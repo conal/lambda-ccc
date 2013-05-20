@@ -4,7 +4,7 @@ Cabal-Version:       >= 1.6
 Synopsis:            Convert lambda expressions to CCC combinators
 Category:            categories
 Description: 
-  Experiments in circuit construction using a categorical vocabulary
+  Convert lambda expressions to CCC combinators
 Author:              Conal Elliott
 Maintainer:          conal@tabula.com
 Copyright:           (c) 2013 by Tabula, Inc
