@@ -1,0 +1,21 @@
+Name:                lambda-ccc
+Version:             0.1
+Cabal-Version:       >= 1.6
+Synopsis:            Convert lambda expressions to CCC combinators
+Category:            categories
+Description: 
+  Experiments in circuit construction using a categorical vocabulary
+Author:              Conal Elliott
+Maintainer:          conal@tabula.com
+Copyright:           (c) 2013 by Tabula, Inc
+License:             BSD3
+Stability:           experimental
+build-type:          Simple
+
+Library
+  hs-Source-Dirs:      src
+  Include-Dirs:        src
+  Build-Depends:       base<5
+  Exposed-Modules:     
+                       LambdaCCC.Convert
+
