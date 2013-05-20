@@ -19,7 +19,7 @@ module LambdaCCC.AsCCC
   ( (:->)(..), (&&&), (***), (+++), (|||), konst
   , first, second, left, right
   , Name, E(..), Pat(..)
-  , toCCC
+  , asCCC
   ) where
 
 -- TODO: explicit exports
@@ -102,23 +102,28 @@ right g = Id +++ g
     Lambda expressions
 --------------------------------------------------------------------}
 
+-- | Variable names
 type Name = String
 
+-- | Lambda expressions
 data E :: * -> * where
   Var :: Name -> Ty a -> E a
   Const :: a -> E a
   App :: E (a :=> b) -> E a -> E b
   Lam :: Pat a -> E b -> E (a :=> b)
 
+-- | Lambda patterns
 data Pat :: * -> * where
   UnitP :: Pat Unit
   VarP  :: Name -> Ty a -> Pat a
   PairP :: Pat a -> Pat b -> Pat (a :* b)
 
+-- | Variable binding context
 type Context = Pat
 
-toCCC :: E a -> (Unit :-> a)
-toCCC = convert UnitP
+-- | Rewrite a lambda expression via CCC combinators
+asCCC :: E a -> (Unit :-> a)
+asCCC = convert UnitP
 
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: Pat a -> E b -> (a :-> b)
