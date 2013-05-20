@@ -19,9 +19,11 @@ module LambdaCCC.Misc where
 
 -- TODO: explicit exports
 
-infixl 7 :*
 infixr 1 :=>
+infixl 6 :+
+infixl 7 :*
 
 type Unit  = ()
 type (:*)  = (,)
+type (:+)  = Either
 type (:=>) = (->)

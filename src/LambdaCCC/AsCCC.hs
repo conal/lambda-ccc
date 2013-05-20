@@ -1,8 +1,6 @@
 {-# LANGUAGE TypeOperators, GADTs, KindSignatures, PatternGuards #-}
 {-# OPTIONS_GHC -Wall #-}
 
--- DataKinds
-
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
@@ -18,7 +16,8 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.AsCCC 
-  ( (:->)(..), (***), (&&&), konst, first, second
+  ( (:->)(..), (&&&), (***), (+++), (|||), konst
+  , first, second, left, right
   , Name, E(..), Pat(..)
   , toCCC
   ) where
@@ -41,19 +40,31 @@ import LambdaCCC.Type
 
 infix 0 :->
 
--- | CCC combinator expressions
+-- | CCC combinator expressions. Although we use standard Haskell unit,
+-- cartesian product, and function types here, the intended interpretation is as
+-- the categorical counterparts (terminal object, categorical products, and
+-- coproducts).
 data (:->) :: * -> * -> * where
   Id       :: a :-> a
   (:.)     :: (b :-> c) -> (a :-> b) -> (a :-> c)
+  -- Unit
   Terminal :: a :-> Unit
   UKonst   :: b -> (Unit :-> b)
-  Fst      :: a :* b :-> a
-  Snd      :: a :* b :-> b
+  -- Products
+  OutL     :: a :* b :-> a
+  OutR     :: a :* b :-> b
   Dup      :: a :-> a :* a
   (:***)   :: (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
+  -- Coproducts
+  InL      :: a :-> a :+ b
+  InR      :: b :-> a :+ b
+  Jam      :: a :+ a :-> a
+  (:+++)   :: (a :-> c) -> (b :-> d) -> (a :+ b :-> c :+ d)
+  -- Exponentials
   Apply    :: ((a :=> b) :* a) :-> b
   Curry    :: (a :* b :-> c) -> (a :-> (b -> c))
   Uncurry  :: (a :-> (b -> c)) -> (a :* b :-> c)
+  -- Primitives
   Add      :: Num a => (a :* a) :-> a
   -- and more primitives ...
 
@@ -65,14 +76,29 @@ infixr 3 &&&, ***
 (&&&) :: (a :-> c) -> (a :-> d) -> (a :-> c :* d)
 f &&& g = (f *** g) :. Dup
 
-konst :: b -> (a :-> b)
-konst b = UKonst b :. Terminal
-
 first :: (a :-> c) -> (a :* b :-> c :* b)
 first f = f *** Id
 
 second :: (b :-> d) -> (a :* b :-> a :* d)
 second g = Id *** g
+
+infixr 3 |||, +++
+
+(+++) :: (a :-> c) -> (b :-> d) -> (a :+ b :-> c :+ d)
+(+++) = (:+++)
+
+(|||) :: (a :-> c) -> (b :-> c) -> (a :+ b :-> c)
+f ||| g = Jam :. (f +++ g)
+
+left :: (a :-> c) -> (a :+ b :-> c :+ b)
+left f = f +++ Id
+
+right :: (b :-> d) -> (a :+ b :-> a :+ d)
+right g = Id +++ g
+
+
+konst :: b -> (a :-> b)
+konst b = UKonst b :. Terminal
 
 {--------------------------------------------------------------------
     Lambda expressions
@@ -109,4 +135,4 @@ convertVar (VarP x q) n a | x == n, Just Refl <- q `tyEq` a = Just Id
                           | otherwise = Nothing
 convertVar UnitP _ _ = Nothing
 convertVar (PairP q r) n a = 
-  ((:. Fst) <$> convertVar q n a) `mplus` ((:. Snd) <$> convertVar r n a)
+  ((:. OutL) <$> convertVar q n a) `mplus` ((:. OutR) <$> convertVar r n a)
