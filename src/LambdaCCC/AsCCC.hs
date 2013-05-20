@@ -43,18 +43,18 @@ infix 0 :->
 
 -- | CCC combinator expressions
 data (:->) :: * -> * -> * where
-  Id :: a :-> a
-  (:.) :: (b :-> c) -> (a :-> b) -> (a :-> c)
+  Id       :: a :-> a
+  (:.)     :: (b :-> c) -> (a :-> b) -> (a :-> c)
   Terminal :: a :-> Unit
-  UKonst :: b -> (Unit :-> b)
-  Fst :: a :* b :-> a
-  Snd :: a :* b :-> b
-  Dup :: a :-> a :* a
-  (:***) :: (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
-  Apply :: ((a :=> b) :* a) :-> b
-  Curry :: (a :* b :-> c) -> (a :-> (b -> c))
-  Uncurry :: (a :-> (b -> c)) -> (a :* b :-> c)
-  Add :: Num a => (a :* a) :-> a
+  UKonst   :: b -> (Unit :-> b)
+  Fst      :: a :* b :-> a
+  Snd      :: a :* b :-> b
+  Dup      :: a :-> a :* a
+  (:***)   :: (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
+  Apply    :: ((a :=> b) :* a) :-> b
+  Curry    :: (a :* b :-> c) -> (a :-> (b -> c))
+  Uncurry  :: (a :-> (b -> c)) -> (a :* b :-> c)
+  Add      :: Num a => (a :* a) :-> a
   -- and more primitives ...
 
 infixr 3 &&&, ***
@@ -63,7 +63,7 @@ infixr 3 &&&, ***
 (***) = (:***)
 
 (&&&) :: (a :-> c) -> (a :-> d) -> (a :-> c :* d)
-f &&& g = (f :*** g) :. Dup
+f &&& g = (f *** g) :. Dup
 
 konst :: b -> (a :-> b)
 konst b = UKonst b :. Terminal
