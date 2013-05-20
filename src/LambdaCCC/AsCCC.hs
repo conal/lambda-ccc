@@ -38,7 +38,9 @@ import LambdaCCC.Type
     CCC combinator form
 --------------------------------------------------------------------}
 
-infix 0 :->
+infix  0 :->
+infixr 3 &&&, ***
+infixr 3 |||, +++
 
 -- | CCC combinator expressions. Although we use standard Haskell unit,
 -- cartesian product, and function types here, the intended interpretation is as
@@ -68,7 +70,9 @@ data (:->) :: * -> * -> * where
   Add      :: Num a => (a :* a) :-> a
   -- and more primitives ...
 
-infixr 3 &&&, ***
+-- Constant morphism (more generally than 'UKonst' or 'Terminal')
+konst :: b -> (a :-> b)
+konst b = UKonst b :. Terminal
 
 (***) :: (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
 (***) = (:***)
@@ -82,8 +86,6 @@ first f = f *** Id
 second :: (b :-> d) -> (a :* b :-> a :* d)
 second g = Id *** g
 
-infixr 3 |||, +++
-
 (+++) :: (a :-> c) -> (b :-> d) -> (a :+ b :-> c :+ d)
 (+++) = (:+++)
 
@@ -95,10 +97,6 @@ left f = f +++ Id
 
 right :: (b :-> d) -> (a :+ b :-> a :+ d)
 right g = Id +++ g
-
-
-konst :: b -> (a :-> b)
-konst b = UKonst b :. Terminal
 
 {--------------------------------------------------------------------
     Lambda expressions
