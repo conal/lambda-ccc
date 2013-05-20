@@ -23,6 +23,11 @@ infixr 1 :=>
 infixl 6 :+
 infixl 7 :*
 
+-- TODO: Perhaps replace these definitions with a GADT to emphasize the
+-- distinction between standard Haskell unit, cartesian product, and function
+-- types, vs the categorical counterparts (terminal object, categorical
+-- products, and coproducts).
+
 type Unit  = ()
 type (:*)  = (,)
 type (:+)  = Either
