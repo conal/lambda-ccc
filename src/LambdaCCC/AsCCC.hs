@@ -17,8 +17,9 @@
 
 module LambdaCCC.AsCCC 
   ( (:->)(..), (&&&), (***), (+++), (|||), konst
+  -- , Prim(..)
   , first, second, left, right
-  , Name, Op(..), E(..), Pat(..)
+  , Name, E(..), Pat(..)
   , asCCC
   ) where
 
@@ -51,6 +52,21 @@ type (:+)  = Either
 type (:=>) = (->)
 
 {--------------------------------------------------------------------
+    Primitives
+--------------------------------------------------------------------}
+
+{-
+-- | Primitives
+data Prim :: * -> * where
+  Lit :: Show a => a -> Prim a
+  Add :: Num a => Prim (a :* a :=> a)
+  -- More here
+-}
+
+-- | Faked primitives (for now)
+type Prim a = a
+
+{--------------------------------------------------------------------
     CCC combinator form
 --------------------------------------------------------------------}
 
@@ -67,7 +83,7 @@ data (:->) :: * -> * -> * where
   (:.)     :: (b :-> c) -> (a :-> b) -> (a :-> c)
   -- Unit
   Terminal :: a :-> Unit
-  UKonst   :: b -> (Unit :-> b)
+  UKonst   :: Prim b -> (Unit :-> b)
   -- Products
   OutL     :: a :* b :-> a
   OutR     :: a :* b :-> b
@@ -82,12 +98,9 @@ data (:->) :: * -> * -> * where
   Apply    :: ((a :=> b) :* a) :-> b
   Curry    :: (a :* b :-> c) -> (a :-> (b :=> c))
   Uncurry  :: (a :-> (b :=> c)) -> (a :* b :-> c)
-  -- Primitive arrows. Do we want exponentials instead?
-  AddA     :: Num a => (a :* a) :-> a
-  -- and more primitives ...
 
 -- Constant morphism (more generally than 'UKonst' or 'Terminal')
-konst :: b -> (a :-> b)
+konst :: Prim b -> (a :-> b)
 konst b = UKonst b :. Terminal
 
 (***) :: (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
@@ -141,15 +154,10 @@ instance IsTy Ty where
 -- | Variable names
 type Name = String
 
--- | Primitives
-data Op :: * -> * where
-  Lit :: Show a => a -> Op a
-  Add :: Num a => Op (a :* a :=> a)
-
 -- | Lambda expressions
 data E :: * -> * where
   Var   :: Name -> Ty a -> E a
-  Const :: Op a -> E a
+  Const :: Prim a -> E a
   App   :: E (a -> b) -> E a -> E b
   Lam   :: Pat a -> E b -> E (a -> b)
 
@@ -168,15 +176,11 @@ asCCC = convert UnitP
 
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: Pat a -> E b -> (a :-> b)
-convert _ (Const o) = konst (evalOp o)
+convert _ (Const o) = konst o
 convert k (Var n t) = fromMaybe (error $ "unbound variable: " ++ n) $
                       convertVar k n t
 convert k (App u v) = Apply :. (convert k u &&& convert k v)
 convert k (Lam p e) = Curry (convert (PairP k p) e)
-
-evalOp :: Op b -> b
-evalOp (Lit c) = c
-evalOp Add     = uncurry (+)
 
 convertVar :: Context q -> Name -> Ty a -> Maybe (q :-> a)
 convertVar (VarP x q) n a | x == n, Just Refl <- q `tyEq` a = Just Id
