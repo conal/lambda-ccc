@@ -15,7 +15,11 @@ build-type:          Simple
 Library
   hs-Source-Dirs:      src
   Include-Dirs:        src
-  Build-Depends:       base<5
+  Build-Depends:       base<5, ty
   Exposed-Modules:     
-                       LambdaCCC.Convert
+                       LambdaCCC.Misc
+                       LambdaCCC.Type
+                       LambdaCCC.AsCCC
+
+
 
