@@ -64,8 +64,8 @@ data (:->) :: * -> * -> * where
   (:+++)   :: (a :-> c) -> (b :-> d) -> (a :+ b :-> c :+ d)
   -- Exponentials
   Apply    :: ((a :=> b) :* a) :-> b
-  Curry    :: (a :* b :-> c) -> (a :-> (b -> c))
-  Uncurry  :: (a :-> (b -> c)) -> (a :* b :-> c)
+  Curry    :: (a :* b :-> c) -> (a :-> (b :=> c))
+  Uncurry  :: (a :-> (b :=> c)) -> (a :* b :-> c)
   -- Primitives
   Add      :: Num a => (a :* a) :-> a
   -- and more primitives ...
