@@ -17,8 +17,6 @@ Library
   Include-Dirs:        src
   Build-Depends:       base<5, ty
   Exposed-Modules:     
-                       LambdaCCC.Misc
-                       LambdaCCC.Type
                        LambdaCCC.AsCCC
 
 

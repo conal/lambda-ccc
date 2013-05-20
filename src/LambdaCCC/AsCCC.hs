@@ -25,14 +25,30 @@ module LambdaCCC.AsCCC
 -- TODO: explicit exports
 
 import Data.Functor ((<$>))
+import Control.Applicative (liftA2)
 import Control.Monad (mplus)
 import Data.Maybe (fromMaybe)
 
 import Data.IsTy
 import Data.Proof.EQ
 
-import LambdaCCC.Misc
-import LambdaCCC.Type
+{--------------------------------------------------------------------
+    Misc
+--------------------------------------------------------------------}
+
+infixr 1 :=>
+infixl 6 :+
+infixl 7 :*
+
+-- TODO: Perhaps replace these definitions with a GADT to emphasize the
+-- distinction between standard Haskell unit, cartesian product, and function
+-- types, vs the categorical counterparts (terminal object, categorical
+-- products, and coproducts).
+
+type Unit  = ()
+type (:*)  = (,)
+type (:+)  = Either
+type (:=>) = (->)
 
 {--------------------------------------------------------------------
     CCC combinator form
@@ -99,6 +115,26 @@ right :: (b :-> d) -> (a :+ b :-> a :+ d)
 right g = Id +++ g
 
 {--------------------------------------------------------------------
+    Types
+--------------------------------------------------------------------}
+
+-- | Typed type representation
+data Ty :: * -> * where
+  UnitT :: Ty Unit
+  IntT  :: Ty Int
+  BoolT :: Ty Bool
+  PairT :: Ty a -> Ty b -> Ty (a :* b)
+  FunT  :: Ty a -> Ty b -> Ty (a :=> b)
+
+instance IsTy Ty where
+  UnitT     `tyEq` UnitT       = Just Refl
+  IntT      `tyEq` IntT        = Just Refl
+  BoolT     `tyEq` BoolT       = Just Refl
+  PairT a b `tyEq` PairT a' b' = liftA2 liftEq2 (tyEq a a') (tyEq b b')
+  FunT  a b `tyEq` FunT  a' b' = liftA2 liftEq2 (tyEq a a') (tyEq b b')
+  _         `tyEq` _           = Nothing
+
+{--------------------------------------------------------------------
     Lambda expressions
 --------------------------------------------------------------------}
 
@@ -114,8 +150,8 @@ data Op :: * -> * where
 data E :: * -> * where
   Var   :: Name -> Ty a -> E a
   Const :: Op a -> E a
-  App   :: E (a :=> b) -> E a -> E b
-  Lam   :: Pat a -> E b -> E (a :=> b)
+  App   :: E (a -> b) -> E a -> E b
+  Lam   :: Pat a -> E b -> E (a -> b)
 
 -- | Lambda patterns
 data Pat :: * -> * where
