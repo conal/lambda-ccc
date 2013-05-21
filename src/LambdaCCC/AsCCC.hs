@@ -17,7 +17,7 @@
 
 module LambdaCCC.AsCCC 
   ( (:->)(..), (&&&), (***), (+++), (|||), konst
-  -- , Prim(..)
+  , Prim(..)
   , first, second, left, right
   , Name, E(..), Pat(..)
   , asCCC
@@ -32,6 +32,8 @@ import Data.Maybe (fromMaybe)
 
 import Data.IsTy
 import Data.Proof.EQ
+
+import LambdaCCC.ShowUtils
 
 {--------------------------------------------------------------------
     Misc
@@ -55,16 +57,15 @@ type (:=>) = (->)
     Primitives
 --------------------------------------------------------------------}
 
-{-
 -- | Primitives
 data Prim :: * -> * where
   Lit :: Show a => a -> Prim a
   Add :: Num a => Prim (a :* a :=> a)
   -- More here
--}
 
--- | Faked primitives (for now)
-type Prim a = a
+instance Show (Prim a) where
+  showsPrec p (Lit a) = showsPrec p a
+  showsPrec _ Add     = showString "add"
 
 {--------------------------------------------------------------------
     CCC combinator form
@@ -85,13 +86,13 @@ data (:->) :: * -> * -> * where
   Terminal :: a :-> Unit
   UKonst   :: Prim b -> (Unit :-> b)
   -- Products
-  OutL     :: a :* b :-> a
-  OutR     :: a :* b :-> b
+  Fst      :: a :* b :-> a
+  Snd      :: a :* b :-> b
   Dup      :: a :-> a :* a
   (:***)   :: (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
   -- Coproducts
-  InL      :: a :-> a :+ b
-  InR      :: b :-> a :+ b
+  Lft      :: a :-> a :+ b
+  Rht      :: b :-> a :+ b
   Jam      :: a :+ a :-> a
   (:+++)   :: (a :-> c) -> (b :-> d) -> (a :+ b :-> c :+ d)
   -- Exponentials
@@ -127,6 +128,25 @@ left f = f +++ Id
 right :: (b :-> d) -> (a :+ b :-> a :+ d)
 right g = Id +++ g
 
+instance Show (a :-> b) where
+  showsPrec p (f :*** Id) = showsApp1 "first"  p f
+  showsPrec p (Id :*** g) = showsApp1 "second" p g
+  showsPrec _ Id          = showString "id"
+  showsPrec _ Terminal    = showString "terminal"
+  showsPrec p (UKonst x)  = showsApp1 "ukonst" p x
+  showsPrec p (g :. f)    = showsOp2 False  "."  (9,AssocRight) p g f
+  showsPrec p (f :*** g)  = showsOp2 False "***" (3,AssocRight) p f g
+  showsPrec p (f :+++ g)  = showsOp2 False "+++" (2,AssocRight) p f g
+  showsPrec _ Fst         = showString "fst"
+  showsPrec _ Snd         = showString "snd"
+  showsPrec _ Dup         = showString "dup"
+  showsPrec _ Lft         = showString "lft"
+  showsPrec _ Rht         = showString "rht"
+  showsPrec _ Jam         = showString "jam"
+  showsPrec _ Apply       = showString "apply"
+  showsPrec p (Curry f)   = showsApp1  "curry" p f
+  showsPrec p (Uncurry h) = showsApp1  "Uncurry" p h
+
 {--------------------------------------------------------------------
     Types
 --------------------------------------------------------------------}
@@ -158,8 +178,8 @@ type Name = String
 data E :: * -> * where
   Var   :: Name -> Ty a -> E a
   Const :: Prim a -> E a
-  App   :: E (a -> b) -> E a -> E b
-  Lam   :: Pat a -> E b -> E (a -> b)
+  App   :: E (a :=> b) -> E a -> E b
+  Lam   :: Pat a -> E b -> E (a :=> b)
 
 -- | Lambda patterns
 data Pat :: * -> * where
@@ -167,24 +187,22 @@ data Pat :: * -> * where
   VarP  :: Name -> Ty a -> Pat a
   PairP :: Pat a -> Pat b -> Pat (a :* b)
 
--- | Variable binding context
-type Context = Pat
-
 -- | Rewrite a lambda expression via CCC combinators
 asCCC :: E a -> (Unit :-> a)
 asCCC = convert UnitP
 
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: Pat a -> E b -> (a :-> b)
-convert _ (Const o) = konst o
-convert k (Var n t) = fromMaybe (error $ "unbound variable: " ++ n) $
-                      convertVar k n t
-convert k (App u v) = Apply :. (convert k u &&& convert k v)
-convert k (Lam p e) = Curry (convert (PairP k p) e)
+convert _ (Const o)  = konst o
+convert k (Var n t)  = fromMaybe (error $ "unbound variable: " ++ n) $
+                       convertVar k n t
+convert k (App u v)  = Apply :. (convert k u &&& convert k v)
+convert k (Lam p e)  = Curry (convert (PairP k p) e)
 
-convertVar :: Context q -> Name -> Ty a -> Maybe (q :-> a)
-convertVar (VarP x q) n a | x == n, Just Refl <- q `tyEq` a = Just Id
+-- Convert a variable in context
+convertVar :: Pat a -> Name -> Ty b -> Maybe (a :-> b)
+convertVar (VarP x a) n b | x == n, Just Refl <- a `tyEq` b = Just Id
                           | otherwise = Nothing
 convertVar UnitP _ _ = Nothing
-convertVar (PairP q r) n a = 
-  ((:. OutL) <$> convertVar q n a) `mplus` ((:. OutR) <$> convertVar r n a)
+convertVar (PairP p q) n b = 
+  ((:. Fst) <$> convertVar p n b) `mplus` ((:. Snd) <$> convertVar q n b)

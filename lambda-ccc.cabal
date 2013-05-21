@@ -18,6 +18,4 @@ Library
   Build-Depends:       base<5, ty
   Exposed-Modules:     
                        LambdaCCC.AsCCC
-
-
-
+                       LambdaCCC.ShowUtils
