@@ -187,6 +187,10 @@ data Pat :: * -> * where
   VarP  :: Name -> Ty a -> Pat a
   PairP :: Pat a -> Pat b -> Pat (a :* b)
 
+{--------------------------------------------------------------------
+    Conversion
+--------------------------------------------------------------------}
+
 -- | Rewrite a lambda expression via CCC combinators
 asCCC :: E a -> (Unit :-> a)
 asCCC = convert UnitP
@@ -205,4 +209,11 @@ convertVar (VarP x a) n b | x == n, Just Refl <- a `tyEq` b = Just Id
                           | otherwise = Nothing
 convertVar UnitP _ _ = Nothing
 convertVar (PairP p q) n b = 
-  ((:. Fst) <$> convertVar p n b) `mplus` ((:. Snd) <$> convertVar q n b)
+  ((:. Snd) <$> convertVar q n b) `mplus` ((:. Fst) <$> convertVar p n b)
+
+-- Note that we try q before p in case of shadowing.
+
+{--------------------------------------------------------------------
+    Tests
+--------------------------------------------------------------------}
+
