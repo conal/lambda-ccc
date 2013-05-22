@@ -158,15 +158,15 @@ data Ty :: * -> * where
   UnitT :: Ty Unit
   IntT  :: Ty Int
   BoolT :: Ty Bool
-  PairT :: Ty a -> Ty b -> Ty (a :* b)
-  FunT  :: Ty a -> Ty b -> Ty (a :=> b)
+  (:*)  :: Ty a -> Ty b -> Ty (a :* b)
+  (:=>) :: Ty a -> Ty b -> Ty (a :=> b)
 
 instance Show (Ty a) where
-  showsPrec _ UnitT       = showString "Unit"
-  showsPrec _ IntT        = showString "Int"
-  showsPrec _ BoolT       = showString "Bool"
-  showsPrec p (PairT a b) = showsOp2 extraParens ":*"  (7,AssocLeft ) p a b
-  showsPrec p (FunT a b)  = showsOp2 extraParens ":=>" (1,AssocRight) p a b
+  showsPrec _ UnitT     = showString "Unit"
+  showsPrec _ IntT      = showString "Int"
+  showsPrec _ BoolT     = showString "Bool"
+  showsPrec p (a :* b)  = showsOp2 extraParens ":*"  (7,AssocLeft ) p a b
+  showsPrec p (a :=> b) = showsOp2 extraParens ":=>" (1,AssocRight) p a b
 
 extraParens :: Bool
 extraParens = True
@@ -175,8 +175,8 @@ instance IsTy Ty where
   UnitT     `tyEq` UnitT       = Just Refl
   IntT      `tyEq` IntT        = Just Refl
   BoolT     `tyEq` BoolT       = Just Refl
-  PairT a b `tyEq` PairT a' b' = liftA2 liftEq2 (tyEq a a') (tyEq b b')
-  FunT  a b `tyEq` FunT  a' b' = liftA2 liftEq2 (tyEq a a') (tyEq b b')
+  (a :*  b) `tyEq` (a' :*  b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
+  (a :=> b) `tyEq` (a' :=> b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
   _         `tyEq` _           = Nothing
 
 {--------------------------------------------------------------------
@@ -263,10 +263,10 @@ vb = Var "b" IntT
 vc = Var "c" IntT
 
 ty1 :: Ty (Int :=> Int)
-ty1 = FunT IntT IntT
+ty1 = IntT :=> IntT
 
-ty2 :: Ty (Int :=> Int, Bool)
-ty2 = PairT (FunT IntT IntT) BoolT
+ty2 :: Ty ((Int :=> Int) :* Bool)
+ty2 = (IntT :=> IntT) :* BoolT
 
 e1 :: E (Int :* Int)
 e1 = va # vb
