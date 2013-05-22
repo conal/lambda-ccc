@@ -360,12 +360,6 @@ ty1 = IntT :=> IntT
 ty2 :: Ty ((Int :=> Int) :* Bool)
 ty2 = (IntT :=> IntT) :* BoolT
 
--- e1 :: E (Int :* Int)
--- e1 = va # vb
-
--- e2 :: E Int
--- e2 = va +@ vb
-
 e1 :: E Bool
 e1 = Const (Lit False)
 
