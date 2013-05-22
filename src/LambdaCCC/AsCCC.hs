@@ -53,6 +53,10 @@ type (:*)  = (,)
 type (:+)  = Either
 type (:=>) = (->)
 
+showsOp2' :: (Show a, Show b) =>
+             String -> Fixity -> Prec -> a -> b -> ShowS
+showsOp2' = showsOp2 False -- no extra parens
+
 {--------------------------------------------------------------------
     Primitives
 --------------------------------------------------------------------}
@@ -75,7 +79,7 @@ instance Show (Prim a) where
 
 infix  0 :->
 infixr 3 &&&, ***
-infixr 3 |||, +++
+infixr 2 |||, +++
 
 -- | CCC combinator expressions. Although we use standard Haskell unit,
 -- cartesian product, and function types here, the intended interpretation is as
@@ -131,14 +135,21 @@ right :: (b :-> d) -> (a :+ b :-> a :+ d)
 right g = Id +++ g
 
 instance Show (a :-> b) where
+  -- Some abbreviations
+  showsPrec p (UKonst b :. Terminal) = showsApp1 "konst" p b
   showsPrec p (f :*** Id) = showsApp1 "first"  p f
   showsPrec p (Id :*** g) = showsApp1 "second" p g
+  showsPrec p ((f :*** g) :. Dup) = showsOp2' "&&&" (3,AssocRight) p f g
+  showsPrec p (f :+++ Id) = showsApp1 "left"   p f
+  showsPrec p (Id :+++ g) = showsApp1 "right"  p g
+  showsPrec p (Jam :. (f :+++ g)) = showsOp2' "|||" (2,AssocRight) p f g
+  -- 
   showsPrec _ Id          = showString "id"
   showsPrec _ Terminal    = showString "terminal"
   showsPrec p (UKonst x)  = showsApp1 "ukonst" p x
-  showsPrec p (g :. f)    = showsOp2 False  "."  (9,AssocRight) p g f
-  showsPrec p (f :*** g)  = showsOp2 False "***" (3,AssocRight) p f g
-  showsPrec p (f :+++ g)  = showsOp2 False "+++" (2,AssocRight) p f g
+  showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
+  showsPrec p (f :*** g)  = showsOp2' "***" (3,AssocRight) p f g
+  showsPrec p (f :+++ g)  = showsOp2' "+++" (2,AssocRight) p f g
   showsPrec _ Fst         = showString "fst"
   showsPrec _ Snd         = showString "snd"
   showsPrec _ Dup         = showString "dup"
@@ -165,11 +176,8 @@ instance Show (Ty a) where
   showsPrec _ UnitT     = showString "Unit"
   showsPrec _ IntT      = showString "Int"
   showsPrec _ BoolT     = showString "Bool"
-  showsPrec p (a :* b)  = showsOp2 extraParens ":*"  (7,AssocLeft ) p a b
-  showsPrec p (a :=> b) = showsOp2 extraParens ":=>" (1,AssocRight) p a b
-
-extraParens :: Bool
-extraParens = True
+  showsPrec p (a :*  b) = showsOp2' ":*"  (7,AssocLeft ) p a b
+  showsPrec p (a :=> b) = showsOp2' ":=>" (1,AssocRight) p a b
 
 instance IsTy Ty where
   UnitT     `tyEq` UnitT       = Just Refl
