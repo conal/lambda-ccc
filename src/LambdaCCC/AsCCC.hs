@@ -112,7 +112,7 @@ infixr 9 :.
 data (:->) :: * -> * -> * where
   Id       :: a :-> a
   (:.)     :: (b :-> c) -> (a :-> b) -> (a :-> c)
-  -- Primitives. I'm unsure of this one.
+  -- Primitives. I'm unsure of this one. It's closer to UKonst than I like.
   Prim     :: Prim (a :=> b) -> (a :-> b)
   -- Unit
   Terminal :: a :-> Unit
