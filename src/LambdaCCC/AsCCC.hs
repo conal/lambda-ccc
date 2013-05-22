@@ -159,6 +159,16 @@ data Ty :: * -> * where
   PairT :: Ty a -> Ty b -> Ty (a :* b)
   FunT  :: Ty a -> Ty b -> Ty (a :=> b)
 
+instance Show (Ty a) where
+  showsPrec _ UnitT       = showString "Unit"
+  showsPrec _ IntT        = showString "Int"
+  showsPrec _ BoolT       = showString "Bool"
+  showsPrec p (PairT a b) = showsOp2 extraParens ":*"  (7,AssocLeft ) p a b
+  showsPrec p (FunT a b)  = showsOp2 extraParens ":=>" (1,AssocRight) p a b
+
+extraParens :: Bool
+extraParens = True
+
 instance IsTy Ty where
   UnitT     `tyEq` UnitT       = Just Refl
   IntT      `tyEq` IntT        = Just Refl
@@ -174,6 +184,24 @@ instance IsTy Ty where
 -- | Variable names
 type Name = String
 
+-- | Lambda patterns
+data Pat :: * -> * where
+  UnitP :: Pat Unit
+  VarP  :: Name -> Ty a -> Pat a
+  PairP :: Pat a -> Pat b -> Pat (a :* b)
+
+showsVar :: Prec -> Name -> Ty a -> ShowS
+showsVar p n ty = showString n . showString " :: " . showsPrec p ty
+
+instance Show (Pat a) where
+  showsPrec _ UnitP       = showString "()"
+  showsPrec p (VarP n ty) = showsVar p n ty
+  showsPrec p (PairP a b) =
+    showsOp2 True "," (-1,AssocNone) p a b
+
+--   showsPrec _ (PairP a b) =
+--     showChar '(' . showsPrec 0 a . showChar ',' . showsPrec 0 b . showChar ')'
+
 -- | Lambda expressions
 data E :: * -> * where
   Var   :: Name -> Ty a -> E a
@@ -181,11 +209,12 @@ data E :: * -> * where
   App   :: E (a :=> b) -> E a -> E b
   Lam   :: Pat a -> E b -> E (a :=> b)
 
--- | Lambda patterns
-data Pat :: * -> * where
-  UnitP :: Pat Unit
-  VarP  :: Name -> Ty a -> Pat a
-  PairP :: Pat a -> Pat b -> Pat (a :* b)
+instance Show (E a) where
+  showsPrec p (Var n ty) = showsVar p n ty
+  showsPrec p (Const c)  = showsPrec p c
+  showsPrec p (App u v)  = showsApp p u v
+  showsPrec p (Lam q e)  = showParen (p > 0) $
+                           showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
 
 {--------------------------------------------------------------------
     Conversion
@@ -212,6 +241,7 @@ convertVar (PairP p q) n b =
   ((:. Snd) <$> convertVar q n b) `mplus` ((:. Fst) <$> convertVar p n b)
 
 -- Note that we try q before p in case of shadowing.
+
 
 {--------------------------------------------------------------------
     Tests
