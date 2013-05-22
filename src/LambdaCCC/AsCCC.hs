@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -59,13 +59,15 @@ type (:=>) = (->)
 
 -- | Primitives
 data Prim :: * -> * where
-  Lit :: Show a => a -> Prim a
-  Add :: Num a => Prim (a :* a :=> a)
+  Lit  :: Show a => a -> Prim a
+  Pair :: Prim (a :=> b :=> a :* b)
+  Add  :: Num a => Prim (a :* a :=> a)
   -- More here
 
 instance Show (Prim a) where
   showsPrec p (Lit a) = showsPrec p a
   showsPrec _ Add     = showString "add"
+  showsPrec _ Pair    = showString "(#)"
 
 {--------------------------------------------------------------------
     CCC combinator form
@@ -196,11 +198,7 @@ showsVar p n ty = showString n . showString " :: " . showsPrec p ty
 instance Show (Pat a) where
   showsPrec _ UnitP       = showString "()"
   showsPrec p (VarP n ty) = showsVar p n ty
-  showsPrec p (PairP a b) =
-    showsOp2 True "," (-1,AssocNone) p a b
-
---   showsPrec _ (PairP a b) =
---     showChar '(' . showsPrec 0 a . showChar ',' . showsPrec 0 b . showChar ')'
+  showsPrec p (PairP a b) = showsPair p a b
 
 -- | Lambda expressions
 data E :: * -> * where
@@ -210,11 +208,21 @@ data E :: * -> * where
   Lam   :: Pat a -> E b -> E (a :=> b)
 
 instance Show (E a) where
-  showsPrec p (Var n ty) = showsVar p n ty
-  showsPrec p (Const c)  = showsPrec p c
-  showsPrec p (App u v)  = showsApp p u v
-  showsPrec p (Lam q e)  = showParen (p > 0) $
-                           showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
+  -- showsPrec p (Var n ty) = showsVar p n ty
+  showsPrec _ (Var n _) = showString n
+  showsPrec p (Const c) = showsPrec p c
+  showsPrec p (Lam q e) = showParen (p > 0) $
+                          showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
+  showsPrec p (App (App (Const Pair) u) v) = showsPair p u v
+  showsPrec p (App u v) = showsApp p u v
+
+infixl 9 @^
+(@^) :: E (a :=> b) -> E a -> E b
+(@^) = App
+
+infixr 1 #
+(#) :: E a -> E b -> E (a :* b)
+a # b = Const Pair @^ a @^ b
 
 {--------------------------------------------------------------------
     Conversion
@@ -247,3 +255,13 @@ convertVar (PairP p q) n b =
     Tests
 --------------------------------------------------------------------}
 
+va,vb,vc :: E Int
+va = Var "a" IntT
+vb = Var "b" IntT
+vc = Var "c" IntT
+
+e1 :: E Int
+e1 = Const Add @^ (va # vb)
+
+e2 :: E (Int :* Int)
+e2 = va # vb

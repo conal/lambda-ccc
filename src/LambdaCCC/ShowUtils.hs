@@ -43,8 +43,10 @@ showsApp1 s p a = showParen (p > appPrec) $
 
 -- | Show a simple function application
 showsApp :: (Show a, Show b) => Prec -> a -> b -> ShowS
-showsApp p a b = showParen (p >= appPrec) $
-                 showsPrec (appPrec+1) a . showChar ' ' . showsPrec appPrec b
+showsApp p a b = showParen (p > appPrec) $
+                 showsPrec appPrec a . showChar ' ' . showsPrec (appPrec+1) b
+
+-- TODO: refactor showsApp1, showsApp
 
 -- Precedence of function application.
 -- Hack: use 11 instead of 10 to avoid extraneous parens when a function
@@ -81,3 +83,8 @@ showsOp2 extraParens sop (p,assoc) q a b =
 
 -- parend :: ShowS -> Prec -> Prec -> ShowS
 -- parend sh p q = showParen (q > p) sh
+
+showsPair :: (Show a, Show b) => Prec -> a -> b -> ShowS
+showsPair = showsOp2 True "," (-1,AssocNone)
+
+-- showChar '(' . showsPrec 0 a . showChar ',' . showsPrec 0 b . showChar ')'
