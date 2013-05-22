@@ -18,7 +18,7 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.AsCCC 
-  ( (:->)(..), (&&&), (***), (+++), (|||), konst
+  ( (:->)(..), (&&&), (***), (+++), (|||)
   , Prim(..)
   , first, second, left, right
   , Name, E(..), Pat(..)
@@ -114,9 +114,8 @@ data (:->) :: * -> * -> * where
   (:.)     :: (b :-> c) -> (a :-> b) -> (a :-> c)
   -- Primitives. I'm unsure of this one. It's closer to UKonst than I like.
   Prim     :: Prim (a :=> b) -> (a :-> b)
-  -- Unit
-  Terminal :: a :-> Unit
-  UKonst   :: Prim b -> (Unit :-> b)
+  -- Constant
+  Konst    :: Prim b -> (a :-> b)
   -- Products
   Fst      :: a :* b :-> a
   Snd      :: a :* b :-> b
@@ -136,9 +135,8 @@ instance Evalable (a :-> b) where
   type ValT (a :-> b) = a :=> b
   eval Id          = id
   eval (g :. f)    = eval g . eval f
+  eval (Konst b)   = const (eval b)
   eval (Prim p)    = eval p
-  eval Terminal    = const ()
-  eval (UKonst b)  = const (eval b)
   eval Fst         = fst
   eval Snd         = snd
   eval Dup         = \ x -> (x,x)
@@ -157,10 +155,6 @@ infixr 9 @.
 Id @. f  = f
 g  @. Id = g
 g  @. f  = g :. f
-
--- Constant morphism (more generally than 'UKonst' or 'Terminal')
-konst :: Prim b -> (a :-> b)
-konst b = UKonst b @. Terminal
 
 (&&&) :: (a :-> c) -> (a :-> d) -> (a :-> c :* d)
 (&&&) = (:&&&)
@@ -188,7 +182,6 @@ right g = Id +++ g
 
 instance Show (a :-> b) where
 #ifdef SimplifyShow
-  showsPrec p (UKonst b :. Terminal) = showsApp1 "konst" p b
   showsPrec p (f @. Fst :&&& g @. Snd) = showsOp2' "***" (3,AssocRight) p f g
   showsPrec p (f @. Fst :&&& Snd) = showsApp1 "first"  p f
   showsPrec p (Fst :&&& g @. Snd) = showsApp1 "second" p g
@@ -197,12 +190,11 @@ instance Show (a :-> b) where
   showsPrec p (InL :||| InR @. g) = showsApp1 "right" p g
 #endif
   showsPrec _ Id          = showString "id"
-  showsPrec _ Terminal    = showString "terminal"
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
+  showsPrec p (Prim x)    = showsPrec p x
+  showsPrec p (Konst b)   = showsApp1 "konst" p b
   showsPrec p (f :&&& g)  = showsOp2' "&&&" (3,AssocRight) p f g
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
-  showsPrec p (Prim f)    = showsPrec p f
-  showsPrec p (UKonst x)  = showsApp1 "ukonst" p x
   showsPrec _ Fst         = showString "fst"
   showsPrec _ Snd         = showString "snd"
   showsPrec _ Dup         = showString "dup"
@@ -340,7 +332,7 @@ asCCC = convert UnitP
 
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: Pat a -> E b -> (a :-> b)
-convert _ (Const o)  = konst o
+convert _ (Const o)  = Konst o
 convert k (Var n t)  = fromMaybe (error $ "unbound variable: " ++ n) $
                        convertVar k n t
 convert k (u :^ v)   = Apply @. (convert k u &&& convert k v)
