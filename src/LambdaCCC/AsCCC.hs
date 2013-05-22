@@ -112,6 +112,8 @@ infixr 9 :.
 data (:->) :: * -> * -> * where
   Id       :: a :-> a
   (:.)     :: (b :-> c) -> (a :-> b) -> (a :-> c)
+  -- Primitives. I'm unsure of this one.
+  Prim     :: Prim (a :=> b) -> (a :-> b)
   -- Unit
   Terminal :: a :-> Unit
   UKonst   :: Prim b -> (Unit :-> b)
@@ -131,9 +133,10 @@ data (:->) :: * -> * -> * where
   Uncurry  :: (a :-> (b :=> c)) -> (a :* b :-> c)
 
 instance Evalable (a :-> b) where
-  type ValT (a :-> b) = a -> b
+  type ValT (a :-> b) = a :=> b
   eval Id          = id
   eval (g :. f)    = eval g . eval f
+  eval (Prim p)    = eval p
   eval Terminal    = const ()
   eval (UKonst b)  = const (eval b)
   eval Fst         = fst
@@ -195,6 +198,7 @@ instance Show (a :-> b) where
 #endif
   showsPrec _ Id          = showString "id"
   showsPrec _ Terminal    = showString "terminal"
+  showsPrec p (Prim f)    = showsPrec p f
   showsPrec p (UKonst x)  = showsApp1 "ukonst" p x
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
   showsPrec p (f :*** g)  = showsOp2' "***" (3,AssocRight) p f g
