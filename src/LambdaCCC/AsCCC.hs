@@ -292,11 +292,16 @@ instance Evalable (E a) where
   eval (u :^ v)      env = (eval u env) (eval v env)
   eval (Lam p e)     env = \ x -> eval e (extendEnv p x env)
 
+-- TODO: Rework so that eval can work independently of env. Will save repeated
+-- evals.
+
 evalE :: E a -> a
 evalE e = eval e []
 
--- TODO: Rework so that eval can work independently of env. Will save repeated
--- evals.
+extendEnv :: Pat b -> b -> Env -> Env
+extendEnv UnitP         ()    = id
+extendEnv (VarP nb tyb) b     = (Bind nb tyb b :)
+extendEnv (PairP p q)   (a,b) = extendEnv q b . extendEnv p a
 
 lookupVar :: Name -> Ty a -> Env -> Maybe a
 lookupVar na tya = look
@@ -306,10 +311,12 @@ lookupVar na tya = look
      | nb == na, Just Refl <- tya `tyEq` tyb = Just b
      | otherwise = look env'
 
-extendEnv :: Pat b -> b -> Env -> Env
-extendEnv UnitP () = id
-extendEnv (VarP nb tyb) b = (Bind nb tyb b :)
-extendEnv (PairP p q) (a,b) = extendEnv q b . extendEnv p a
+-- Oh, hm. I'm using a difference (Hughes) list representation. extendEnv maps
+-- UnitP, VarP, and PairP to mempty, singleton, and mappend, respectively.
+-- 
+-- TODO: adopt another representation, such as Seq. Replace the explicit
+-- recursion in lookupVar with a fold or something. It's almost a mconcat. Could
+-- use toList and catMaybes.
 
 {--------------------------------------------------------------------
     Conversion
