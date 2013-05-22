@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, GADTs, KindSignatures, PatternGuards #-}
+{-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures, PatternGuards, ExistentialQuantification #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -28,6 +28,7 @@ module LambdaCCC.AsCCC
 import Data.Functor ((<$>))
 import Control.Applicative (liftA2)
 import Control.Monad (mplus)
+import qualified Control.Arrow as A
 import Data.Maybe (fromMaybe)
 
 import Data.IsTy
@@ -58,6 +59,14 @@ showsOp2' :: (Show a, Show b) =>
 showsOp2' = showsOp2 False -- no extra parens
 
 {--------------------------------------------------------------------
+    Evaluation
+--------------------------------------------------------------------}
+
+class Evalable e where
+  type ValT e
+  eval :: e -> ValT e
+
+{--------------------------------------------------------------------
     Primitives
 --------------------------------------------------------------------}
 
@@ -65,13 +74,22 @@ showsOp2' = showsOp2 False -- no extra parens
 data Prim :: * -> * where
   Lit  :: Show a => a -> Prim a
   Pair :: Prim (a :=> b :=> a :* b)
+  Not  :: Prim (Bool :=> Bool)
   Add  :: Num a => Prim (a :* a :=> a)
   -- More here
 
 instance Show (Prim a) where
   showsPrec p (Lit a) = showsPrec p a
-  showsPrec _ Add     = showString "add"
   showsPrec _ Pair    = showString "(#)"
+  showsPrec _ Add     = showString "add"
+  showsPrec _ Not     = showString "not"
+
+instance Evalable (Prim a) where
+  type ValT (Prim a) = a
+  eval (Lit x) = x
+  eval Pair    = (,)
+  eval Add     = uncurry (+)
+  eval Not     = not
 
 {--------------------------------------------------------------------
     CCC combinator form
@@ -80,6 +98,7 @@ instance Show (Prim a) where
 infix  0 :->
 infixr 3 &&&, ***
 infixr 2 |||, +++
+infixr 9 :.
 
 -- | CCC combinator expressions. Although we use standard Haskell unit,
 -- cartesian product, and function types here, the intended interpretation is as
@@ -97,8 +116,8 @@ data (:->) :: * -> * -> * where
   Dup      :: a :-> a :* a
   (:***)   :: (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
   -- Coproducts
-  Lft      :: a :-> a :+ b
-  Rht      :: b :-> a :+ b
+  InL      :: a :-> a :+ b
+  InR      :: b :-> a :+ b
   Jam      :: a :+ a :-> a
   (:+++)   :: (a :-> c) -> (b :-> d) -> (a :+ b :-> c :+ d)
   -- Exponentials
@@ -106,15 +125,40 @@ data (:->) :: * -> * -> * where
   Curry    :: (a :* b :-> c) -> (a :-> (b :=> c))
   Uncurry  :: (a :-> (b :=> c)) -> (a :* b :-> c)
 
+instance Evalable (a :-> b) where
+  type ValT (a :-> b) = a -> b
+  eval Id          = id
+  eval (g :. f)    = eval g . eval f
+  eval Terminal    = const ()
+  eval (UKonst b)  = const (eval b)
+  eval Fst         = fst
+  eval Snd         = snd
+  eval Dup         = \ x -> (x,x)
+  eval (f :*** g)  = eval f A.*** eval g
+  eval InL         = Left
+  eval InR         = Right
+  eval Jam         = id A.||| id
+  eval (f :+++ g)  = eval f A.+++ eval g
+  eval Apply       = uncurry ($)
+  eval (Curry h)   = curry (eval h)
+  eval (Uncurry f) = uncurry (eval f)
+
+infixr 9 @.
+-- | Optimizing arrow composition
+(@.) :: (b :-> c) -> (a :-> b) -> (a :-> c)
+Id @. f  = f
+g  @. Id = g
+g  @. f  = g :. f
+
 -- Constant morphism (more generally than 'UKonst' or 'Terminal')
 konst :: Prim b -> (a :-> b)
-konst b = UKonst b :. Terminal
+konst b = UKonst b @. Terminal
 
 (***) :: (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
 (***) = (:***)
 
 (&&&) :: (a :-> c) -> (a :-> d) -> (a :-> c :* d)
-f &&& g = (f *** g) :. Dup
+f &&& g = (f *** g) @. Dup
 
 first :: (a :-> c) -> (a :* b :-> c :* b)
 first f = f *** Id
@@ -126,7 +170,7 @@ second g = Id *** g
 (+++) = (:+++)
 
 (|||) :: (a :-> c) -> (b :-> c) -> (a :+ b :-> c)
-f ||| g = Jam :. (f +++ g)
+f ||| g = Jam @. (f +++ g)
 
 left :: (a :-> c) -> (a :+ b :-> c :+ b)
 left f = f +++ Id
@@ -153,8 +197,8 @@ instance Show (a :-> b) where
   showsPrec _ Fst         = showString "fst"
   showsPrec _ Snd         = showString "snd"
   showsPrec _ Dup         = showString "dup"
-  showsPrec _ Lft         = showString "lft"
-  showsPrec _ Rht         = showString "rht"
+  showsPrec _ InL         = showString "inL"
+  showsPrec _ InR         = showString "inR"
   showsPrec _ Jam         = showString "jam"
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry f)   = showsApp1  "curry" p f
@@ -217,6 +261,9 @@ data E :: * -> * where
   (:^)  :: E (a :=> b) -> E a -> E b
   Lam   :: Pat a -> E b -> E (a :=> b)
 
+data Bind = forall a. Bind Name (Ty a) a
+type Env = [Bind]
+
 instance Show (E a) where
   -- showsPrec p (Var n ty) = showsVar p n ty
   showsPrec _ (Var n _) = showString n
@@ -230,9 +277,39 @@ infixr 1 #
 (#) :: E a -> E b -> E (a :* b)
 a # b = Const Pair :^ a :^ b
 
+notE :: E Bool -> E Bool
+notE b = Const Not :^ b
+
 infixl 6 +@
 (+@) :: Num a => E a -> E a -> E a
 a +@ b = Const Add :^ (a # b)
+
+instance Evalable (E a) where
+  type ValT (E a) = Env -> a
+  eval (Var name ty) env = fromMaybe (error $ "eval: unbound name: " ++ name) $
+                           lookupVar name ty env
+  eval (Const p)     _   = eval p
+  eval (u :^ v)      env = (eval u env) (eval v env)
+  eval (Lam p e)     env = \ x -> eval e (extendEnv p x env)
+
+evalE :: E a -> a
+evalE e = eval e []
+
+-- TODO: Rework so that eval can work independently of env. Will save repeated
+-- evals.
+
+lookupVar :: Name -> Ty a -> Env -> Maybe a
+lookupVar na tya = look
+ where
+   look [] = Nothing
+   look (Bind nb tyb b : env')
+     | nb == na, Just Refl <- tya `tyEq` tyb = Just b
+     | otherwise = look env'
+
+extendEnv :: Pat b -> b -> Env -> Env
+extendEnv UnitP () = id
+extendEnv (VarP nb tyb) b = (Bind nb tyb b :)
+extendEnv (PairP p q) (a,b) = extendEnv q b . extendEnv p a
 
 {--------------------------------------------------------------------
     Conversion
@@ -247,7 +324,7 @@ convert :: Pat a -> E b -> (a :-> b)
 convert _ (Const o)  = konst o
 convert k (Var n t)  = fromMaybe (error $ "unbound variable: " ++ n) $
                        convertVar k n t
-convert k (u :^ v)   = Apply :. (convert k u &&& convert k v)
+convert k (u :^ v)   = Apply @. (convert k u &&& convert k v)
 convert k (Lam p e)  = Curry (convert (PairP k p) e)
 
 -- Convert a variable in context
@@ -256,7 +333,7 @@ convertVar (VarP x a) n b | x == n, Just Refl <- a `tyEq` b = Just Id
                           | otherwise = Nothing
 convertVar UnitP _ _ = Nothing
 convertVar (PairP p q) n b = 
-  ((:. Snd) <$> convertVar q n b) `mplus` ((:. Fst) <$> convertVar p n b)
+  ((@. Snd) <$> convertVar q n b) `mplus` ((@. Fst) <$> convertVar p n b)
 
 -- Note that we try q before p in case of shadowing.
 
@@ -276,17 +353,47 @@ ty1 = IntT :=> IntT
 ty2 :: Ty ((Int :=> Int) :* Bool)
 ty2 = (IntT :=> IntT) :* BoolT
 
-e1 :: E (Int :* Int)
-e1 = va # vb
+-- e1 :: E (Int :* Int)
+-- e1 = va # vb
 
-e2 :: E Int
-e2 = va +@ vb
+-- e2 :: E Int
+-- e2 = va +@ vb
 
-e3 :: E (Int :=> Int)
-e3 = Lam (VarP "x" IntT) (Var "x" IntT)
+e1 :: E Bool
+e1 = Const (Lit False)
+
+e2 :: E Bool
+e2 = notE e1
+
+e3 :: E (Bool :=> Bool)
+e3 = Const Not
 
 e4 :: E (Int :=> Int)
-e4 = Lam (VarP "x" IntT) (x +@ x)
+e4 = Lam (VarP "x" IntT) (Var "x" IntT)
+
+e5 :: E (Int :=> Int)
+e5 = Lam (VarP "x" IntT) (x +@ x)
  where
    x = Var "x" IntT
 
+-- > evalE e1
+-- False
+-- > evalE e2
+-- True
+-- > evalE e3 True
+-- False
+-- > evalE e4 5
+-- 5
+-- > evalE e5 10
+-- 20
+
+-- > asCCC e1
+-- konst False
+-- > asCCC e2
+-- apply . (konst not &&& konst False)
+-- > asCCC e3
+-- konst not
+-- > asCCC e4
+-- curry snd
+-- > asCCC e5
+-- curry (apply . (konst add &&& apply . (apply . (konst (#) &&& snd) &&& snd)))
