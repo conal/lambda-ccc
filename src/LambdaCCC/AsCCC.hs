@@ -262,6 +262,12 @@ va = Var "a" IntT
 vb = Var "b" IntT
 vc = Var "c" IntT
 
+ty1 :: Ty (Int :=> Int)
+ty1 = FunT IntT IntT
+
+ty2 :: Ty (Int :=> Int, Bool)
+ty2 = PairT (FunT IntT IntT) BoolT
+
 e1 :: E (Int :* Int)
 e1 = va # vb
 
@@ -275,3 +281,4 @@ e4 :: E (Int :=> Int)
 e4 = Lam (VarP "x" IntT) (x +@ x)
  where
    x = Var "x" IntT
+
