@@ -78,9 +78,9 @@ class Evalable e where
 -- | Primitives
 data Prim :: * -> * where
   Lit  :: Show a => a -> Prim a
-  Pair :: Prim (a :=> b :=> a :* b)
-  Not  :: Prim (Bool :=> Bool)
-  Add  :: Num a => Prim (a :* a :=> a)
+  Pair ::                Prim (a :=> b :=> a :* b)
+  Not  ::                Prim (Bool :=> Bool)
+  Add  :: Num  a =>      Prim (a :* a :=> a)
   -- More here
 
 instance Show (Prim a) where
