@@ -200,11 +200,13 @@ instance Show (Pat a) where
   showsPrec p (VarP n ty) = showsVar p n ty
   showsPrec p (PairP a b) = showsPair p a b
 
+infixl 9 :^
+
 -- | Lambda expressions
 data E :: * -> * where
   Var   :: Name -> Ty a -> E a
   Const :: Prim a -> E a
-  App   :: E (a :=> b) -> E a -> E b
+  (:^)  :: E (a :=> b) -> E a -> E b
   Lam   :: Pat a -> E b -> E (a :=> b)
 
 instance Show (E a) where
@@ -213,16 +215,16 @@ instance Show (E a) where
   showsPrec p (Const c) = showsPrec p c
   showsPrec p (Lam q e) = showParen (p > 0) $
                           showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
-  showsPrec p (App (App (Const Pair) u) v) = showsPair p u v
-  showsPrec p (App u v) = showsApp p u v
-
-infixl 9 @^
-(@^) :: E (a :=> b) -> E a -> E b
-(@^) = App
+  showsPrec p (Const Pair :^ u :^ v) = showsPair p u v
+  showsPrec p (u :^ v) = showsApp p u v
 
 infixr 1 #
 (#) :: E a -> E b -> E (a :* b)
-a # b = Const Pair @^ a @^ b
+a # b = Const Pair :^ a :^ b
+
+infixl 6 +@
+(+@) :: Num a => E a -> E a -> E a
+a +@ b = Const Add :^ (a # b)
 
 {--------------------------------------------------------------------
     Conversion
@@ -237,7 +239,7 @@ convert :: Pat a -> E b -> (a :-> b)
 convert _ (Const o)  = konst o
 convert k (Var n t)  = fromMaybe (error $ "unbound variable: " ++ n) $
                        convertVar k n t
-convert k (App u v)  = Apply :. (convert k u &&& convert k v)
+convert k (u :^ v)   = Apply :. (convert k u &&& convert k v)
 convert k (Lam p e)  = Curry (convert (PairP k p) e)
 
 -- Convert a variable in context
@@ -260,8 +262,16 @@ va = Var "a" IntT
 vb = Var "b" IntT
 vc = Var "c" IntT
 
-e1 :: E Int
-e1 = Const Add @^ (va # vb)
+e1 :: E (Int :* Int)
+e1 = va # vb
 
-e2 :: E (Int :* Int)
-e2 = va # vb
+e2 :: E Int
+e2 = va +@ vb
+
+e3 :: E (Int :=> Int)
+e3 = Lam (VarP "x" IntT) (Var "x" IntT)
+
+e4 :: E (Int :=> Int)
+e4 = Lam (VarP "x" IntT) (x +@ x)
+ where
+   x = Var "x" IntT
