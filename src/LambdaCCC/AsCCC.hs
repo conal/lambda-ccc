@@ -1,4 +1,6 @@
-{-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures, PatternGuards, ExistentialQuantification #-}
+{-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
+{-# LANGUAGE PatternGuards, ExistentialQuantification #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -35,6 +37,9 @@ import Data.IsTy
 import Data.Proof.EQ
 
 import LambdaCCC.ShowUtils
+
+-- Whether to simply (fold) during show
+-- #define SimplifyShow
 
 {--------------------------------------------------------------------
     Misc
@@ -80,7 +85,7 @@ data Prim :: * -> * where
 
 instance Show (Prim a) where
   showsPrec p (Lit a) = showsPrec p a
-  showsPrec _ Pair    = showString "(#)"
+  showsPrec _ Pair    = showString "(,)"
   showsPrec _ Add     = showString "add"
   showsPrec _ Not     = showString "not"
 
@@ -179,7 +184,7 @@ right :: (b :-> d) -> (a :+ b :-> a :+ d)
 right g = Id +++ g
 
 instance Show (a :-> b) where
-  -- Some abbreviations
+#ifdef SimplifyShow
   showsPrec p (UKonst b :. Terminal) = showsApp1 "konst" p b
   showsPrec p (f :*** Id) = showsApp1 "first"  p f
   showsPrec p (Id :*** g) = showsApp1 "second" p g
@@ -187,7 +192,7 @@ instance Show (a :-> b) where
   showsPrec p (f :+++ Id) = showsApp1 "left"   p f
   showsPrec p (Id :+++ g) = showsApp1 "right"  p g
   showsPrec p (Jam :. (f :+++ g)) = showsOp2' "|||" (2,AssocRight) p f g
-  -- 
+#endif
   showsPrec _ Id          = showString "id"
   showsPrec _ Terminal    = showString "terminal"
   showsPrec p (UKonst x)  = showsApp1 "ukonst" p x
@@ -265,12 +270,15 @@ data Bind = forall a. Bind Name (Ty a) a
 type Env = [Bind]
 
 instance Show (E a) where
+#ifdef SimplifyShow
+  showsPrec p (Const Add :^ (Const Pair :^ u :^ v)) = showsOp2' "+" (6,AssocLeft) p u v
+  showsPrec p (Const Pair :^ u :^ v) = showsPair p u v
+#endif
   -- showsPrec p (Var n ty) = showsVar p n ty
   showsPrec _ (Var n _) = showString n
   showsPrec p (Const c) = showsPrec p c
   showsPrec p (Lam q e) = showParen (p > 0) $
                           showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
-  showsPrec p (Const Pair :^ u :^ v) = showsPair p u v
   showsPrec p (u :^ v) = showsApp p u v
 
 infixr 1 #
