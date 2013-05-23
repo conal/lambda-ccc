@@ -238,7 +238,6 @@ instance IsTy Ty where
   (a :=> b) `tyEq` (a' :=> b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
   _         `tyEq` _           = Nothing
 
-
 class HasTy a where typ :: Ty a
 
 instance HasTy Unit where typ = UnitT
@@ -376,8 +375,8 @@ convertVar UnitP _ _ = Nothing
 convertVar (PairP p q) n b = 
   ((@. Snd) <$> convertVar q n b) `mplus` ((@. Fst) <$> convertVar p n b)
 
--- Note that we try q before p in case of shadowing.
-
+-- Note that we try q before p. This choice cooperates with uncurrying and
+-- shadowing.
 
 {--------------------------------------------------------------------
     Tests
