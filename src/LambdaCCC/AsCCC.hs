@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
-{-# LANGUAGE PatternGuards, ExistentialQuantification #-}
+{-# LANGUAGE PatternGuards, ExistentialQuantification, TypeSynonymInstances #-}
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
@@ -154,6 +154,8 @@ infixr 9 @.
 (@.) :: (b :-> c) -> (a :-> b) -> (a :-> c)
 Id @. f  = f
 g  @. Id = g
+Apply @. (Konst k :&&& f) = Prim k @. f
+Apply @. (Prim Pair :&&& Id) = Dup
 g  @. f  = g :. f
 
 (&&&) :: (a :-> c) -> (a :-> d) -> (a :-> c :* d)
@@ -191,7 +193,8 @@ instance Show (a :-> b) where
 #endif
   showsPrec _ Id          = showString "id"
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
-  showsPrec p (Prim x)    = showsPrec p x
+  showsPrec p (Prim x)    = showsApp1 "prim" p x
+                            -- showsPrec p x
   showsPrec p (Konst b)   = showsApp1 "konst" p b
   showsPrec p (f :&&& g)  = showsOp2' "&&&" (3,AssocRight) p f g
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
@@ -231,6 +234,17 @@ instance IsTy Ty where
   (a :*  b) `tyEq` (a' :*  b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
   (a :=> b) `tyEq` (a' :=> b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
   _         `tyEq` _           = Nothing
+
+
+class HasTy a where typ :: Ty a
+
+instance HasTy Unit where typ = UnitT
+instance HasTy Int  where typ = IntT
+instance HasTy Bool where typ = BoolT
+instance (HasTy a, HasTy b) => HasTy (a :*  b) where typ = typ :*  typ
+instance (HasTy a, HasTy b) => HasTy (a :=> b) where typ = typ :=> typ
+
+-- TODO: Try out the singletons library
 
 {--------------------------------------------------------------------
     Lambda expressions
@@ -322,6 +336,10 @@ lookupVar na tya = look
 -- recursion in lookupVar with a fold or something. It's almost a mconcat. Could
 -- use toList and catMaybes.
 
+etaExpand :: HasTy a => E (a :=> b) -> E (a :=> b)
+etaExpand (Lam{}) = error "etaExpand: did you mean to expand a lambda?"
+etaExpand e = Lam (VarP "ETA" typ) (e :^ Var "ETA" typ)
+
 {--------------------------------------------------------------------
     Conversion
 --------------------------------------------------------------------}
@@ -329,6 +347,10 @@ lookupVar na tya = look
 -- | Rewrite a lambda expression via CCC combinators
 asCCC :: E a -> (Unit :-> a)
 asCCC = convert UnitP
+
+asCCC' :: HasTy a => E (a :=> b) -> (a :-> b)
+asCCC' (Lam p e) = convert p e
+asCCC' e = asCCC' (etaExpand e)
 
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: Pat a -> E b -> (a :-> b)
@@ -376,10 +398,17 @@ e3 = Const Not
 e4 :: E (Int :=> Int)
 e4 = Lam (VarP "x" IntT) (Var "x" IntT)
 
-e5 :: E (Int :=> Int)
-e5 = Lam (VarP "x" IntT) (x +@ x)
+e5 :: E (Int :=> Int :* Int)
+e5 = Lam (VarP "x" IntT) (x # x)
  where
    x = Var "x" IntT
+
+e6 :: E (Int :=> Int)
+e6 = Lam (VarP "x" IntT) (x +@ x)
+ where
+   x = Var "x" IntT
+
+{- Evaluations -}
 
 -- > evalE e1
 -- False
@@ -391,14 +420,31 @@ e5 = Lam (VarP "x" IntT) (x +@ x)
 -- 5
 -- > evalE e5 10
 -- 20
+-- > evalE e6 10
+-- (10,10)
+
+{- Conversions -}
 
 -- > asCCC e1
 -- konst False
 -- > asCCC e2
--- apply . (konst not &&& konst False)
+-- prim not . konst False
 -- > asCCC e3
 -- konst not
 -- > asCCC e4
 -- curry snd
 -- > asCCC e5
--- curry (apply . (konst add &&& apply . (apply . (konst (#) &&& snd) &&& snd)))
+-- curry (prim add . apply . (prim (,) . snd &&& snd))
+-- > asCCC e6
+-- curry (apply . (prim (,) . snd &&& snd))
+
+{- Without extra unit context -}
+
+-- > asCCC' e3
+-- prim not
+-- > asCCC' e4
+-- id
+-- > asCCC' e5
+-- prim add . dup
+-- > asCCC' e6
+-- dup
