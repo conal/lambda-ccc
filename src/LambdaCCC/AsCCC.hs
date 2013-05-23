@@ -408,43 +408,49 @@ e6 = Lam (VarP "x" IntT) (x +@ x)
  where
    x = Var "x" IntT
 
-{- Evaluations -}
+{- Evaluations:
 
--- > evalE e1
--- False
--- > evalE e2
--- True
--- > evalE e3 True
--- False
--- > evalE e4 5
--- 5
--- > evalE e5 10
--- 20
--- > evalE e6 10
--- (10,10)
+> evalE e1
+False
+> evalE e2
+True
+> evalE e3 True
+False
+> evalE e4 5
+5
+> evalE e5 10
+20
+> evalE e6 10
+(10,10)
 
-{- Conversions -}
+-}
 
--- > asCCC e1
--- konst False
--- > asCCC e2
--- prim not . konst False
--- > asCCC e3
--- konst not
--- > asCCC e4
--- curry snd
--- > asCCC e5
--- curry (prim add . apply . (prim (,) . snd &&& snd))
--- > asCCC e6
--- curry (apply . (prim (,) . snd &&& snd))
+{- Conversions:
 
-{- Without extra unit context -}
+> asCCC e1
+konst False
+> asCCC e2
+prim not . konst False
+> asCCC e3
+konst not
+> asCCC e4
+curry snd
+> asCCC e5
+curry (prim add . apply . (prim (,) . snd &&& snd))
+> asCCC e6
+curry (apply . (prim (,) . snd &&& snd))
 
--- > asCCC' e3
--- prim not
--- > asCCC' e4
--- id
--- > asCCC' e5
--- prim add . dup
--- > asCCC' e6
--- dup
+-}
+
+{- Without extra unit context:
+
+> asCCC' e3
+prim not
+> asCCC' e4
+id
+> asCCC' e5
+prim add . dup
+> asCCC' e6
+dup
+
+-}
