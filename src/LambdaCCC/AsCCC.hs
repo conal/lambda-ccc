@@ -39,7 +39,7 @@ import Data.Proof.EQ
 import LambdaCCC.ShowUtils
 
 -- Whether to simply (fold) during show
--- #define SimplifyShow
+#define SimplifyShow
 
 {--------------------------------------------------------------------
     Misc
@@ -104,6 +104,9 @@ infix  0 :->
 infixr 3 &&&, ***
 infixr 2 |||, +++
 infixr 9 :.
+
+infixr 3 :&&&
+infixr 2 :|||
 
 -- | CCC combinator expressions. Although we use standard Haskell unit,
 -- cartesian product, and function types here, the intended interpretation is as
@@ -184,12 +187,12 @@ right g = Id +++ g
 
 instance Show (a :-> b) where
 #ifdef SimplifyShow
-  showsPrec p (f @. Fst :&&& g @. Snd) = showsOp2' "***" (3,AssocRight) p f g
-  showsPrec p (f @. Fst :&&& Snd) = showsApp1 "first"  p f
-  showsPrec p (Fst :&&& g @. Snd) = showsApp1 "second" p g
-  showsPrec p (InL @. f :||| InR @. g) = showsOp2' "+++" (2,AssocRight) p f g
-  showsPrec p (InL @. f :||| InR) = showsApp1 "left"  p f
-  showsPrec p (InL :||| InR @. g) = showsApp1 "right" p g
+  showsPrec p (f :. Fst :&&& g :. Snd) = showsOp2' "***" (3,AssocRight) p f g
+  showsPrec p (f :. Fst :&&& Snd) = showsApp1 "first"  p f
+  showsPrec p (Fst :&&& g :. Snd) = showsApp1 "second" p g
+  showsPrec p (InL :. f :||| InR :. g) = showsOp2' "+++" (2,AssocRight) p f g
+  showsPrec p (InL :. f :||| InR) = showsApp1 "left"  p f
+  showsPrec p (InL :||| InR :. g) = showsApp1 "right" p g
 #endif
   showsPrec _ Id          = showString "id"
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
@@ -338,7 +341,12 @@ lookupVar na tya = look
 
 etaExpand :: HasTy a => E (a :=> b) -> E (a :=> b)
 etaExpand (Lam{}) = error "etaExpand: did you mean to expand a lambda?"
-etaExpand e = Lam (VarP "ETA" typ) (e :^ Var "ETA" typ)
+etaExpand e = Lam vp (e :^ ve)
+ where
+   (vp,ve) = vars "ETA" typ
+
+vars :: Name -> Ty a -> (Pat a, E a)
+vars n t = (VarP n t, Var n t)
 
 {--------------------------------------------------------------------
     Conversion
@@ -395,18 +403,20 @@ e2 = notE e1
 e3 :: E (Bool :=> Bool)
 e3 = Const Not
 
-e4 :: E (Int :=> Int)
-e4 = Lam (VarP "x" IntT) (Var "x" IntT)
-
-e5 :: E (Int :=> Int :* Int)
-e5 = Lam (VarP "x" IntT) (x # x)
+e4 :: E (Int :=> Int)  -- \ x -> x
+e4 = Lam vp ve
  where
-   x = Var "x" IntT
+   (vp,ve) = vars "x" IntT
 
-e6 :: E (Int :=> Int)
-e6 = Lam (VarP "x" IntT) (x +@ x)
+e5 :: E (Int :=> Int)
+e5 = Lam vp (ve +@ ve)
  where
-   x = Var "x" IntT
+   (vp,ve) = vars "x" IntT
+
+e6 :: E (Int :=> Int :* Int) -- \ x -> (x,x)
+e6 = Lam vp (ve # ve)
+ where
+   (vp,ve) = vars "x" IntT
 
 {- Evaluations:
 
@@ -439,6 +449,9 @@ curry snd
 curry (prim add . apply . (prim (,) . snd &&& snd))
 > asCCC e6
 curry (apply . (prim (,) . snd &&& snd))
+
+-- TODO: try auto-refactoring to get 
+--   curry (dup . snd)
 
 -}
 
