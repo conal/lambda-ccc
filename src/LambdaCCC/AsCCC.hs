@@ -22,7 +22,7 @@ module LambdaCCC.AsCCC
   , Prim(..)
   , first, second, left, right
   , Name, E(..), Pat(..)
-  , asCCC
+  , asCCC, asCCC'
   ) where
 
 -- TODO: explicit exports
