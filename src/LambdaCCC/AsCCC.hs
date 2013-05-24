@@ -78,24 +78,31 @@ class Evalable e where
 
 -- | Primitives
 data Prim :: * -> * where
-  Lit  :: Show a => a -> Prim a
-  Pair ::                Prim (a :=> b :=> a :* b)
-  Not  ::                Prim (Bool :=> Bool)
-  Add  :: Num  a =>      Prim (a :* a :=> a)
+  Lit        :: Show a => a -> Prim a
+  Pair       :: Prim (a :=> b :=> a :* b)
+  Not        :: Prim (Bool :=> Bool)
+  And,Or,Xor :: Prim (Bool :* Bool :=> Bool)
+  Add        :: Num  a => Prim (a :* a :=> a)
   -- More here
 
 instance Show (Prim a) where
   showsPrec p (Lit a) = showsPrec p a
   showsPrec _ Pair    = showString "(,)"
-  showsPrec _ Add     = showString "add"
   showsPrec _ Not     = showString "not"
+  showsPrec _ And     = showString "and"
+  showsPrec _ Or      = showString "or"
+  showsPrec _ Xor     = showString "xor"
+  showsPrec _ Add     = showString "add"
 
 instance Evalable (Prim a) where
   type ValT (Prim a) = a
   eval (Lit x) = x
   eval Pair    = (,)
-  eval Add     = uncurry (+)
   eval Not     = not
+  eval And     = uncurry (&&)
+  eval Or      = uncurry (||)
+  eval Xor     = uncurry (/=)
+  eval Add     = uncurry (+)
 
 {--------------------------------------------------------------------
     CCC combinator form
@@ -284,7 +291,10 @@ type Env = [Bind]
 
 instance Show (E a) where
 #ifdef SimplifyShow
-  showsPrec p (Const Add :^ (Const Pair :^ u :^ v)) = showsOp2' "+" (6,AssocLeft) p u v
+  showsPrec p (Const Add :^ (Const Pair :^ u :^ v)) = showsOp2' "+"     (6,AssocLeft ) p u v
+  showsPrec p (Const And :^ (Const Pair :^ u :^ v)) = showsOp2' "&&&"   (3,AssocRight) p u v
+  showsPrec p (Const Or  :^ (Const Pair :^ u :^ v)) = showsOp2' "|||"   (2,AssocRight) p u v
+  showsPrec p (Const Xor :^ (Const Pair :^ u :^ v)) = showsOp2' "`xor`" (2,AssocRight) p u v
   showsPrec p (Const Pair :^ u :^ v) = showsPair p u v
 #endif
   -- showsPrec p (Var n ty) = showsVar p n ty
@@ -294,16 +304,32 @@ instance Show (E a) where
                           showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
   showsPrec p (u :^ v) = showsApp p u v
 
+-- TODO: Refactor add/and/or/xor/pair
+
 infixr 1 #
 (#) :: E a -> E b -> E (a :* b)
 a # b = Const Pair :^ a :^ b
 
-notE :: E Bool -> E Bool
+notE :: Unop (E Bool)
 notE b = Const Not :^ b
+
+infixr 2 ||*, `xor`
+infixr 3 &&*
+
+(&&*) :: Binop (E Bool)
+a &&* b = Const And :^ (a # b)
+
+(||*) :: E Bool -> E Bool -> E Bool
+a ||* b = Const Or  :^ (a # b)
+
+xor :: E Bool -> E Bool -> E Bool
+a `xor` b = Const Xor :^ (a # b)
 
 infixl 6 +@
 (+@) :: Num a => E a -> E a -> E a
 a +@ b = Const Add :^ (a # b)
+
+-- TODO: Use Num and Boolean classes
 
 instance Evalable (E a) where
   type ValT (E a) = Env -> a
@@ -343,10 +369,17 @@ etaExpand :: HasTy a => E (a :=> b) -> E (a :=> b)
 etaExpand (Lam{}) = error "etaExpand: did you mean to expand a lambda?"
 etaExpand e = Lam vp (e :^ ve)
  where
-   (vp,ve) = vars "ETA" typ
+   (vp,ve) = vars "ETA"
 
-vars :: Name -> Ty a -> (Pat a, E a)
-vars n t = (VarP n t, Var n t)
+vars :: HasTy a => Name -> (Pat a, E a)
+vars n = (VarP n t, Var n t) where t = typ
+
+vars2 :: (HasTy a, HasTy b) =>
+         (Name,Name) -> (Pat (a,b), (E a,E b))
+vars2 (na,nb) = (PairP ap bp, (ae,be))
+ where
+   (ap,ae) = vars na
+   (bp,be) = vars nb
 
 {--------------------------------------------------------------------
     Conversion
@@ -400,23 +433,41 @@ e1 = Const (Lit False)
 e2 :: E Bool
 e2 = notE e1
 
-e3 :: E (Bool :=> Bool)
+infixr 1 :+>
+type a :+> b = E (a :=> b)
+
+e3 :: Bool :+> Bool
 e3 = Const Not
 
-e4 :: E (Int :=> Int)  -- \ x -> x
-e4 = Lam vp ve
+e4 :: Int :+> Int  -- \ x -> x
+e4 = Lam p x
  where
-   (vp,ve) = vars "x" IntT
+   (p,x) = vars "x"
 
-e5 :: E (Int :=> Int)
-e5 = Lam vp (ve +@ ve)
+e5 :: Int :+> Int
+e5 = Lam p (x +@ x)
  where
-   (vp,ve) = vars "x" IntT
+   (p,x) = vars "x"
 
-e6 :: E (Int :=> Int :* Int) -- \ x -> (x,x)
-e6 = Lam vp (ve # ve)
+e6 :: Int :+> Int :* Int -- \ x -> (x,x)
+e6 = Lam p (x # x)
  where
-   (vp,ve) = vars "x" IntT
+   (p,x) = vars "x"
+
+e7 :: Bool :* Bool :+> Bool
+e7 = Lam p (notE (notE a &&* notE b))
+ where
+   (p,(a,b)) = vars2 ("a","b")
+
+e8 :: Bool :* Bool :+> Bool :* Bool
+e8 = Lam p (b # a) where (p,(a,b)) = vars2 ("a","b")
+
+-- Half adder
+e9 :: Bool :* Bool :+> Bool :* Bool
+e9 = Lam p ((a `xor` b) # (a &&* b))   -- half-adder
+ where
+   (p,(a,b)) = vars2 ("a","b")
+
 
 {- Evaluations:
 
