@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, GADTs #-}
+{-# LANGUAGE TypeOperators, GADTs, PatternGuards #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -6,7 +6,7 @@
 
 ----------------------------------------------------------------------
 -- |
--- Module      :  LambdaCCC.AsCCC
+-- Module      :  LambdaCCC.ToCCC
 -- Copyright   :  (c) 2013 Tabula, Inc.
 -- License     :  BSD3
 -- 
@@ -16,7 +16,7 @@
 -- Convert lambda expressions to CCC combinators
 ----------------------------------------------------------------------
 
-module LambdaCCC.AsCCC (asCCC, asCCC') where
+module LambdaCCC.ToCCC (toCCC, toCCC') where
 
 import Data.Functor ((<$>))
 import Control.Monad (mplus)
@@ -35,12 +35,12 @@ import LambdaCCC.Lambda
 --------------------------------------------------------------------}
 
 -- | Rewrite a lambda expression via CCC combinators
-asCCC :: E a -> (Unit :-> a)
-asCCC = convert UnitP
+toCCC :: E a -> (Unit :-> a)
+toCCC = convert UnitP
 
-asCCC' :: HasTy a => E (a :=> b) -> (a :-> b)
-asCCC' (Lam p e) = convert p e
-asCCC' e = asCCC' (etaExpand e)
+toCCC' :: HasTy a => E (a :=> b) -> (a :-> b)
+toCCC' (Lam p e) = convert p e
+toCCC' e = toCCC' (etaExpand e)
 
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: Pat a -> E b -> (a :-> b)

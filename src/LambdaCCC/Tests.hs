@@ -21,7 +21,7 @@ import LambdaCCC.Misc
 import LambdaCCC.Prim
 import LambdaCCC.Ty (Ty(..))
 import LambdaCCC.Lambda
-import LambdaCCC.AsCCC
+import LambdaCCC.ToCCC
 
 va,vb,vc :: E Int
 va = Var "a" IntT
@@ -103,28 +103,28 @@ False
 
 {- Conversions (with Simplify and ShowFolded, though ShowFolded isn't helping):
 
-> asCCC e1
+> toCCC e1
 konst False
-> asCCC e2
+> toCCC e2
 prim not . konst False
-> asCCC e3
+> toCCC e3
 konst not
-> asCCC e4
+> toCCC e4
 curry snd
-> asCCC e5
+> toCCC e5
 curry (prim add . (snd &&& snd))
-> asCCC e6
+> toCCC e6
 curry (snd &&& snd)
-> asCCC e7
+> toCCC e7
 curry (prim not . prim and . (prim not . fst . snd &&& prim not . snd . snd))
-> asCCC e8
+> toCCC e8
 curry (snd . snd &&& fst . snd)
-> asCCC e9
+> toCCC e9
 curry (prim xor . (fst . snd &&& snd . snd) &&& prim and . (fst . snd &&& snd . snd))
 
 -}
 
-{- Examples e3 through e9, without extra unit context, i.e., with asCCC':
+{- Examples e3 through e9, without extra unit context, i.e., with toCCC':
 
 Without Simplify and without ShowFolded:
 
