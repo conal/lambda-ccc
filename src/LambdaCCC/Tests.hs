@@ -1,8 +1,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wall #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- For tests
 
 ----------------------------------------------------------------------
 -- |
@@ -21,6 +20,7 @@ import LambdaCCC.Misc
 import LambdaCCC.Prim
 import LambdaCCC.Ty (Ty(..))
 import LambdaCCC.Lambda
+import LambdaCCC.AsCCC
 
 va,vb,vc :: E Int
 va = Var "a" IntT
@@ -97,6 +97,7 @@ False
 (10,10)
 > eval e8 (True,False)
 (False,True)
+
 -}
 
 {- Conversions:
@@ -134,6 +135,6 @@ prim not . prim and . apply . (prim (,) . prim not . fst &&& prim not . snd)
 > asCCC' e8
 apply . (prim (,) . snd &&& fst)
 > asCCC' e9
-apply . (prim (,) . prim xor . apply . first (prim (,)) &&& prim and . apply . first (prim (,)))
+apply . (prim (,) . prim xor . apply . (prim (,) . fst &&& snd) &&& prim and . apply . (prim (,) . fst &&& snd))
 
 -}
