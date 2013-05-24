@@ -26,7 +26,6 @@ import Data.IsTy
 import Data.Proof.EQ
 
 import LambdaCCC.Misc
-import LambdaCCC.Prim
 import LambdaCCC.Ty
 import LambdaCCC.CCC
 import LambdaCCC.Lambda

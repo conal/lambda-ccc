@@ -17,7 +17,7 @@
 
 module LambdaCCC.Tests where
 
-import LambdaCCC.Misc ((:*),(:=>))
+import LambdaCCC.Misc
 import LambdaCCC.Prim
 import LambdaCCC.Ty (Ty(..))
 import LambdaCCC.Lambda
@@ -83,19 +83,19 @@ e9 = Lam p ((a `xor` b) # (a &&* b))   -- half-adder
 
 {- Evaluations:
 
-> evalE e1
+> eval e1
 False
-> evalE e2
+> eval e2
 True
-> evalE e3 True
+> eval e3 True
 False
-> evalE e4 5
+> eval e4 5
 5
-> evalE e5 10
+> eval e5 10
 20
-> evalE e6 10
+> eval e6 10
 (10,10)
-> evalE e8 (True,False)
+> eval e8 (True,False)
 (False,True)
 -}
 

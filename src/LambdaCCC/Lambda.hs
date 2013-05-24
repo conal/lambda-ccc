@@ -22,7 +22,7 @@ module LambdaCCC.Lambda
   ( Name, Pat(..), E(..)
   , (#), notE, (||*), (&&*), xor, (+@)
   , vars, vars2
-  , evalE, etaExpand
+  , etaExpand
   ) where
 
 import Data.Maybe (fromMaybe)
@@ -115,22 +115,24 @@ a +@ b = Const Add :^ (a # b)
 
 -- TODO: Use Num and Boolean classes
 
--- Expression evaluation requires a binding environment. In other words,
--- expressions evaluate to a function from environments.
+-- We evaluate *closed* expressions (no free variables)
 instance Evalable (E a) where
-  type ValT (E a) = Env -> a
-  eval (Var name ty) env = fromMaybe (error $ "eval: unbound name: " ++ name) $
-                           lookupVar name ty env
-  eval (Const p)     _   = eval p
-  eval (u :^ v)      env = (eval u env) (eval v env)
-  eval (Lam p e)     env = \ x -> eval e (extendEnv p x env)
+  type ValT (E a) = a
+  eval e = eval' e []  -- provide empty environment
 
 -- TODO: Rework so that eval can work independently of env. Will save repeated
 -- evals.
 
--- | Evaluate in an empty environment
-evalE :: E a -> a
-evalE e = eval e []
+-- Expression evaluation requires a binding environment. In other words,
+-- expressions evaluate to a function from environments.
+
+eval' :: E a -> Env -> a
+eval' (Var name ty) env = fromMaybe (error $ "eval': unbound name: " ++ name) $
+                          lookupVar name ty env
+eval' (Const p)     _   = eval p
+eval' (u :^ v)      env = (eval' u env) (eval' v env)
+eval' (Lam p e)     env = \ x -> eval' e (extendEnv p x env)
+
 
 extendEnv :: Pat b -> b -> Env -> Env
 extendEnv UnitP         ()    = id
