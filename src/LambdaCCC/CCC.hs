@@ -38,7 +38,10 @@ infixr 3 :&&&
 infixr 2 :|||
 
 -- Whether to simply (fold) during show
-#define SimplifyShow
+#define ShowFolded
+
+-- Whether to simplify during construction
+#define Simplify
 
 -- | CCC combinator expressions. Although we use standard Haskell unit,
 -- cartesian product, and function types here, the intended interpretation is as
@@ -83,10 +86,12 @@ instance Evalable (a :-> b) where
 infixr 9 @.
 -- | Optimizing arrow composition
 (@.) :: (b :-> c) -> (a :-> b) -> (a :-> c)
+#ifdef Simplify
 Id @. f  = f
 g  @. Id = g
 Apply @. (Konst k :&&& f) = Prim k @. f
 -- Apply @. (Prim Pair :&&& Id) = Dup
+#endif
 g  @. f  = g :. f
 
 dup :: a :-> a :* a
@@ -102,7 +107,9 @@ swapC :: a :+ b :-> b :+ a
 swapC = InR ||| InL
 
 (&&&) :: (a :-> c) -> (a :-> d) -> (a :-> c :* d)
+#ifdef Simplify
 Fst &&& Snd = Id
+#endif
 f &&& g = f :&&& g
 
 (***) :: (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
@@ -127,7 +134,7 @@ right :: (b :-> d) -> (a :+ b :-> a :+ d)
 right g = Id +++ g
 
 instance Show (a :-> b) where
-#ifdef SimplifyShow
+#ifdef ShowFolded
   showsPrec p (f :. Fst :&&& g :. Snd) = showsOp2'  "***" (3,AssocRight) p f g
   showsPrec p (InL :. f :||| InR :. g) = showsOp2'  "+++" (2,AssocRight) p f g
   showsPrec _ (Id :&&& Id)             = showString "dup"

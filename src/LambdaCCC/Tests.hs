@@ -101,7 +101,7 @@ False
 
 -}
 
-{- Conversions:
+{- Conversions (with Simplify and ShowFolded, though ShowFolded isn't helping):
 
 > asCCC e1
 konst False
@@ -112,25 +112,48 @@ konst not
 > asCCC e4
 curry snd
 > asCCC e5
+curry (prim add . (snd &&& snd))
 > asCCC e6
 curry (snd &&& snd)
+> asCCC e7
+curry (prim not . prim and . (prim not . fst . snd &&& prim not . snd . snd))
+> asCCC e8
+curry (snd . snd &&& fst . snd)
+> asCCC e9
+curry (prim xor . (fst . snd &&& snd . snd) &&& prim and . (fst . snd &&& snd . snd))
+
 -}
 
-{- Without extra unit context:
+{- Examples e3 through e9, without extra unit context, i.e., with asCCC':
 
-> asCCC' e3
-prim not
-> asCCC' e4
-id
-> asCCC' e5
-prim add . dup
-> asCCC' e6
-dup
-> asCCC' e7
-prim not . prim and . (prim not *** prim not)
-> asCCC' e8
-swapP
-> asCCC' e9
-prim xor &&& prim and
+Without Simplify and without ShowFolded:
+
+> apply . (konst not &&& id)
+> id
+> apply . (konst add &&& id &&& id)
+> id &&& id
+> apply . (konst not &&& apply . (konst and &&& apply . (konst not &&& id . fst) &&& apply . (konst not &&& id . snd)))
+> id . snd &&& id . fst
+> apply . (konst xor &&& id . fst &&& id . snd) &&& apply . (konst and &&& id . fst &&& id . snd)
+
+With Simplify:
+
+> prim not
+> id
+> prim add . (id &&& id)
+> id &&& id
+> prim not . prim and . (prim not . fst &&& prim not . snd)
+> snd &&& fst
+> prim xor &&& prim and
+
+With Simplify and ShowFolded:
+
+> prim not
+> id
+> prim add . dup
+> dup
+> prim not . prim and . (prim not *** prim not)
+> swapP
+> prim xor &&& prim and
 
 -}

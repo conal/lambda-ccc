@@ -37,7 +37,7 @@ import LambdaCCC.Prim
 import LambdaCCC.Ty
 
 -- Whether to simply (fold) during show
-#define SimplifyShow
+#define ShowFolded
 
 -- | Variable names
 type Name = String
@@ -74,7 +74,7 @@ data Bind = forall a. Bind Name (Ty a) a
 type Env = [Bind]
 
 instance Show (E a) where
-#ifdef SimplifyShow
+#ifdef ShowFolded
   showsPrec p (Const prim :^ (u :# v)) | Just (OpInfo op fixity) <- opInfo prim =
     showsOp2' op fixity p u v
 --   showsPrec p (Const Add :^ (u :# v)) = showsOp2' "+"     (6,AssocLeft ) p u v
