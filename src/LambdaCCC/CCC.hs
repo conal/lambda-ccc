@@ -87,10 +87,10 @@ infixr 9 @.
 -- | Optimizing arrow composition
 (@.) :: (b :-> c) -> (a :-> b) -> (a :-> c)
 #ifdef Simplify
-Id @. f  = f
-g  @. Id = g
-Apply @. (Konst k :&&& f) = Prim k @. f
--- Apply @. (Prim Pair :&&& Id) = Dup
+Id      @. f                = f
+g       @. Id               = g
+Konst k @. _                = Konst k
+Apply   @. (Konst k :&&& f) = Prim k @. f
 #endif
 g  @. f  = g :. f
 
