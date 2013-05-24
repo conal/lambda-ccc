@@ -100,9 +100,11 @@ dup = Id &&& Id
 jam :: a :+ a :-> a
 jam = Id ||| Id
 
+-- | Product swap
 swapP :: a :* b :-> b :* a
 swapP = Snd &&& Fst
 
+-- | Coproduct swap
 swapC :: a :+ b :-> b :+ a
 swapC = InR ||| InL
 
