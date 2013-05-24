@@ -80,7 +80,7 @@ instance Evalable (a :-> b) where
   eval InR         = Right
   eval (f :||| g)  = eval f A.||| eval g
   eval Apply       = uncurry ($)
-  eval (Curry h)   = curry (eval h)
+  eval (Curry   h) = curry   (eval h)
   eval (Uncurry f) = uncurry (eval f)
 
 infixr 9 @.
@@ -92,7 +92,7 @@ g       @. Id               = g
 Konst k @. _                = Konst k
 Apply   @. (Konst k :&&& f) = Prim k @. f
 #endif
-g  @. f  = g :. f
+g @. f  = g :. f
 
 dup :: a :-> a :* a
 dup = Id &&& Id
