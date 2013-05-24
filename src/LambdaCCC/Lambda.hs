@@ -58,10 +58,13 @@ instance Show (Pat a) where
 
 infixl 9 :^
 
+infix 1 :#
+
 -- | Lambda expressions
 data E :: * -> * where
   Var   :: Name -> Ty a -> E a
   Const :: Prim a -> E a
+  (:#)  :: E a -> E b -> E (a :* b)
   (:^)  :: E (a :=> b) -> E a -> E b
   Lam   :: Pat a -> E b -> E (a :=> b)
 
@@ -72,20 +75,30 @@ type Env = [Bind]
 
 instance Show (E a) where
 #ifdef SimplifyShow
-  showsPrec p (Const Add :^ (Const Pair :^ u :^ v)) = showsOp2' "+"     (6,AssocLeft ) p u v
-  showsPrec p (Const And :^ (Const Pair :^ u :^ v)) = showsOp2' "&&&"   (3,AssocRight) p u v
-  showsPrec p (Const Or  :^ (Const Pair :^ u :^ v)) = showsOp2' "|||"   (2,AssocRight) p u v
-  showsPrec p (Const Xor :^ (Const Pair :^ u :^ v)) = showsOp2' "`xor`" (2,AssocRight) p u v
-  showsPrec p (Const Pair :^ u :^ v) = showsPair p u v
+  showsPrec p (Const prim :^ (u :# v)) | Just (OpInfo op fixity) <- opInfo prim =
+    showsOp2' op fixity p u v
+--   showsPrec p (Const Add :^ (u :# v)) = showsOp2' "+"     (6,AssocLeft ) p u v
+--   showsPrec p (Const And :^ (u :# v)) = showsOp2' "&&&"   (3,AssocRight) p u v
+--   showsPrec p (Const Or  :^ (u :# v)) = showsOp2' "|||"   (2,AssocRight) p u v
+--   showsPrec p (Const Xor :^ (u :# v)) = showsOp2' "`xor`" (2,AssocRight) p u v
 #endif
   -- showsPrec p (Var n ty) = showsVar p n ty
   showsPrec _ (Var n _) = showString n
   showsPrec p (Const c) = showsPrec p c
+  showsPrec p (u :# v)  = showsPair p u v
+  showsPrec p (u :^ v)  = showsApp p u v
   showsPrec p (Lam q e) = showParen (p > 0) $
                           showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
-  showsPrec p (u :^ v) = showsApp p u v
 
--- TODO: Refactor add/and/or/xor/pair
+data OpInfo = OpInfo String Fixity
+
+opInfo :: Prim a -> Maybe OpInfo
+opInfo Add = Just $ OpInfo "+"     (6,AssocLeft )
+opInfo And = Just $ OpInfo "&&&"   (3,AssocRight)
+opInfo Or  = Just $ OpInfo "|||"   (2,AssocRight)
+opInfo Xor = Just $ OpInfo "`xor`" (2,AssocRight)
+opInfo _   = Nothing
+
 
 {--------------------------------------------------------------------
     Convenient notation for expression building
@@ -93,7 +106,8 @@ instance Show (E a) where
 
 infixr 1 #
 (#) :: E a -> E b -> E (a :* b)
-a # b = Const Pair :^ a :^ b
+-- (Const Fst :^ p) # (Const Snd :^ p') | ... = ...
+a # b = a :# b
 
 notE :: Unop (E Bool)
 notE b = Const Not :^ b
@@ -131,6 +145,7 @@ eval' :: E a -> Env -> a
 eval' (Var name ty) env = fromMaybe (error $ "eval': unbound name: " ++ name) $
                           lookupVar name ty env
 eval' (Const p)     _   = eval p
+eval' (u :# v)      env = (eval' u env, eval' v env)
 eval' (u :^ v)      env = (eval' u env) (eval' v env)
 eval' (Lam p e)     env = \ x -> eval' e (extendEnv p x env)
 

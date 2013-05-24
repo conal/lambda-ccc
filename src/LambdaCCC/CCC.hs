@@ -88,7 +88,7 @@ infixr 9 @.
 Id @. f  = f
 g  @. Id = g
 Apply @. (Konst k :&&& f) = Prim k @. f
-Apply @. (Prim Pair :&&& Id) = Dup
+-- Apply @. (Prim Pair :&&& Id) = Dup
 g  @. f  = g :. f
 
 (&&&) :: (a :-> c) -> (a :-> d) -> (a :-> c :* d)

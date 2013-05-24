@@ -112,12 +112,9 @@ konst not
 > asCCC e4
 curry snd
 > asCCC e5
-curry (prim add . apply . (prim (,) . snd &&& snd))
+curry (prim add . (snd &&& snd))
 > asCCC e6
-curry (apply . (prim (,) . snd &&& snd))
-
--- TODO: try auto-refactoring to get 
---   curry (dup . snd)
+curry (snd &&& snd)
 
 -}
 
@@ -139,3 +136,7 @@ apply . (prim (,) . snd &&& fst)
 apply . (prim (,) . prim xor . apply . (prim (,) . fst &&& snd) &&& prim and . apply . (prim (,) . fst &&& snd))
 
 -}
+
+
+-- Next, replace `Dup` and `Jam` by `dup` and `jam`, defined as `id &&& id` and `id ||| id`, respectively.
+
