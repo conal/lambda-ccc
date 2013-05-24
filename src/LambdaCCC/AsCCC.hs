@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
-{-# LANGUAGE PatternGuards, ExistentialQuantification, TypeSynonymInstances #-}
+{-# LANGUAGE PatternGuards, ExistentialQuantification #-}
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
@@ -29,7 +29,6 @@ module LambdaCCC.AsCCC
 -- TODO: explicit exports
 
 import Data.Functor ((<$>))
-import Control.Applicative (liftA2)
 import Control.Monad (mplus)
 import qualified Control.Arrow as A
 import Data.Maybe (fromMaybe)
@@ -37,7 +36,10 @@ import Data.Maybe (fromMaybe)
 import Data.IsTy
 import Data.Proof.EQ
 
+import LambdaCCC.Misc
 import LambdaCCC.ShowUtils
+import LambdaCCC.Prim
+import LambdaCCC.Ty
 
 -- Whether to simply (fold) during show
 #define SimplifyShow
@@ -45,64 +47,6 @@ import LambdaCCC.ShowUtils
 {--------------------------------------------------------------------
     Misc
 --------------------------------------------------------------------}
-
-infixr 1 :=>
-infixl 6 :+
-infixl 7 :*
-
--- TODO: Perhaps replace these definitions with a GADT to emphasize the
--- distinction between standard Haskell unit, cartesian product, and function
--- types, vs the categorical counterparts (terminal object, categorical
--- products, and coproducts).
-
-type Unit  = ()
-type (:*)  = (,)
-type (:+)  = Either
-type (:=>) = (->)
-
-showsOp2' :: (Show a, Show b) =>
-             String -> Fixity -> Prec -> a -> b -> ShowS
-showsOp2' = showsOp2 False -- no extra parens
-
-{--------------------------------------------------------------------
-    Evaluation
---------------------------------------------------------------------}
-
-class Evalable e where
-  type ValT e
-  eval :: e -> ValT e
-
-{--------------------------------------------------------------------
-    Primitives
---------------------------------------------------------------------}
-
--- | Primitives
-data Prim :: * -> * where
-  Lit        :: Show a => a -> Prim a
-  Pair       :: Prim (a :=> b :=> a :* b)
-  Not        :: Prim (Bool :=> Bool)
-  And,Or,Xor :: Prim (Bool :* Bool :=> Bool)
-  Add        :: Num  a => Prim (a :* a :=> a)
-  -- More here
-
-instance Show (Prim a) where
-  showsPrec p (Lit a) = showsPrec p a
-  showsPrec _ Pair    = showString "(,)"
-  showsPrec _ Not     = showString "not"
-  showsPrec _ And     = showString "and"
-  showsPrec _ Or      = showString "or"
-  showsPrec _ Xor     = showString "xor"
-  showsPrec _ Add     = showString "add"
-
-instance Evalable (Prim a) where
-  type ValT (Prim a) = a
-  eval (Lit x) = x
-  eval Pair    = (,)
-  eval Not     = not
-  eval And     = uncurry (&&)
-  eval Or      = uncurry (||)
-  eval Xor     = uncurry (/=)
-  eval Add     = uncurry (+)
 
 {--------------------------------------------------------------------
     CCC combinator form
@@ -218,43 +162,6 @@ instance Show (a :-> b) where
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry f)   = showsApp1  "curry" p f
   showsPrec p (Uncurry h) = showsApp1  "Uncurry" p h
-
-{--------------------------------------------------------------------
-    Types
---------------------------------------------------------------------}
-
--- | Typed type representation
-data Ty :: * -> * where
-  UnitT :: Ty Unit
-  IntT  :: Ty Int
-  BoolT :: Ty Bool
-  (:*)  :: Ty a -> Ty b -> Ty (a :* b)
-  (:=>) :: Ty a -> Ty b -> Ty (a :=> b)
-
-instance Show (Ty a) where
-  showsPrec _ UnitT     = showString "Unit"
-  showsPrec _ IntT      = showString "Int"
-  showsPrec _ BoolT     = showString "Bool"
-  showsPrec p (a :*  b) = showsOp2' ":*"  (7,AssocLeft ) p a b
-  showsPrec p (a :=> b) = showsOp2' ":=>" (1,AssocRight) p a b
-
-instance IsTy Ty where
-  UnitT     `tyEq` UnitT       = Just Refl
-  IntT      `tyEq` IntT        = Just Refl
-  BoolT     `tyEq` BoolT       = Just Refl
-  (a :*  b) `tyEq` (a' :*  b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
-  (a :=> b) `tyEq` (a' :=> b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
-  _         `tyEq` _           = Nothing
-
-class HasTy a where typ :: Ty a
-
-instance HasTy Unit where typ = UnitT
-instance HasTy Int  where typ = IntT
-instance HasTy Bool where typ = BoolT
-instance (HasTy a, HasTy b) => HasTy (a :*  b) where typ = typ :*  typ
-instance (HasTy a, HasTy b) => HasTy (a :=> b) where typ = typ :=> typ
-
--- TODO: Try out the singletons library
 
 {--------------------------------------------------------------------
     Lambda expressions

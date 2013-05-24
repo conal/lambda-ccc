@@ -22,19 +22,7 @@ module LambdaCCC.ShowUtils where
 
 import Data.List (intersperse)
 
-{--------------------------------------------------------------------
-    Misc
---------------------------------------------------------------------}
-
--- | Unary transformation
-type Unop  a = a -> a
-
--- | Binary transformation
-type Binop a = a -> Unop a
-
--- | Compose list of unary transformations
-compose :: [Unop a] -> Unop a
-compose = foldr (.) id
+import LambdaCCC.Misc (compose)
 
 {--------------------------------------------------------------------
     Show helpers
@@ -84,6 +72,10 @@ showsOp2 extraParens sop (p,assoc) q a b =
                AssocNone  -> (succ, succ)
    incr | extraParens = succ
         | otherwise   = id
+
+showsOp2' :: (Show a, Show b) =>
+             String -> Fixity -> Prec -> a -> b -> ShowS
+showsOp2' = showsOp2 False -- no extra parens
 
 -- parend :: ShowS -> Prec -> Prec -> ShowS
 -- parend sh p q = showParen (q > p) sh
