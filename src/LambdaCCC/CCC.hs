@@ -1,6 +1,4 @@
-{-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
-{-# LANGUAGE PatternGuards, ExistentialQuantification #-}
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures, CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -21,7 +19,7 @@
 module LambdaCCC.CCC
   ( (:->)(..), (@.)
   , (&&&), (***), (+++), (|||)
-  , first, second, left, right
+  , dup, jam, first, second, left, right
   ) where
 
 import qualified Control.Arrow as A
@@ -52,12 +50,10 @@ data (:->) :: * -> * -> * where
   -- Products
   Fst      :: a :* b :-> a
   Snd      :: a :* b :-> b
-  Dup      :: a :-> a :* a
   (:&&&)   :: (a :-> c) -> (a :-> d) -> (a :-> c :* d)
   -- Coproducts
   InL      :: a :-> a :+ b
   InR      :: b :-> a :+ b
-  Jam      :: a :+ a :-> a
   (:|||)   :: (a :-> c) -> (b :-> c) -> (a :+ b :-> c)
   -- Exponentials
   Apply    :: ((a :=> b) :* a) :-> b
@@ -72,11 +68,9 @@ instance Evalable (a :-> b) where
   eval (Prim p)    = eval p
   eval Fst         = fst
   eval Snd         = snd
-  eval Dup         = \ x -> (x,x)
   eval (f :&&& g)  = eval f A.&&& eval g
   eval InL         = Left
   eval InR         = Right
-  eval Jam         = id A.||| id
   eval (f :||| g)  = eval f A.||| eval g
   eval Apply       = uncurry ($)
   eval (Curry h)   = curry (eval h)
@@ -90,6 +84,12 @@ g  @. Id = g
 Apply @. (Konst k :&&& f) = Prim k @. f
 -- Apply @. (Prim Pair :&&& Id) = Dup
 g  @. f  = g :. f
+
+dup :: a :-> a :* a
+dup = Id &&& Id
+
+jam :: a :+ a :-> a
+jam = Id ||| Id
 
 (&&&) :: (a :-> c) -> (a :-> d) -> (a :-> c :* d)
 (&&&) = (:&&&)
@@ -123,6 +123,8 @@ instance Show (a :-> b) where
   showsPrec p (InL :. f :||| InR :. g) = showsOp2' "+++" (2,AssocRight) p f g
   showsPrec p (InL :. f :||| InR) = showsApp1 "left"  p f
   showsPrec p (InL :||| InR :. g) = showsApp1 "right" p g
+  showsPrec p (Id :&&& Id) = showString "dup"
+  showsPrec p (Id :||| Id) = showString "jam"
 #endif
   showsPrec _ Id          = showString "id"
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
@@ -133,10 +135,8 @@ instance Show (a :-> b) where
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
   showsPrec _ Fst         = showString "fst"
   showsPrec _ Snd         = showString "snd"
-  showsPrec _ Dup         = showString "dup"
   showsPrec _ InL         = showString "inL"
   showsPrec _ InR         = showString "inR"
-  showsPrec _ Jam         = showString "jam"
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry f)   = showsApp1  "curry" p f
   showsPrec p (Uncurry h) = showsApp1  "Uncurry" p h
