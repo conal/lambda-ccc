@@ -17,9 +17,11 @@
 -- GADT of CCC combinators
 ----------------------------------------------------------------------
 
-module LambdaCCC.CCC where
-
--- TODO: explicit exports
+module LambdaCCC.CCC
+  ( (:->)(..), (@.)
+  , (&&&), (***), (+++), (|||)
+  , first, second, left, right
+  ) where
 
 import qualified Control.Arrow as A
 

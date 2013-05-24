@@ -20,10 +20,7 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.AsCCC 
-  ( (:->)(..), (&&&), (***), (+++), (|||)
-  , Prim(..)
-  , first, second, left, right
-  , Name, E(..), Pat(..)
+  ( Name, E(..), Pat(..)
   , asCCC, asCCC'
   ) where
 

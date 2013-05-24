@@ -15,7 +15,7 @@
 -- Primitives
 ----------------------------------------------------------------------
 
-module LambdaCCC.Prim where
+module LambdaCCC.Prim (Prim(..)) where
 
 -- TODO: explicit exports
 
