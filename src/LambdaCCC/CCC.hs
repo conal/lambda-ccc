@@ -129,20 +129,19 @@ right g = Id +++ g
 instance Show (a :-> b) where
 #ifdef SimplifyShow
   showsPrec p (f :. Fst :&&& g :. Snd) = showsOp2'  "***" (3,AssocRight) p f g
-  showsPrec p (f :. Fst :&&& Snd)      = showsApp1  "first"  p f
-  showsPrec p (Fst :&&& g :. Snd)      = showsApp1  "second" p g
   showsPrec p (InL :. f :||| InR :. g) = showsOp2'  "+++" (2,AssocRight) p f g
-  showsPrec p (InL :. f :||| InR)      = showsApp1  "left"  p f
-  showsPrec p (InL :||| InR :. g)      = showsApp1  "right" p g
   showsPrec _ (Id :&&& Id)             = showString "dup"
   showsPrec _ (Id :||| Id)             = showString "jam"
   showsPrec _ (Snd :&&& Fst)           = showString "swapP"
   showsPrec _ (InR :&&& InL)           = showString "swapC"
+  showsPrec p (f :. Fst :&&& Snd)      = showsApp1  "first"  p f
+  showsPrec p (Fst :&&& g :. Snd)      = showsApp1  "second" p g
+  showsPrec p (InL :. f :||| InR)      = showsApp1  "left"   p f
+  showsPrec p (InL :||| InR :. g)      = showsApp1  "right"  p g
 #endif
   showsPrec _ Id          = showString "id"
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
-  showsPrec p (Prim x)    = showsApp1 "prim" p x
-                            -- showsPrec p x
+  showsPrec p (Prim x)    = showsApp1 "prim" p x    -- or: showsPrec p x
   showsPrec p (Konst b)   = showsApp1 "konst" p b
   showsPrec p (f :&&& g)  = showsOp2' "&&&" (3,AssocRight) p f g
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
@@ -151,5 +150,5 @@ instance Show (a :-> b) where
   showsPrec _ InL         = showString "inL"
   showsPrec _ InR         = showString "inR"
   showsPrec _ Apply       = showString "apply"
-  showsPrec p (Curry f)   = showsApp1  "curry" p f
+  showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "Uncurry" p h
