@@ -129,12 +129,8 @@ dup
 > asCCC' e7
 prim not . prim and . (prim not *** prim not)
 > asCCC' e8
-snd &&& fst
+swapP
 > asCCC' e9
 prim xor &&& prim and
 
 -}
-
-
--- Next, replace `Dup` and `Jam` by `dup` and `jam`, defined as `id &&& id` and `id ||| id`, respectively.
-
