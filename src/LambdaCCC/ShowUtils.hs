@@ -29,6 +29,9 @@ import Data.List (intersperse)
 -- | Unary transformation
 type Unop  a = a -> a
 
+-- | Binary transformation
+type Binop a = a -> Unop a
+
 -- | Compose list of unary transformations
 compose :: [Unop a] -> Unop a
 compose = foldr (.) id
