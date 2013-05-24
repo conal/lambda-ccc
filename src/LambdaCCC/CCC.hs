@@ -19,7 +19,8 @@
 module LambdaCCC.CCC
   ( (:->)(..), (@.)
   , (&&&), (***), (+++), (|||)
-  , dup, jam, first, second, left, right
+  , dup, jam, swapP, swapC
+  , first, second, left, right
   ) where
 
 import qualified Control.Arrow as A
@@ -35,6 +36,9 @@ infixr 9 :.
 
 infixr 3 :&&&
 infixr 2 :|||
+
+-- Whether to simply (fold) during show
+#define SimplifyShow
 
 -- | CCC combinator expressions. Although we use standard Haskell unit,
 -- cartesian product, and function types here, the intended interpretation is as
@@ -91,8 +95,15 @@ dup = Id &&& Id
 jam :: a :+ a :-> a
 jam = Id ||| Id
 
+swapP :: a :* b :-> b :* a
+swapP = Snd &&& Fst
+
+swapC :: a :+ b :-> b :+ a
+swapC = InR ||| InL
+
 (&&&) :: (a :-> c) -> (a :-> d) -> (a :-> c :* d)
-(&&&) = (:&&&)
+Fst &&& Snd = Id
+f &&& g = f :&&& g
 
 (***) :: (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
 f *** g = f @. Fst &&& g @. Snd
@@ -117,14 +128,16 @@ right g = Id +++ g
 
 instance Show (a :-> b) where
 #ifdef SimplifyShow
-  showsPrec p (f :. Fst :&&& g :. Snd) = showsOp2' "***" (3,AssocRight) p f g
-  showsPrec p (f :. Fst :&&& Snd) = showsApp1 "first"  p f
-  showsPrec p (Fst :&&& g :. Snd) = showsApp1 "second" p g
-  showsPrec p (InL :. f :||| InR :. g) = showsOp2' "+++" (2,AssocRight) p f g
-  showsPrec p (InL :. f :||| InR) = showsApp1 "left"  p f
-  showsPrec p (InL :||| InR :. g) = showsApp1 "right" p g
-  showsPrec p (Id :&&& Id) = showString "dup"
-  showsPrec p (Id :||| Id) = showString "jam"
+  showsPrec p (f :. Fst :&&& g :. Snd) = showsOp2'  "***" (3,AssocRight) p f g
+  showsPrec p (f :. Fst :&&& Snd)      = showsApp1  "first"  p f
+  showsPrec p (Fst :&&& g :. Snd)      = showsApp1  "second" p g
+  showsPrec p (InL :. f :||| InR :. g) = showsOp2'  "+++" (2,AssocRight) p f g
+  showsPrec p (InL :. f :||| InR)      = showsApp1  "left"  p f
+  showsPrec p (InL :||| InR :. g)      = showsApp1  "right" p g
+  showsPrec _ (Id :&&& Id)             = showString "dup"
+  showsPrec _ (Id :||| Id)             = showString "jam"
+  showsPrec _ (Snd :&&& Fst)           = showString "swapP"
+  showsPrec _ (InR :&&& InL)           = showString "swapC"
 #endif
   showsPrec _ Id          = showString "id"
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f

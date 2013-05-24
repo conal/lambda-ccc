@@ -112,10 +112,8 @@ konst not
 > asCCC e4
 curry snd
 > asCCC e5
-curry (prim add . (snd &&& snd))
 > asCCC e6
 curry (snd &&& snd)
-
 -}
 
 {- Without extra unit context:
@@ -129,11 +127,11 @@ prim add . dup
 > asCCC' e6
 dup
 > asCCC' e7
-prim not . prim and . apply . (prim (,) . prim not . fst &&& prim not . snd)
+prim not . prim and . (prim not *** prim not)
 > asCCC' e8
-apply . (prim (,) . snd &&& fst)
+snd &&& fst
 > asCCC' e9
-apply . (prim (,) . prim xor . apply . (prim (,) . fst &&& snd) &&& prim and . apply . (prim (,) . fst &&& snd))
+prim xor &&& prim and
 
 -}
 
