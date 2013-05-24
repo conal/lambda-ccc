@@ -436,33 +436,39 @@ e2 = notE e1
 infixr 1 :+>
 type a :+> b = E (a :=> b)
 
+-- \ x -> not
 e3 :: Bool :+> Bool
 e3 = Const Not
 
-e4 :: Int :+> Int  -- \ x -> x
+-- \ x -> x
+e4 :: Int :+> Int
 e4 = Lam p x
  where
    (p,x) = vars "x"
 
+-- \ x -> x + x
 e5 :: Int :+> Int
 e5 = Lam p (x +@ x)
  where
    (p,x) = vars "x"
 
-e6 :: Int :+> Int :* Int -- \ x -> (x,x)
+-- \ x -> (x,x)
+e6 :: Int :+> Int :* Int
 e6 = Lam p (x # x)
  where
    (p,x) = vars "x"
 
+-- \ (a,b) -> not (not a && not b)
 e7 :: Bool :* Bool :+> Bool
 e7 = Lam p (notE (notE a &&* notE b))
  where
    (p,(a,b)) = vars2 ("a","b")
 
+-- \ (a,b) -> (b,a)
 e8 :: Bool :* Bool :+> Bool :* Bool
 e8 = Lam p (b # a) where (p,(a,b)) = vars2 ("a","b")
 
--- Half adder
+-- Half adder: \ (a,b) -> (a `xor` b, a && b)
 e9 :: Bool :* Bool :+> Bool :* Bool
 e9 = Lam p ((a `xor` b) # (a &&* b))   -- half-adder
  where
@@ -483,7 +489,8 @@ False
 20
 > evalE e6 10
 (10,10)
-
+> evalE e8 (True,False)
+(False,True)
 -}
 
 {- Conversions:
@@ -516,5 +523,11 @@ id
 prim add . dup
 > asCCC' e6
 dup
+> asCCC' e7
+prim not . prim and . apply . (prim (,) . prim not . fst &&& prim not . snd)
+> asCCC' e8
+apply . (prim (,) . snd &&& fst)
+> asCCC' e9
+apply . (prim (,) . prim xor . apply . first (prim (,)) &&& prim and . apply . first (prim (,)))
 
 -}
