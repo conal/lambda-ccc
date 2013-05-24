@@ -17,8 +17,6 @@
 
 module LambdaCCC.Prim (Prim(..)) where
 
--- TODO: explicit exports
-
 import LambdaCCC.Misc
 
 -- | Primitives

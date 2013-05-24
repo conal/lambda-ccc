@@ -29,14 +29,6 @@ import LambdaCCC.Misc
 import LambdaCCC.ShowUtils
 import LambdaCCC.Prim
 
-
--- Whether to simply (fold) during show
-#define SimplifyShow
-
-{--------------------------------------------------------------------
-    CCC combinator form
---------------------------------------------------------------------}
-
 infix  0 :->
 infixr 3 &&&, ***
 infixr 2 |||, +++

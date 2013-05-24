@@ -15,9 +15,7 @@
 -- Typed types
 ----------------------------------------------------------------------
 
-module LambdaCCC.Ty where
-
--- TODO: explicit exports
+module LambdaCCC.Ty (HasTy(..),Ty(..)) where
 
 import Control.Applicative (liftA2)
 
@@ -52,6 +50,7 @@ instance IsTy Ty where
   (a :=> b) `tyEq` (a' :=> b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
   _         `tyEq` _           = Nothing
 
+-- | Synthesize a type
 class HasTy a where typ :: Ty a
 
 instance HasTy Unit where typ = UnitT
