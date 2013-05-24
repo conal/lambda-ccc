@@ -49,6 +49,7 @@ convert k (Var n t)  = fromMaybe (error $ "unbound variable: " ++ n) $
                        convertVar k n t
 convert k (u :# v)   = convert k u &&& convert k v
 convert k (u :^ v)   = Apply @. (convert k u &&& convert k v)
+                  -- = Apply @. convert k (u :# v)
 convert k (Lam p e)  = Curry (convert (PairP k p) e)
 
 -- Convert a variable in context
