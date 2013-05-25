@@ -40,7 +40,9 @@ toCCC = convert UnitP
 
 toCCC' :: HasTy a => E (a :=> b) -> (a :-> b)
 toCCC' (Lam p e) = convert p e
-toCCC' e = toCCC' (etaExpand e)
+toCCC' e = toCCC' (Lam vp (e :^ ve))
+ where
+   (vp,ve) = vars "ETA"
 
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: Pat a -> E b -> (a :-> b)

@@ -23,7 +23,6 @@ module LambdaCCC.Lambda
   ( Name, Pat(..), E(..)
   , (#), notE, (||*), (&&*), xor, (+@)
   , vars, vars2
-  , etaExpand
   ) where
 
 import Data.Maybe (fromMaybe)
@@ -169,12 +168,6 @@ lookupVar na tya = look
 -- TODO: adopt another representation, such as Seq. Replace the explicit
 -- recursion in lookupVar with a fold or something. It's almost a mconcat. Could
 -- use toList and catMaybes.
-
-etaExpand :: HasTy a => E (a :=> b) -> E (a :=> b)
-etaExpand (Lam{}) = error "etaExpand: did you mean to expand a lambda?"
-etaExpand e = Lam vp (e :^ ve)
- where
-   (vp,ve) = vars "ETA"
 
 vars :: HasTy a => Name -> (Pat a, E a)
 vars n = (VarP n t, Var n t) where t = typ
