@@ -17,5 +17,12 @@ Library
   Include-Dirs:        src
   Build-Depends:       base<5, ty
   Exposed-Modules:     
-                       LambdaCCC.ToCCC
+                       LambdaCCC.Misc
                        LambdaCCC.ShowUtils
+                       LambdaCCC.Ty
+                       LambdaCCC.Prim
+                       LambdaCCC.Lambda
+                       LambdaCCC.CCC
+                       LambdaCCC.ToCCC
+  Other-Modules:
+                       LambdaCCC.Tests
