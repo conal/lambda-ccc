@@ -114,18 +114,17 @@ notE b = Const Not :^ b
 infixr 2 ||*, `xor`
 infixr 3 &&*
 
-(&&*) :: Binop (E Bool)
-a &&* b = Const And :^ (a # b)
+binop :: Prim (a :* b :=> c) -> E a -> E b -> E c
+binop op a b = Const op :^ (a # b)
 
-(||*) :: E Bool -> E Bool -> E Bool
-a ||* b = Const Or  :^ (a # b)
-
-xor :: E Bool -> E Bool -> E Bool
-a `xor` b = Const Xor :^ (a # b)
+(&&*), (||*), xor :: Binop (E Bool)
+(&&*) = binop And
+(||*) = binop Or
+xor   = binop Xor
 
 infixl 6 +@
-(+@) :: Num a => E a -> E a -> E a
-a +@ b = Const Add :^ (a # b)
+(+@) :: Num a => Binop (E a)
+(+@) = binop Add
 
 -- TODO: Use Num and Boolean classes
 
