@@ -19,7 +19,10 @@ import Language.HERMIT.Primitive.Common
 
 externals ::  [External]
 externals = [ external "reify" (promoteExprR reifyR :: RewriteH Core)
-                [ "reify a core expression into the Expr GADT"
+                [ "reify a core expression of the form \"eval e\"",
+                  "into a core expression of the form \"compile x\",",
+                  "where \"x\" is a representation of the structure of \"e\"",
+                  "using the \"Expr\" data type."
                 ] .+ Experiment
             ]
 
