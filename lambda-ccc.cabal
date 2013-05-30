@@ -3,7 +3,7 @@ Version:             0.1
 Cabal-Version:       >= 1.6
 Synopsis:            Convert lambda expressions to CCC combinators
 Category:            categories
-Description: 
+Description:
   Convert lambda expressions to CCC combinators
 Author:              Conal Elliott
 Maintainer:          conal@tabula.com
@@ -15,9 +15,9 @@ build-type:          Simple
 Library
   hs-Source-Dirs:      src
   Include-Dirs:        src
-  Build-Depends:       base < 5, 
+  Build-Depends:       base < 5,
                        ghc >= 7.6,
-                       hermit >= 0.1.8.0, 
+                       hermit >= 0.1.8.0,
                        template-haskell,
                        ty
   Exposed-Modules:     LambdaCCC
@@ -28,5 +28,7 @@ Library
                        LambdaCCC.Lambda
                        LambdaCCC.CCC
                        LambdaCCC.ToCCC
+                       LambdaCCCDemo.Reify
+                       LambdaCCCDemo.Embedding
   Other-Modules:
                        LambdaCCC.Tests

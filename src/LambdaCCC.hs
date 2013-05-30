@@ -14,11 +14,14 @@ import Language.HERMIT.Primitive.Debug
 
 import LambdaCCC.CCC
 
+import qualified LambdaCCCDemo.Reify as Reify
+
 plugin :: Plugin
 plugin = optimize (phase 0 . interactive cmds)
 
 cmds :: [External]
-cmds = 
+cmds =
+    Reify.externals ++
     [ external "convert" (promoteExprR (convert UnitP))
         [ "top level lambda->CCC transformation" ]
     , external "convert-lam" (promoteExprR (convertLam UnitP))
@@ -30,11 +33,11 @@ cmds =
 data Pat = UnitP | VarP Id | PairP Pat Pat
 
 convert :: Pat -> RewriteH CoreExpr
-convert k =    convertLam k 
+convert k =    convertLam k
             <+ convertApp k
 
 -- This project should serve as a useful motivator for finding
--- a more typeful way to build CoreExprs. 
+-- a more typeful way to build CoreExprs.
 
 -- NB: Neither of these is correct yet...
 --     1. We need to supply explicit types to mkCoreApps
@@ -57,6 +60,6 @@ convertApp k = do
     a <- findIdT 'Apply
     c <- findIdT $ TH.mkName ":."
     amp <- findIdT $ TH.mkName "&&&"
-    appT (convert k) (convert k) $ \ u v -> 
+    appT (convert k) (convert k) $ \ u v ->
         let res = mkCoreApps (varToCoreExpr amp) [{-types go here-}u,v]
         in mkCoreApps (varToCoreExpr c) [{-again types go here-}varToCoreExpr a,res]
