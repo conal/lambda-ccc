@@ -48,8 +48,8 @@ convertLam :: Pat -> RewriteH CoreExpr
 convertLam k = do
     Lam p _ <- idR
     observeR "convertLam"
-    c <- findIdT 'Curry
-    lamT (convert (PairP k $ VarP p)) $ \ _ e -> mkCoreApps (varToCoreExpr c) [{-some types need to go here!-}e]
+    c <- findET 'Curry
+    lamT (convert (PairP k $ VarP p)) $ \ _ e -> mkCoreApps c [{-some types need to go here!-}e]
 
 -- convert k (u :^ v)   = Apply @. (convert k u &&& convert k v)
 -- @. = :.
