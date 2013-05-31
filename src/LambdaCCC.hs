@@ -57,9 +57,9 @@ convertApp :: Pat -> RewriteH CoreExpr
 convertApp k = do
     App u v <- idR
     observeR "convertApp"
-    a   <- findET  'Apply
-    c   <- findET' ":."
-    amp <- findET' "&&&"
+    a   <- findET 'Apply
+    c   <- findET '(:.)
+    amp <- findET '(&&&)
     appT (convert k) (convert k) $ \ u v ->
         let res = mkCoreApps amp [{-types go here-}u,v]
         in mkCoreApps c [{-again types go here-} a,res]
@@ -67,5 +67,5 @@ convertApp k = do
 findET :: TH.Name -> TranslateH a CoreExpr
 findET = fmap varToCoreExpr . findIdT
 
-findET' :: String -> TranslateH a CoreExpr
-findET' = findET . TH.mkName
+-- findET' :: String -> TranslateH a CoreExpr
+-- findET' = findET . TH.mkName
