@@ -17,7 +17,8 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.CCC
-  ( (:->)(..), (@.)
+  ( module LambdaCCC.Misc
+  , (:->)(..), (@.)
   , (&&&), (***), (+++), (|||)
   , dup, jam, swapP, swapC
   , first, second, left, right
@@ -25,9 +26,9 @@ module LambdaCCC.CCC
 
 import qualified Control.Arrow as A
 
-import LambdaCCC.Misc
-import LambdaCCC.ShowUtils
-import LambdaCCC.Prim
+import LambdaCCC.Misc (Evalable(..),(:*),(:+),(:=>))
+import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
+import LambdaCCC.Prim (Prim(..))
 
 infix  0 :->
 infixr 3 &&&, ***

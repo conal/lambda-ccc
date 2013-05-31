@@ -1,0 +1,2 @@
+:set -package ghc
+:set -XTemplateHaskell
