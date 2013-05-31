@@ -54,7 +54,7 @@ varToStringLitE =  Lit . mkMachString . var2String
 ----------------------------------------------------
 
 embeddingModule :: String
-embeddingModule = "Embedding"
+embeddingModule = "LambdaCCCDemo.Embedding"
 
 type FunctionName = String
 
