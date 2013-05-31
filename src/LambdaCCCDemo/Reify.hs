@@ -29,14 +29,12 @@ externals = [ external "reify" (promoteExprR reifyR :: RewriteH Core)
 ----------------------------------------------------
 
 reifyR :: RewriteH CoreExpr
-reifyR =  do evalId   <- findEmbeddingId "eval"
-             compileE <- findEmbeddingE "compile"
+reifyR =  do compileE <- findEmbeddingE "compile"
              varE     <- findEmbeddingE "var"
              appE     <- findEmbeddingE "app"
              lamE     <- findEmbeddingE "lam"
              withPatFailMsg (wrongExprForm "App (App 'eval ty) e") $
-               do App (App (Var eval) (Type _)) _ <- idR
-                  guardMsg (eval == evalId) "cannot reify: not an evaluation of an expression."
+               do (_eval, (Type _):_) <- callNameT $ TH.mkName $ addEmbeddingModule "eval"
                   let reifyR'  :: RewriteH CoreExpr
                       reifyR'  =  varT (\ i -> mkCoreApp varE (varToStringLitE i))
                                <+ appT reifyR' reifyR' (\ e1 e2 -> mkCoreApps appE [e1,e2])
@@ -56,12 +54,15 @@ varToStringLitE =  Lit . mkMachString . var2String
 embeddingModule :: String
 embeddingModule = "LambdaCCCDemo.Embedding"
 
+addEmbeddingModule :: String -> String
+addEmbeddingModule s = embeddingModule ++ "." ++ s
+
 type FunctionName = String
 
 findEmbeddingE :: FunctionName -> TranslateH a CoreExpr
 findEmbeddingE s = findEmbeddingId s >>^ varToCoreExpr
 
 findEmbeddingId :: FunctionName -> TranslateH a Id
-findEmbeddingId s = findIdT (TH.mkName (embeddingModule ++ "." ++ s))
+findEmbeddingId = findIdT . TH.mkName . addEmbeddingModule
 
 ----------------------------------------------------
