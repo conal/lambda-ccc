@@ -15,6 +15,7 @@ import Language.HERMIT.Primitive.Debug
 import LambdaCCC.CCC
 
 import qualified LambdaCCCDemo.Reify as Reify
+import qualified LambdaCCC.Core as LC
 
 plugin :: Plugin
 plugin = optimize (phase 0 . interactive cmds)
@@ -22,6 +23,7 @@ plugin = optimize (phase 0 . interactive cmds)
 cmds :: [External]
 cmds =
     Reify.externals ++
+    LC.externals ++
     [ external "convert" (promoteExprR (convert UnitP))
         [ "top level lambda->CCC transformation" ]
     , external "convert-lam" (promoteExprR (convertLam UnitP))
