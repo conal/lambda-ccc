@@ -8,6 +8,7 @@
 -- |
 -- Module      :  LambdaCCC.FunCCC
 -- Copyright   :  (c) 2013 Tabula, Inc.
+-- LICENSE     :  BSD3
 -- 
 -- Maintainer  :  conal@tabula.com
 -- Stability   :  experimental
