@@ -69,7 +69,7 @@ ppT = constT . ppH
 unhandledT :: Show a => a -> Translate c HermitM a b
 unhandledT e = fail $ "Not yet handled: " ++ show e
 
--- TODO: Use one of HERMIT's pretty-printers
+-- TODO: Use one of HERMIT's pretty-printers instead of CLasH's Show.
 
 {--------------------------------------------------------------------
     Core utilities
