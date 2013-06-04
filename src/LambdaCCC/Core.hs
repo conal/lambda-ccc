@@ -1,4 +1,4 @@
-{-# LANGUAGE ViewPatterns, TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns, PatternGuards, TemplateHaskell #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -36,7 +36,7 @@ import Language.HERMIT.External
 import Language.HERMIT.Kure hiding (apply)
 import Language.HERMIT.Optimize
 import Language.HERMIT.Primitive.Common
--- import Language.HERMIT.Primitive.Debug
+import Language.HERMIT.Primitive.Debug (observeR)
 
 -- import LambdaCCC.CCC
 import LambdaCCC.FunCCC  -- Function-only vocabulary
@@ -82,12 +82,16 @@ apps f ts es = mkCoreApps (varToCoreExpr f) (map Type ts ++ es)
 expType :: CoreExpr -> Type
 expType (Var x)          = varType x
 expType (Lit l)          = literalType l
-expType (App f (Type _)) = ran where ForAllTy _ ran = expType f
-expType (App f _)        = ran where FunTy    _ ran = expType f
+expType (App f _)        = ranType (expType f)
 expType (Lam x e)        = FunTy (varType x) (expType e)
 expType (Let _ e)        = expType e
 expType (Case _ _ ty _)  = ty
 expType _                = error "expType: form not yet handled"
+
+ranType :: Type -> Type
+ranType (ForAllTy _ ran) = ran
+ranType (FunTy    _ ran) = ran
+ranType _ = error "ranType: not ForAllTy or FunTy"
 
 tupleTy :: [Type] -> Type
 tupleTy = mkBoxedTupleTy -- from TysWiredIn
@@ -102,9 +106,28 @@ pairTy a b = tupleTy [a,b]
 
 unPairTy :: Type -> Maybe (Type,Type)
 unPairTy = listToPair <=< unTupleTy
- where
-   listToPair [a,b] = Just (a,b)
-   listToPair _     = Nothing
+
+listToPair :: [a] -> Maybe (a,a)
+listToPair [a,b] = Just (a,b)
+listToPair _     = Nothing
+
+unTuple :: CoreExpr -> Maybe [(Type,CoreExpr)]
+unTuple expr@(App {})
+  | (Var f, span isTypeArg -> (tyArgs,valArgs)) <- collectArgs expr
+  , Just dc <- isDataConWorkId_maybe f
+  , isTupleTyCon (dataConTyCon dc) && (valArgs `lengthIs` idArity f)
+  = Just (zip (unType <$> tyArgs) valArgs)
+unTuple _ = Nothing               
+
+unPair :: CoreExpr -> Maybe ((Type,CoreExpr),(Type,CoreExpr))
+unPair = listToPair <=< unTuple
+
+-- TODO: Discard types returned from unTuple and unPair, since they're easy to
+-- reconstruct.
+
+unType :: CoreExpr -> Type
+unType (Type t) = t
+unType _ = error "unType: not a type"
 
 -- curry :: forall a b c. (a :* b :-> c) -> (a :-> b :=> c)
 
@@ -158,6 +181,12 @@ mkApplyComp applyCompId f g = apps applyCompId [a,b,c] [f,g]
 
 -- TODO: Use applyId and compId to define mkApplyComp
 
+mkAmp :: Id -> Binop CoreExpr
+mkAmp ampId f g = apps ampId [a,c,d] [f,g]
+ where
+   FunTy a  c = expType f
+   FunTy _a d = expType g
+
 -- TODO: consider some refactoring of mkXyz above
 
 
@@ -200,15 +229,27 @@ convert =
      sndId       <- findIdT 'snd
      compFstId   <- findIdT 'compFst
      applyCompId <- findIdT 'applyComp
+     ampId       <- findIdT '(&&&)
      let rew :: Context -> CoreExpr -> RewriteH CoreExpr
-         rew cxt (Var x  ) = pure $ findVar (compFstId,sndId) constId x cxt
-         rew cxt (App u v) = mkApplyComp applyCompId <$> rew cxt u <*> rew cxt v
-         rew cxt (Lam x e) = mkCurry curryId <$> rew (x : cxt) e
-         rew _   e         = return e   -- ???
+         rew cxt (Var x  ) = do _ <- observeR "Var"
+                                pure $ findVar (compFstId,sndId) constId x cxt
+         rew cxt (unPair -> Just ((_,ea),(_,eb))) =
+           do _ <- observeR "Pair"
+              mkAmp ampId <$> rew cxt ea <*> rew cxt eb
+         rew cxt (App u v) = do _ <- observeR "App"
+                                mkApplyComp applyCompId <$> rew cxt u <*> rew cxt v
+         rew cxt (Lam x e) = do _ <- observeR "Lam"
+                                mkCurry curryId <$> rew (x : cxt) e
+         rew _   e         = do _ <- observeR "Other"
+                                return e   -- ???
          -- rew _   e         = unhandledT e
          -- rew _ _ = fail "convert: only Var, App, Lam currently handled"
       in
         idR >>= rew []
+
+--      appId     <- findIdT 'apply
+--      compId    <- findIdT '(.)
+--      fstId     <- findIdT 'fst
 
 -- TODO: Rework rew with simpler types, and adapt from idR.
 
@@ -224,11 +265,6 @@ convert =
 -- constT :: m b -> Translate c m a bSource
 
 
-
---      appId     <- findIdT 'apply
---      compId    <- findIdT '(.)
---      ampId     <- findIdT '(&&&)
---      fstId     <- findIdT 'fst
 
 -- Redo using varT, appT, lamT:
 
