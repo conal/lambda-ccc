@@ -1,12 +1,15 @@
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wall -fno-warn-unused-imports #-}
 
-module Adder (foo,halfAdd) where
+module Adder where
 
 import Prelude hiding (and)
 
 -- import LambdaCCC.CCC
 import LambdaCCC.FunCCC
+
+bar :: (Bool,Bool) -> Bool
+bar = xor
 
 foo :: (Bool,Bool) -> Bool
 foo p = xor p
