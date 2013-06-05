@@ -2,7 +2,7 @@ Convert lambda expressions to CCC combinators
 
 # GHC Plugin
 
-This package provides a HERMIT GHC plugin which converts
+This package provides a HERMIT GHC plugin that converts
 GHC Core to CCC combinators. You must `cabal install` the
 package for the plugin to be available. To invoke the plugin:
 
