@@ -26,6 +26,7 @@ import Control.Applicative (Applicative(..),liftA2)
 import Control.Arrow ((>>>))
 import Control.Monad ((<=<))
 import Data.Maybe (fromMaybe)
+import Text.Printf (printf)
 
 import GhcPlugins
 import TypeRep (Type(..))
@@ -39,6 +40,7 @@ import Language.HERMIT.Kure hiding (apply)
 import Language.HERMIT.Optimize
 import Language.HERMIT.Primitive.Common
 import Language.HERMIT.Primitive.Debug (observeR)
+import Language.HERMIT.GHC (uqName)
 
 -- import LambdaCCC.CCC
 import LambdaCCC.FunCCC  -- Function-only vocabulary
@@ -180,8 +182,10 @@ mkAmp ampId f g = apps ampId [a,c,d] [f,g]
 -- | Lambda-bound variables, inner-first
 type Context = [Id]
 
--- "\ a b c " --> [c,b,a] --> (a :* b) :* c
--- isn't this really: ((a :* b) :* c) :* () ?
+showContext :: Context -> String
+showContext = show . map (uqName.varName)
+
+-- "\ a b c " --> [c,b,a] --> ((a :* b) :* c) :* () ?
 cxtType :: Context -> Type
 cxtType = foldr (flip pairTy) unitTy . map varType
 
@@ -195,7 +199,7 @@ selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
    select :: Context -> Type -> Maybe CoreExpr
    select [] _                    = Nothing
    select (v:vs) cxTy | v == x    = Just (apps sndId [a,b] [])
-                      | otherwise = mkCompFst compFstId <$> (select vs a)
+                      | otherwise = mkCompFst compFstId <$> select vs a
     where
       Just (a,b) = unPairTy cxTy
 
@@ -219,7 +223,7 @@ convert =
      applyCompId <- findIdT 'applyComp
   -- ampId       <- findIdT '(&&&)
      let rr :: RecoreC
-         rr c = observeR "rr" >>= \_ -> 
+         rr c = observeR (printf "rr: %s" (showContext c)) >>= \_ -> 
                    (rVar  c >>> observeR "Var")
                 <+ (rPair c >>> observeR "Pair")
                 <+ (rApp  c >>> observeR "App")
