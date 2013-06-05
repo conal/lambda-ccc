@@ -135,8 +135,6 @@ mkCurry curryId = do
         return ()
     guardMsg (isTupleTyCon tc) "mkCurry: tycon is not a tuple tycon"
     return $ apps curryId [a,b,c] [f]
-    
---   FunTy (unPairTy -> Just (a,b)) c = exprType f
 
 -- apply :: forall a b. ((a :=> b) :* a) :-> b
 
@@ -224,7 +222,7 @@ selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
  where
    select :: Context -> Type -> Maybe CoreExpr
    select [] _                    = Nothing
-   select (v:vs) cxTy | v == x    = Just (mkIntExpr 0) -- (apps sndId [a,b] [])
+   select (v:vs) cxTy | v == x    = Just {- to skip past this error and get to the mkCurry one (mkIntExpr 0) -} (apps sndId [a,b] [])
                       | otherwise = mkCompFst compFstId <$> select vs a
     where
       Just (a,b) = unPairTy cxTy
