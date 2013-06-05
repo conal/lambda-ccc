@@ -1,4 +1,4 @@
-{-# LANGUAGE ViewPatterns, PatternGuards, TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns, PatternGuards, TemplateHaskell, LambdaCase #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -37,6 +37,7 @@ import TypeRep (Type(..))
 import Language.HERMIT.Monad (HermitM,liftCoreM)
 import Language.HERMIT.External
 import Language.HERMIT.Kure hiding (apply)
+import qualified Language.HERMIT.Kure as Kure
 import Language.HERMIT.Optimize
 import Language.HERMIT.Primitive.Common
 import Language.HERMIT.Primitive.Debug (observeR)
@@ -99,15 +100,15 @@ listToPair :: [a] -> Maybe (a,a)
 listToPair [a,b] = Just (a,b)
 listToPair _     = Nothing
 
-unTuple :: CoreExpr -> Maybe [(Type,CoreExpr)]
+unTuple :: CoreExpr -> Maybe [CoreExpr]
 unTuple expr@(App {})
-  | (Var f, span isTypeArg -> (tyArgs,valArgs)) <- collectArgs expr
+  | (Var f, dropWhile isTypeArg -> valArgs) <- collectArgs expr
   , Just dc <- isDataConWorkId_maybe f
   , isTupleTyCon (dataConTyCon dc) && (valArgs `lengthIs` idArity f)
-  = Just (zip (unType <$> tyArgs) valArgs)
+  = Just valArgs
 unTuple _ = Nothing               
 
-unPair :: CoreExpr -> Maybe ((Type,CoreExpr),(Type,CoreExpr))
+unPair :: CoreExpr -> Maybe (CoreExpr,CoreExpr)
 unPair = listToPair <=< unTuple
 
 -- TODO: Discard types returned from unTuple and unPair, since they're easy to
@@ -174,6 +175,18 @@ mkAmp ampId f g = apps ampId [a,c,d] [f,g]
 
 -- TODO: consider some refactoring of mkXyz above
 
+{--------------------------------------------------------------------
+    HERMIT utilities
+--------------------------------------------------------------------}
+
+-- | Translate a pair expression.
+pairT :: (PathContext c, Applicative m, Monad m) =>
+         Translate c m CoreExpr a1 -> Translate c m CoreExpr a2
+      -> (a1 -> a2 -> b) -> Translate c m CoreExpr b
+pairT t1 t2 f = translate $ \ c ->
+  \ case (unPair -> Just (e1,e2)) ->
+           f <$> Kure.apply t1 (c @@ 0) e1 <*> Kure.apply t2 (c @@ 1) e2
+         _         -> fail "not a pair node."
 
 {--------------------------------------------------------------------
     Rewriting
@@ -221,11 +234,11 @@ convert =
      sndId       <- findIdT 'snd
      compFstId   <- findIdT 'compFst
      applyCompId <- findIdT 'applyComp
-  -- ampId       <- findIdT '(&&&)
+     ampId       <- findIdT '(&&&)
      let rr :: RecoreC
          rr c = observeR (printf "rr: %s" (showContext c)) >>= \_ -> 
                    (rVar  c >>> observeR "Var")
-                <+ (rPair c >>> observeR "Pair")
+                <+ (rPair c >>> observeR "Pair") -- NB: before App
                 <+ (rApp  c >>> observeR "App")
                 <+ (rLam  c >>> observeR "Lam")
                 <+ (observeR "Other" >>> fail "only Var, App, Lam currently handled")
@@ -234,9 +247,8 @@ convert =
          rVar cxt = varT $ \ x -> findVar (compFstId,sndId) constId x cxt
 
          rPair :: RecoreC
-         -- rPair cxt = pairT (rr cxt) (rr cxt) $ mkAmp ampId
-         -- How to define pairT?
-         rPair _ = fail "rPair unimplemented"
+         rPair cxt = pairT (rr cxt) (rr cxt) $ mkAmp ampId
+         -- rPair _ = fail "rPair unimplemented"
 
          rApp :: RecoreC
          rApp cxt = appT (rr cxt) (rr cxt) $ \ u v -> mkApplyComp applyCompId u v
