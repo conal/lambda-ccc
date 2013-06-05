@@ -220,9 +220,9 @@ selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
    select []     _    = Nothing
    select (v:vs) cxTy = do 
         (tc, [a,b]) <- splitTyConApp_maybe $ tr cxTy
-        tr (return a)
-        tr (return $ varName sndId)
-        tr (return b)
+        _ <- tr (return a)
+        _ <- tr (return $ varName sndId)
+        _ <- tr (return b)
         guardMsg (isTupleTyCon tc) "select: not a tuple tycon"
         if v == x
             then return (apps sndId [a,b] []) 
@@ -274,7 +274,7 @@ convert =
          rLam cxt = do 
             x <- lamT (pure ()) const 
             Lam _ b <- lamR (rr (x:cxt)) 
-            applyInContextT (observeR "b") b
+            _ <- applyInContextT (observeR "b") b
             tyStr <- applyInContextT exprTypeT b
             constT $ liftIO $ putStrLn tyStr
             applyInContextT (mkCurry curryId) b
@@ -325,7 +325,7 @@ type Convert = TranslateH CoreExpr (Context -> CoreExpr)
 
 convert' :: Recore
 convert' =
-  do curryId     <- findIdT 'curry
+  do -- curryId     <- findIdT 'curry
      constId     <- findIdT 'const
      sndId       <- findIdT 'snd
      compFstId   <- findIdT 'compFst
