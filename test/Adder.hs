@@ -5,6 +5,8 @@ module Adder where
 
 import Prelude hiding (and)
 
+import Data.Tuple (fst,snd)
+
 -- import LambdaCCC.CCC
 import LambdaCCC.FunCCC
 
@@ -19,6 +21,9 @@ bar = xor
 
 foo :: (Bool,Bool) -> Bool
 foo p = xor p
+
+baz :: (Bool,Bool) -> (Bool,Bool) -> Bool
+baz p q = xor (xor p, xor q)
 
 halfAdd :: (Bool,Bool) -> (Bool,Bool)
 halfAdd p = (xor p, and p)
