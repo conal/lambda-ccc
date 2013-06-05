@@ -163,10 +163,10 @@ mkConst constId a x = apps constId [exprType x,a] [x]
 -- compFst :: forall b b' c. (b :-> c) -> (b :* b' :-> c)
 -- compSnd :: forall b b' c. (b' :-> c) -> (b :* b' :-> c)
 
-mkCompFst :: Id -> Unop CoreExpr
-mkCompFst compFstId f = apps compFstId [b,b',c] [f]
- where
-   FunTy _ (FunTy (unPairTy -> Just (b,b')) c) = exprType f
+mkCompFst :: Id -> Type -> CoreExpr -> Maybe CoreExpr
+mkCompFst compFstId b' f = do
+    (b,c) <- splitFunTy_maybe $ exprType f
+    return $ apps compFstId [b,b',c] [f]
 
 -- TODO: Use compId and fstId to define compFst
 
@@ -209,23 +209,28 @@ type Context = [Id]
 showContext :: Context -> String
 showContext = show . map (uqName.varName)
 
--- "\ a b c " --> [c,b,a] --> ((a :* b) :* c) :* () ?
+-- "\ a b c " --> [c,b,a] --> ((() :* a) :* b) :* c
 cxtType :: Context -> Type
 cxtType = foldr (flip pairTy) unitTy . map varType
-
--- \ a b c --> [c,b,a] --> c :* (b :* (a :* ()))
--- cxtType :: Context -> Type
--- cxtType = foldr (pairTy . varType) unitTy
 
 selectVar :: (Id,Id) -> Id -> Context -> Maybe CoreExpr
 selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
  where
    select :: Context -> Type -> Maybe CoreExpr
-   select [] _                    = Nothing
-   select (v:vs) cxTy | v == x    = Just {- to skip past this error and get to the mkCurry one (mkIntExpr 0) -} (apps sndId [a,b] [])
-                      | otherwise = mkCompFst compFstId <$> select vs a
-    where
-      Just (a,b) = unPairTy cxTy
+   select []     _    = Nothing
+   select (v:vs) cxTy = do 
+        (tc, [a,b]) <- splitTyConApp_maybe $ tr cxTy
+        tr (return a)
+        tr (return $ varName sndId)
+        tr (return b)
+        guardMsg (isTupleTyCon tc) "select: not a tuple tycon"
+        if v == x
+            then return (apps sndId [a,b] []) 
+            else mkCompFst compFstId b =<< select vs a
+
+-- Unsafe way to ppr in pure code.
+tr :: Outputable a => a -> a
+tr x = trace ("tr: " ++ showPpr tracingDynFlags x) x
 
 -- Given comp, fst & snd ids, const, a variable, translate the variable in the context.
 findVar :: (Id,Id) -> Id -> Id -> Context -> CoreExpr
