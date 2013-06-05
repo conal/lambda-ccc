@@ -23,7 +23,7 @@ module LambdaCCC.Core (plugin,externals) where
 
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..),liftA2)
-import Control.Arrow ((>>>))
+import Control.Arrow ((>>>), arr)
 import Control.Monad ((<=<))
 import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
@@ -64,8 +64,8 @@ ppCore a = flip showPpr a <$> getDynFlags
 ppH :: Outputable a => a -> HermitM String
 ppH = liftCoreM . ppCore
 
-ppT :: Outputable a => a -> Translate c HermitM a String
-ppT = constT . ppH
+ppT :: Outputable a => Translate c HermitM a String
+ppT = contextfreeT ppH
 
 -- unhandledT :: Outputable a => a -> Translate c HermitM a b
 -- unhandledT e = ("Not yet handled: " ++) <$> ppT e >>= fail
@@ -120,10 +120,23 @@ unType _ = error "unType: not a type"
 
 -- curry :: forall a b c. (a :* b :-> c) -> (a :-> b :=> c)
 
-mkCurry :: Id -> Unop CoreExpr
-mkCurry curryId f = apps curryId [a,b,c] [f]
- where
-   FunTy (unPairTy -> Just (a,b)) c = exprType f
+mkCurry :: Id -> RewriteH CoreExpr
+mkCurry curryId = do
+    f <- observeR "mkCurry f"
+    (ab,c) <- maybe (fail "mkCurry splitFunTy") return $ splitFunTy_maybe $ exprType f
+    (tc,[a,b]) <- maybe (fail "mkCurry splitTyConApp") return $ splitTyConApp_maybe ab 
+    dflags <- constT getDynFlags
+    constT $ liftIO $ do
+        putStrLn $ showPpr dflags ab
+        putStrLn $ showPpr dflags c
+        putStrLn $ showPpr dflags tc
+        putStrLn $ showPpr dflags a
+        putStrLn $ showPpr dflags b
+        return ()
+    guardMsg (isTupleTyCon tc) "mkCurry: tycon is not a tuple tycon"
+    return $ apps curryId [a,b,c] [f]
+    
+--   FunTy (unPairTy -> Just (a,b)) c = exprType f
 
 -- apply :: forall a b. ((a :=> b) :* a) :-> b
 
@@ -211,7 +224,7 @@ selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
  where
    select :: Context -> Type -> Maybe CoreExpr
    select [] _                    = Nothing
-   select (v:vs) cxTy | v == x    = Just (apps sndId [a,b] [])
+   select (v:vs) cxTy | v == x    = Just (mkIntExpr 0) -- (apps sndId [a,b] [])
                       | otherwise = mkCompFst compFstId <$> select vs a
     where
       Just (a,b) = unPairTy cxTy
@@ -256,7 +269,11 @@ convert =
          rLam :: RecoreC
          rLam cxt = do 
             x <- lamT (pure ()) const 
-            lamT (rr (x:cxt)) $ \ _ b -> mkCurry curryId b
+            Lam _ b <- lamR (rr (x:cxt)) 
+            applyInContextT (observeR "b") b
+            tyStr <- applyInContextT exprTypeT b
+            constT $ liftIO $ putStrLn tyStr
+            applyInContextT (mkCurry curryId) b
 
      rr []
 --         rew :: Context -> CoreExpr -> RewriteH CoreExpr
@@ -310,7 +327,7 @@ convert' =
          conv = observeR "conv" >>= \ _ ->
                 varT (findVar (compFstId,sndId) constId)
              <+ appT conv conv (liftA2 (mkApplyComp applyCompId))
-             <+ lamT conv (\ x u' cxt -> mkCurry curryId (u' (x : cxt)))
+--             <+ lamT conv (\ x u' cxt -> mkCurry curryId (u' (x : cxt)))
              <+ (idR >>= unhandledT)
      ($ []) <$> conv
 
@@ -330,4 +347,9 @@ externals =
         [ "top level lambda->CCC transformation, first version" ]
     , external "lambda-to-ccc'" (promoteExprR convert')
         [ "top level lambda->CCC transformation, second version" ]
+    , external "expr-type" (promoteExprT exprTypeT)
+        [ "get the type of the current expression" ]
     ]
+
+exprTypeT :: TranslateH CoreExpr String
+exprTypeT = arr exprType >>> ppT
