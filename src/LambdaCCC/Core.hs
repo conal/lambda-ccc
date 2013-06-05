@@ -23,6 +23,7 @@ module LambdaCCC.Core (plugin,externals) where
 
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..),liftA2)
+import Control.Arrow ((>>>))
 import Control.Monad ((<=<))
 import Data.Maybe (fromMaybe)
 
@@ -177,8 +178,7 @@ mkCompFst compFstId f = apps compFstId [b,b',c] [f]
 
 mkApplyComp :: Id -> Binop CoreExpr
 mkApplyComp applyCompId f g = apps applyCompId [a,b,c] [f,g]
- where
-   FunTy a (FunTy b c) = expType f
+    where ([a,b],c) = splitFunTysN 2 $ exprType f
 
 -- TODO: Use applyId and compId to define mkApplyComp
 
@@ -199,9 +199,13 @@ mkAmp ampId f g = apps ampId [a,c,d] [f,g]
 type Context = [Id]
 
 -- "\ a b c " --> [c,b,a] --> (a :* b) :* c
-
+-- isn't this really: ((a :* b) :* c) :* () ?
 cxtType :: Context -> Type
 cxtType = foldr (flip pairTy) unitTy . map varType
+
+-- \ a b c --> [c,b,a] --> c :* (b :* (a :* ()))
+-- cxtType :: Context -> Type
+-- cxtType = foldr (pairTy . varType) unitTy
 
 selectVar :: (Id,Id) -> Id -> Context -> Maybe CoreExpr
 selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
@@ -231,22 +235,45 @@ convert =
      compFstId   <- findIdT 'compFst
      applyCompId <- findIdT 'applyComp
      ampId       <- findIdT '(&&&)
-     let rew :: Context -> CoreExpr -> RewriteH CoreExpr
-         rew cxt (Var x  ) = do _ <- observeR "Var"
-                                pure $ findVar (compFstId,sndId) constId x cxt
-         rew cxt (unPair -> Just ((_,ea),(_,eb))) =
-           do _ <- observeR "Pair"
-              mkAmp ampId <$> rew cxt ea <*> rew cxt eb
-         rew cxt (App u v) = do _ <- observeR "App"
-                                mkApplyComp applyCompId <$> rew cxt u <*> rew cxt v
-         rew cxt (Lam x e) = do _ <- observeR "Lam"
-                                mkCurry curryId <$> rew (x : cxt) e
-         rew _   e         = do _ <- observeR "Other"
-                                return e   -- ???
+     let rr :: Context -> RewriteH CoreExpr
+         rr c = observeR "rr" >>= \_ -> 
+                   (rVar  c >>> observeR "Var")
+                <+ (rPair c >>> observeR "Pair")
+                <+ (rApp  c >>> observeR "App")
+                <+ (rLam  c >>> observeR "Lam")
+                <+ (observeR "Other" >>> fail "only Var, App, Lam currently handled")
+
+         rVar :: Context -> RewriteH CoreExpr
+         rVar cxt = varT $ \ x -> findVar (compFstId,sndId) constId x cxt
+
+         rPair :: Context -> RewriteH CoreExpr
+         rPair cxt = fail "rPair unimplemented"
+
+         rApp :: Context -> RewriteH CoreExpr
+         rApp cxt = appT (rr cxt) (rr cxt) $ \ u v -> mkApplyComp applyCompId u v
+    
+         rLam :: Context -> RewriteH CoreExpr
+         rLam cxt = do 
+            x <- lamT (pure ()) const 
+            lamT (rr (x:cxt)) $ \ _ b -> mkCurry curryId b
+
+     rr []
+--         rew :: Context -> CoreExpr -> RewriteH CoreExpr
+--         rew cxt (Var x  ) = do _ <- observeR "Var"
+--                                pure $ findVar (compFstId,sndId) constId x cxt
+--         rew cxt (unPair -> Just ((_,ea),(_,eb))) =
+--           do _ <- observeR "Pair"
+--              mkAmp ampId <$> rew cxt ea <*> rew cxt eb
+--         rew cxt (App u v) = do _ <- observeR "App"
+--                                mkApplyComp applyCompId <$> rew cxt u <*> rew cxt v
+--         rew cxt (Lam x e) = do _ <- observeR "Lam"
+--                                mkCurry curryId <$> rew (x : cxt) e
+--         rew _   e         = do _ <- observeR "Other"
+--                                return e   -- ???
          -- rew _   e         = unhandledT e
          -- rew _ _ = fail "convert: only Var, App, Lam currently handled"
-      in
-        idR >>= rew []
+--      in 
+--        idR >>= rew []
 
 --      appId     <- findIdT 'apply
 --      compId    <- findIdT '(.)
@@ -279,7 +306,8 @@ convert' =
      compFstId   <- findIdT 'compFst
      applyCompId <- findIdT 'applyComp
      let conv :: Convert
-         conv = varT (findVar (compFstId,sndId) constId)
+         conv = observeR "conv" >>= \ _ ->
+                varT (findVar (compFstId,sndId) constId)
              <+ appT conv conv (liftA2 (mkApplyComp applyCompId))
              <+ lamT conv (\ x u' cxt -> mkCurry curryId (u' (x : cxt)))
              <+ (idR >>= unhandledT)
