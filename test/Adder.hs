@@ -8,6 +8,9 @@ import Prelude hiding (and)
 -- import LambdaCCC.CCC
 import LambdaCCC.FunCCC
 
+idBool :: Bool -> Bool
+idBool p = p
+
 bar :: (Bool,Bool) -> Bool
 bar = xor
 
