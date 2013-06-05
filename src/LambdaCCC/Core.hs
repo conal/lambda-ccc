@@ -56,8 +56,7 @@ type Unop  a = a -> a
 type Binop a = a -> Unop a
 
 ppCore :: Outputable a => a -> CoreM String
-ppCore a = do d <- getDynFlags
-              return (showPpr d a)
+ppCore a = flip showPpr a <$> getDynFlags
 
 ppH :: Outputable a => a -> HermitM String
 ppH = liftCoreM . ppCore
@@ -79,21 +78,6 @@ unhandledT e = fail $ "Not yet handled: " ++ show e
 
 apps :: Id -> [Type] -> [CoreExpr] -> CoreExpr
 apps f ts es = mkCoreApps (varToCoreExpr f) (map Type ts ++ es)
-
--- | The type of a type-consistent Core expression
-expType :: CoreExpr -> Type
-expType (Var x)          = varType x
-expType (Lit l)          = literalType l
-expType (App f _)        = ranType (expType f)
-expType (Lam x e)        = FunTy (varType x) (expType e)
-expType (Let _ e)        = expType e
-expType (Case _ _ ty _)  = ty
-expType _                = error "expType: form not yet handled"
-
-ranType :: Type -> Type
-ranType (ForAllTy _ ran) = ran
-ranType (FunTy    _ ran) = ran
-ranType _ = error "ranType: not ForAllTy or FunTy"
 
 tupleTy :: [Type] -> Type
 tupleTy = mkBoxedTupleTy -- from TysWiredIn
@@ -136,29 +120,27 @@ unType _ = error "unType: not a type"
 mkCurry :: Id -> Unop CoreExpr
 mkCurry curryId f = apps curryId [a,b,c] [f]
  where
-   FunTy (unPairTy -> Just (a,b)) c = expType f
+   FunTy (unPairTy -> Just (a,b)) c = exprType f
 
 -- apply :: forall a b. ((a :=> b) :* a) :-> b
 
 -- mkApply :: Id -> Unop CoreExpr
 -- mkApply applyId f = apps applyId [a,b] [f]
 --  where
---    (unPairTy -> Just (FunTy a b, _a)) = expType f
+--    (unPairTy -> Just (FunTy a b, _a)) = exprType f
 
 -- const :: forall b a. b :-> (a :=> b)
 
 mkConst :: Id -> Type -> Unop CoreExpr
-mkConst constId a x = apps constId [b,a] [x]
- where
-   b = expType x
+mkConst constId a x = apps constId [exprType x,a] [x]
 
 -- (.) :: forall b c a. (b :-> c) -> (a :-> b) -> (a :-> c)
 
 -- mkCompose :: Id -> Binop CoreExpr
 -- mkCompose compId g f = apps compId [b,c,a] [g,f]
 --  where
---    FunTy b  c = expType g
---    FunTy a _b = expType f
+--    FunTy b  c = exprType g
+--    FunTy a _b = exprType f
 
 -- fst :: forall a b. a :* b :-> a
 -- snd :: forall a b. a :* b :-> b
@@ -170,7 +152,7 @@ mkConst constId a x = apps constId [b,a] [x]
 mkCompFst :: Id -> Unop CoreExpr
 mkCompFst compFstId f = apps compFstId [b,b',c] [f]
  where
-   FunTy _ (FunTy (unPairTy -> Just (b,b')) c) = expType f
+   FunTy _ (FunTy (unPairTy -> Just (b,b')) c) = exprType f
 
 -- TODO: Use compId and fstId to define compFst
 
@@ -185,8 +167,8 @@ mkApplyComp applyCompId f g = apps applyCompId [a,b,c] [f,g]
 mkAmp :: Id -> Binop CoreExpr
 mkAmp ampId f g = apps ampId [a,c,d] [f,g]
  where
-   FunTy a  c = expType f
-   FunTy _a d = expType g
+   FunTy a  c = exprType f
+   FunTy _a d = exprType g
 
 -- TODO: consider some refactoring of mkXyz above
 
@@ -212,10 +194,10 @@ selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
  where
    select :: Context -> Type -> Maybe CoreExpr
    select [] _                    = Nothing
-   select (v:vs) cxTy | v == x    = Just (apps sndId [cxTy] [])
-                      | otherwise = fmap (mkCompFst compFstId) (select vs cxTy')
+   select (v:vs) cxTy | v == x    = Just (apps sndId [a,b] [])
+                      | otherwise = mkCompFst compFstId <$> (select vs a)
     where
-      Just (cxTy',_) = unPairTy cxTy
+      Just (a,b) = unPairTy cxTy
 
 -- Given comp, fst & snd ids, const, a variable, translate the variable in the context.
 findVar :: (Id,Id) -> Id -> Id -> Context -> CoreExpr
@@ -225,7 +207,8 @@ findVar compFstSndId constId x cxt =
 
 -- TODO: Inspect and test findVar carefully.
 
-type Recore = RewriteH CoreExpr
+type Recore  = RewriteH CoreExpr
+type RecoreC = Context -> Recore
 
 convert :: Recore
 convert =
@@ -234,8 +217,8 @@ convert =
      sndId       <- findIdT 'snd
      compFstId   <- findIdT 'compFst
      applyCompId <- findIdT 'applyComp
-     ampId       <- findIdT '(&&&)
-     let rr :: Context -> RewriteH CoreExpr
+  -- ampId       <- findIdT '(&&&)
+     let rr :: RecoreC
          rr c = observeR "rr" >>= \_ -> 
                    (rVar  c >>> observeR "Var")
                 <+ (rPair c >>> observeR "Pair")
@@ -243,16 +226,16 @@ convert =
                 <+ (rLam  c >>> observeR "Lam")
                 <+ (observeR "Other" >>> fail "only Var, App, Lam currently handled")
 
-         rVar :: Context -> RewriteH CoreExpr
+         rVar :: RecoreC
          rVar cxt = varT $ \ x -> findVar (compFstId,sndId) constId x cxt
 
-         rPair :: Context -> RewriteH CoreExpr
-         rPair cxt = fail "rPair unimplemented"
+         rPair :: RecoreC
+         rPair _ = fail "rPair unimplemented"
 
-         rApp :: Context -> RewriteH CoreExpr
+         rApp :: RecoreC
          rApp cxt = appT (rr cxt) (rr cxt) $ \ u v -> mkApplyComp applyCompId u v
     
-         rLam :: Context -> RewriteH CoreExpr
+         rLam :: RecoreC
          rLam cxt = do 
             x <- lamT (pure ()) const 
             lamT (rr (x:cxt)) $ \ _ b -> mkCurry curryId b
