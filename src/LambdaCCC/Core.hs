@@ -234,6 +234,8 @@ convert =
          rVar cxt = varT $ \ x -> findVar (compFstId,sndId) constId x cxt
 
          rPair :: RecoreC
+         -- rPair cxt = pairT (rr cxt) (rr cxt) $ mkAmp ampId
+         -- How to define pairT?
          rPair _ = fail "rPair unimplemented"
 
          rApp :: RecoreC
