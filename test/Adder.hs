@@ -8,6 +8,9 @@ import Prelude hiding (and)
 -- import LambdaCCC.CCC
 import LambdaCCC.FunCCC
 
+constPair :: (Bool,Bool)
+constPair = (True,False)
+
 idBool :: Bool -> Bool
 idBool p = p
 
