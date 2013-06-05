@@ -251,6 +251,7 @@ convert =
      compFstId   <- findIdT 'compFst
      applyCompId <- findIdT 'applyComp
      ampId       <- findIdT '(&&&)
+     applyUnitId <- findIdT 'applyUnit
      let rr :: RecoreC
          rr c = observeR (printf "rr: %s" (showContext c)) >>= \_ -> 
                    (rVar  c >>> observeR "Var")
@@ -278,7 +279,10 @@ convert =
             constT $ liftIO $ putStrLn tyStr
             applyInContextT (mkCurry curryId) b
 
-     rr []
+     e <- rr [] 
+     (_,r) <- maybe (fail "splitFunTy for applyUnit") return $ splitFunTy_maybe $ exprType e
+     return $ apps applyUnitId [r] [e]
+
 --         rew :: Context -> CoreExpr -> RewriteH CoreExpr
 --         rew cxt (Var x  ) = do _ <- observeR "Var"
 --                                pure $ findVar (compFstId,sndId) constId x cxt
