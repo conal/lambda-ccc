@@ -30,7 +30,7 @@ halfAdd p = (xor p, and p)
 
 -- halfAdd (a,b) = (xor (a,b), and (a,b))
 
-xor, and :: (Bool,Bool) :-> Bool
+xor, and :: (Bool,Bool) -> Bool
 
 xor (True,False) = True
 xor (False,True) = True
@@ -38,3 +38,6 @@ xor _            = False
 
 and (True,True) = True
 and _           = False
+
+quux :: Bool -> (Bool,Bool)
+quux p = (p,True)
