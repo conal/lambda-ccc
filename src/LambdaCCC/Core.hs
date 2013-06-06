@@ -125,14 +125,14 @@ mkCurry curryId = do
     f <- observeR "mkCurry f"
     (ab,c) <- maybe (fail "mkCurry splitFunTy") return $ splitFunTy_maybe $ exprType f
     (tc,[a,b]) <- maybe (fail "mkCurry splitTyConApp") return $ splitTyConApp_maybe ab 
-    dflags <- constT getDynFlags
-    constT $ liftIO $ do
-        putStrLn $ showPpr dflags ab
-        putStrLn $ showPpr dflags c
-        putStrLn $ showPpr dflags tc
-        putStrLn $ showPpr dflags a
-        putStrLn $ showPpr dflags b
-        return ()
+--     dflags <- constT getDynFlags
+--     constT $ liftIO $ do
+--         putStrLn $ showPpr dflags ab
+--         putStrLn $ showPpr dflags c
+--         putStrLn $ showPpr dflags tc
+--         putStrLn $ showPpr dflags a
+--         putStrLn $ showPpr dflags b
+--         return ()
     guardMsg (isTupleTyCon tc) "mkCurry: tycon is not a tuple tycon"
     return $ apps curryId [a,b,c] [f]
 
@@ -219,10 +219,11 @@ selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
    select :: Context -> Type -> Maybe CoreExpr
    select []     _    = Nothing
    select (v:vs) cxTy = do 
-        (tc, [a,b]) <- splitTyConApp_maybe $ tr cxTy
-        _ <- tr (return a)
-        _ <- tr (return $ varName sndId)
-        _ <- tr (return b)
+        -- - <- tr (return cxTy)
+        (tc, [a,b]) <- splitTyConApp_maybe cxTy
+        -- _ <- tr (return a)
+        -- _ <- tr (return $ varName sndId)
+        -- _ <- tr (return b)
         guardMsg (isTupleTyCon tc) "select: not a tuple tycon"
         if v == x
             then return (apps sndId [a,b] []) 
@@ -274,9 +275,9 @@ convert =
          rLam cxt = do 
             x <- lamT (pure ()) const 
             Lam _ b <- lamR (rr (x:cxt)) 
-            _ <- applyInContextT (observeR "b") b
-            tyStr <- applyInContextT exprTypeT b
-            constT $ liftIO $ putStrLn tyStr
+--             _ <- applyInContextT (observeR "b") b
+--             tyStr <- applyInContextT exprTypeT b
+--             constT $ liftIO $ putStrLn tyStr
             applyInContextT (mkCurry curryId) b
 
      e <- rr [] 
