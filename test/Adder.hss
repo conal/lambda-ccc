@@ -1,4 +1,4 @@
-set-pp-type Show
+-- set-pp-type Show
 -- set-auto-corelint True
-rhs-of 'foo
+rhs-of 'baz
 lambda-to-ccc

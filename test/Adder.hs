@@ -41,3 +41,6 @@ and _           = False
 
 quux :: Bool -> (Bool,Bool)
 quux p = (p,True)
+
+p1 :: Bool -> (Bool,Bool)
+p1 a = (a,not a)
