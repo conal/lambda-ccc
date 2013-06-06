@@ -2,3 +2,5 @@
 -- set-auto-corelint True
 rhs-of 'halfAdd
 lambda-to-ccc
+-- expr-type
+resume
