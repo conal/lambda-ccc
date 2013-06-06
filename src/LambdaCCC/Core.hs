@@ -1,4 +1,5 @@
 {-# LANGUAGE ViewPatterns, PatternGuards, TemplateHaskell, LambdaCase #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -42,6 +43,7 @@ import Language.HERMIT.Optimize
 import Language.HERMIT.Primitive.Common
 import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.GHC (uqName)
+import Language.HERMIT.Core (Crumb(..))
 
 -- import LambdaCCC.CCC
 import LambdaCCC.FunCCC  -- Function-only vocabulary
@@ -181,8 +183,8 @@ mkApplyComp applyCompId f g = apps applyCompId [a,b,c] [f,g]
 mkAmp :: Id -> Binop CoreExpr
 mkAmp ampId f g = apps ampId [a,c,d] [f,g]
  where
-   FunTy a  c = exprType f
-   FunTy _a d = exprType g
+   ( a,c) = splitFunTy (exprType f)
+   (_a,d) = splitFunTy (exprType g)
 
 -- TODO: consider some refactoring of mkXyz above
 
@@ -191,13 +193,17 @@ mkAmp ampId f g = apps ampId [a,c,d] [f,g]
 --------------------------------------------------------------------}
 
 -- | Translate a pair expression.
-pairT :: (PathContext c, Applicative m, Monad m) =>
+pairT :: (Applicative m, Monad m, ExtendPath c Crumb) =>
          Translate c m CoreExpr a1 -> Translate c m CoreExpr a2
       -> (a1 -> a2 -> b) -> Translate c m CoreExpr b
 pairT t1 t2 f = translate $ \ c ->
   \ case (unPair -> Just (e1,e2)) ->
-           f <$> Kure.apply t1 (c @@ 0) e1 <*> Kure.apply t2 (c @@ 1) e2
+           f <$> Kure.apply t1 (c @@ Alt_Var 0) e1
+             <*> Kure.apply t2 (c @@ Alt_Var 1) e2
          _         -> fail "not a pair node."
+
+-- TODO: Revisit choice of crumb. I could use something App_Fun @@ App_Arg and
+-- App_Arg.
 
 {--------------------------------------------------------------------
     Rewriting
