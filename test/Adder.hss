@@ -1,4 +1,4 @@
 -- set-pp-type Show
 -- set-auto-corelint True
-rhs-of 'baz
+rhs-of 'halfAdd
 lambda-to-ccc

@@ -28,7 +28,17 @@ baz p q = xor (xor p, xor q)
 halfAdd :: (Bool,Bool) -> (Bool,Bool)
 halfAdd p = (xor p, and p)
 
--- halfAdd (a,b) = (xor (a,b), and (a,b))
+quux :: Bool -> (Bool,Bool)
+quux p = (p,True)
+
+p1 :: Bool -> (Bool,Bool)
+p1 a = (a,not a)
+
+-- The rest don't yet transform successfully. They become 'case' expressions,
+-- which we're not yet handling.
+
+halfAdd' :: (Bool,Bool) -> (Bool,Bool)
+halfAdd' (a,b) = (xor (a,b), and (a,b))
 
 xor, and :: (Bool,Bool) -> Bool
 
@@ -38,9 +48,3 @@ xor _            = False
 
 and (True,True) = True
 and _           = False
-
-quux :: Bool -> (Bool,Bool)
-quux p = (p,True)
-
-p1 :: Bool -> (Bool,Bool)
-p1 a = (a,not a)
