@@ -272,7 +272,6 @@ convert =
 
          rPair :: RecoreC
          rPair cxt = pairT (rr cxt) (rr cxt) $ mkAmp ampId
-         -- rPair _ = fail "rPair unimplemented"
 
          rApp :: RecoreC
          rApp cxt = appT (rr cxt) (rr cxt) $ \ u v -> mkApplyComp applyCompId u v
@@ -290,41 +289,13 @@ convert =
      (_,r) <- maybe (fail "splitFunTy for applyUnit") return $ splitFunTy_maybe $ exprType e
      return $ apps applyUnitId [r] [e]
 
---         rew :: Context -> CoreExpr -> RewriteH CoreExpr
---         rew cxt (Var x  ) = do _ <- observeR "Var"
---                                pure $ findVar (compFstId,sndId) constId x cxt
---         rew cxt (unPair -> Just ((_,ea),(_,eb))) =
---           do _ <- observeR "Pair"
---              mkAmp ampId <$> rew cxt ea <*> rew cxt eb
---         rew cxt (App u v) = do _ <- observeR "App"
---                                mkApplyComp applyCompId <$> rew cxt u <*> rew cxt v
---         rew cxt (Lam x e) = do _ <- observeR "Lam"
---                                mkCurry curryId <$> rew (x : cxt) e
---         rew _   e         = do _ <- observeR "Other"
---                                return e   -- ???
-         -- rew _   e         = unhandledT e
-         -- rew _ _ = fail "convert: only Var, App, Lam currently handled"
---      in 
---        idR >>= rew []
-
 --      appId     <- findIdT 'apply
 --      compId    <- findIdT '(.)
 --      fstId     <- findIdT 'fst
 
 -- TODO: Rework rew with simpler types, and adapt from idR.
 
--- idR :: Monad m => Rewrite c m a
--- type Rewrite c m a = Translate c m a a
--- newtype Translate c m a b = Translate {apply :: c -> a -> m b}
--- instance Monad m => Monad (Translate c m a) where ...
-
--- rew [] :: CoreExpr -> HermitM CoreExpr
--- idR :: Rewrite c m CoreExpr
--- idR >>= rew [] :: Rewrite 
-
--- constT :: m b -> Translate c m a bSource
-
-
+{-
 
 -- Redo using varT, appT, lamT:
 
@@ -347,6 +318,7 @@ convert' =
 
 -- TODO: Maybe use HERMIT's binding context rather than building one of my own.
 
+-}
 
 {--------------------------------------------------------------------
     Plugin
