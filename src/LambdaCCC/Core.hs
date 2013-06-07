@@ -263,11 +263,11 @@ convert =
          rr c = observeR (printf "rr: %s" (showContext c)) >>= \_ -> 
                    -- NB Pair before App
                    tries [("Var",rVar),("Pair",rPair),("App",rApp),("Lam",rLam)]
-                <+ (observeR "Other" >>> fail "only Var, App, Lam currently handled")
           where
             try label rew = rew c >>> observeR label
             tries :: [(String,RecoreC)] -> Recore
-            tries = foldr1 (<+) . map (uncurry try)
+            tries = foldr (<+) (observeR "Other" >>> fail "unhandled")
+                  . map (uncurry try)
          rVar, rPair, rApp, rLam :: RecoreC
          rVar  cxt = varT $ \ x -> findVar (compFstId,sndId) constId x cxt
          rPair cxt = pairT (rr cxt) (rr cxt) $ mkAmp ampId
