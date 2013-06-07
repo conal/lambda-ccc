@@ -23,7 +23,7 @@ module LambdaCCC.Core (plugin,externals) where
 -- TODO: explicit exports
 
 import Data.Functor ((<$>))
-import Control.Applicative (Applicative(..),liftA2)
+import Control.Applicative (Applicative(..)) -- ,liftA2
 import Control.Arrow ((>>>), arr)
 import Control.Monad ((<=<))
 import Data.Maybe (fromMaybe)
@@ -267,17 +267,11 @@ convert =
                 <+ (rLam  c >>> observeR "Lam")
                 <+ (observeR "Other" >>> fail "only Var, App, Lam currently handled")
 
-         rVar :: RecoreC
-         rVar cxt = varT $ \ x -> findVar (compFstId,sndId) constId x cxt
-
-         rPair :: RecoreC
+         rVar, rPair, rApp, rLam :: RecoreC
+         rVar  cxt = varT $ \ x -> findVar (compFstId,sndId) constId x cxt
          rPair cxt = pairT (rr cxt) (rr cxt) $ mkAmp ampId
-
-         rApp :: RecoreC
-         rApp cxt = appT (rr cxt) (rr cxt) $ \ u v -> mkApplyComp applyCompId u v
-    
-         rLam :: RecoreC
-         rLam cxt = do 
+         rApp  cxt = appT  (rr cxt) (rr cxt) $ mkApplyComp applyCompId
+         rLam  cxt = do 
             x <- lamT (pure ()) const 
             Lam _ b <- lamR (rr (x:cxt)) 
 --             _ <- applyInContextT (observeR "b") b
@@ -331,8 +325,8 @@ externals :: [External]
 externals =
     [ external "lambda-to-ccc" (promoteExprR convert)
         [ "top level lambda->CCC transformation, first version" ]
-    , external "lambda-to-ccc'" (promoteExprR convert')
-        [ "top level lambda->CCC transformation, second version" ]
+--     , external "lambda-to-ccc'" (promoteExprR convert')
+--         [ "top level lambda->CCC transformation, second version" ]
     , external "expr-type" (promoteExprT exprTypeT)
         [ "get the type of the current expression" ]
     ]
