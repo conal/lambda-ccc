@@ -210,19 +210,19 @@ pairT t1 t2 f = translate $ \ c ->
 --------------------------------------------------------------------}
 
 -- | Lambda-bound variables, inner-first
-type Context = [Id]
+type LContext = [Id]
 
-showContext :: Context -> String
+showContext :: LContext -> String
 showContext = show . map (uqName.varName)
 
 -- "\ a b c " --> [c,b,a] --> ((() :* a) :* b) :* c
-cxtType :: Context -> Type
+cxtType :: LContext -> Type
 cxtType = foldr (flip pairTy) unitTy . map varType
 
-selectVar :: (Id,Id) -> Id -> Context -> Maybe CoreExpr
+selectVar :: (Id,Id) -> Id -> LContext -> Maybe CoreExpr
 selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
  where
-   select :: Context -> Type -> Maybe CoreExpr
+   select :: LContext -> Type -> Maybe CoreExpr
    select []     _    = Nothing
    select (v:vs) cxTy = do 
         -- - <- tr (return cxTy)
@@ -240,7 +240,7 @@ tr :: Outputable a => a -> a
 tr x = trace ("tr: " ++ showPpr tracingDynFlags x) x
 
 -- Given comp, fst & snd ids, const, a variable, translate the variable in the context.
-findVar :: (Id,Id) -> Id -> Context -> Id -> CoreExpr
+findVar :: (Id,Id) -> Id -> LContext -> Id -> CoreExpr
 findVar compFstSndId constId cxt x =
   fromMaybe (mkConst constId (cxtType cxt) (Var x))
             (selectVar compFstSndId x cxt)
@@ -248,7 +248,7 @@ findVar compFstSndId constId cxt x =
 -- TODO: Inspect and test findVar carefully.
 
 type Recore  = RewriteH CoreExpr
-type RecoreC = Context -> Recore
+type RecoreC = LContext -> Recore
 
 convert :: Recore
 convert =
