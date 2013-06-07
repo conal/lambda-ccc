@@ -266,10 +266,10 @@ convert =
             try label rew = rew >>> observeR label
          rVar, rPair, rApp, rLam :: Recore
          rVar  = do cxt <- lambdaVarsT
-                    varT (findVar (compFstId,sndId) constId cxt)
+                    varT $ arr $ (findVar (compFstId,sndId) constId cxt)
          rPair = pairT rr rr (mkAmp ampId)
          rApp  = appT  rr rr (mkApplyComp applyCompId)
-         rLam  = lamT  rr    (const (mkCurry curryId))
+         rLam  = lamT  (pure ()) rr (const (mkCurry curryId))
      
      mkApplyUnit applyUnitId <$> rr
 
