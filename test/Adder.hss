@@ -1,6 +1,6 @@
 -- set-pp-type Show
 -- set-auto-corelint True
-rhs-of 'halfAdd
+rhs-of 'baz
 lambda-to-ccc
 -- expr-type
 resume
