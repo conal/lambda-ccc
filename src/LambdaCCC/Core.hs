@@ -47,8 +47,8 @@ import Language.HERMIT.Optimize
 import Language.HERMIT.Primitive.Common
 import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.GHC (uqName)
-import Language.HERMIT.Core (Crumb(..))  -- ,CoreDef
-import Language.HERMIT.Context (HermitC,HermitBindingSite(LAM),hermitC_bindings)
+import Language.HERMIT.Core (Crumb(..),CoreDef)
+import Language.HERMIT.Context (HermitBindingSite(LAM),ReadBindings(..))
 
 -- import LambdaCCC.CCC
 import LambdaCCC.FunCCC  -- Function-only vocabulary
@@ -194,21 +194,27 @@ pairT ta tb f = translate $ \ c ->
          _         -> fail "not a pair node."
 
 -- Just the lambda-bound variables in a HERMIT context
-lambdaVars :: HermitC -> [Var]
-lambdaVars = map fst . filter (isLam . snd . snd) . M.toList . hermitC_bindings
+lambdaVars :: ReadBindings c => c -> [Var]
+lambdaVars = map fst . filter (isLam . snd . snd) . M.toList . hermitBindings
  where
    isLam LAM = True
    isLam _   = False
 
 -- | Extract just the lambda-bound variables in a HERMIT context
-lambdaVarsT :: Applicative m => Translate HermitC m a [Var]
+lambdaVarsT :: (ReadBindings c, Applicative m) => Translate c m a [Var]
 lambdaVarsT = contextonlyT (pure . lambdaVars)
 
 retypeVar :: RewriteH Type -> RewriteH Var
 retypeVar tr = translate $ \ c -> \ v ->
-                 setVarType v <$> Kure.apply tr (c @@ crumb) (varType v)
- where
+                 setVarType v <$> Kure.apply tr c (varType v)
+
+-- Neil: We don't currently traverse into variables using generic traversals, so it is not neccassary to add a Crumb to the context at this point.
+--       It's possible this may change in the future though (in which case, retypeVar would appear as a congruence combinator provided by HERMIT).
+
+{-
+   where
    crumb = error "retypeVar: what crumb to use?"
+-}
 
 -- TODO: Resolve crumb. IIRC, I could use an Int crumb, but then I couldn't use
 -- HermitC, due to functional dependency. How does type rewriting get done in
@@ -233,7 +239,7 @@ selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
  where
    select :: LContext -> Type -> Maybe CoreExpr
    select []     _    = Nothing
-   select (v:vs) cxTy = do 
+   select (v:vs) cxTy = do
         (tc, [a,b]) <- splitTyConApp_maybe cxTy
         guardMsg (isTupleTyCon tc) "select: not a tuple tycon"
         if v == x
@@ -277,7 +283,7 @@ convertExpr =
          rPair = pairT rr       rr $ mkAmp ampId
          rApp  = appT  rr       rr $ mkApplyComp applyCompId
          rLam  = lamT (pure ()) rr $ const (mkCurry curryId)
-     
+
      mkApplyUnit applyUnitId <$> rr
 
 --      appId     <- findIdT 'apply
@@ -289,20 +295,8 @@ convertExpr =
 tweakTy :: RewriteH Type
 tweakTy = id                            -- for now
 
--- convertDef :: RewriteH CoreDef
--- convertDef = defAllR (retypeVar (anybuR tweakTy)) convertExpr
-
--- LambdaCCC/Core.hs:293:34:
---     Couldn't match type `Crumb' with `Int'
---     When using functional dependencies to combine
---       ExtendPath HermitC Crumb,
---         arising from the dependency `c -> crumb'
---         in the instance declaration in `Language.HERMIT.Context'
---       ExtendPath HermitC Int,
---         arising from a use of `anybuR' at LambdaCCC/Core.hs:293:34-39
---     In the first argument of `retypeVar', namely `(anybuR tweakTy)'
---     In the first argument of `defAllR', namely
---       `(retypeVar (anybuR tweakTy))'
+convertDef :: RewriteH CoreDef
+convertDef = defAllR (retypeVar (anybuR tweakTy)) convertExpr
 
 
 {--------------------------------------------------------------------
