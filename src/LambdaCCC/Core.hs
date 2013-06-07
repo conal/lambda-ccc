@@ -28,6 +28,7 @@ import Control.Arrow ((>>>), arr)
 import Control.Monad ((<=<))
 import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
+import qualified Data.Map as M
 
 import GhcPlugins
 import TypeRep (Type(..))
@@ -44,6 +45,7 @@ import Language.HERMIT.Primitive.Common
 import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.GHC (uqName)
 import Language.HERMIT.Core (Crumb(..))
+import Language.HERMIT.Context (HermitC,HermitBindingSite(LAM),hermitC_bindings)
 
 -- import LambdaCCC.CCC
 import LambdaCCC.FunCCC  -- Function-only vocabulary
@@ -204,6 +206,18 @@ pairT t1 t2 f = translate $ \ c ->
 
 -- TODO: Revisit choice of crumb. I could use something App_Fun @@ App_Arg and
 -- App_Arg.
+
+-- Just the lambda-bound variables in a HERMIT context
+lambdaVars :: HermitC -> [Var]
+lambdaVars = map fst . filter (isLam . snd . snd) . M.toList . hermitC_bindings
+ where
+   isLam LAM = True
+   isLam _   = False
+
+-- | Extract just the lambda-bound variables in a HERMIT context
+lambdaVarsT :: Monad m => Translate HermitC m a [Var]
+lambdaVarsT = contextonlyT (return . lambdaVars)
+
 
 {--------------------------------------------------------------------
     Rewriting
