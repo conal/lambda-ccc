@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -21,6 +21,9 @@
 module LambdaCCC.Core (plugin,externals) where
 
 -- TODO: explicit exports
+
+import Prelude hiding (id,(.))
+import Control.Category (id,(.))
 
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..)) -- ,liftA2
@@ -44,7 +47,7 @@ import Language.HERMIT.Optimize
 import Language.HERMIT.Primitive.Common
 import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.GHC (uqName)
-import Language.HERMIT.Core (Crumb(..))
+import Language.HERMIT.Core (Crumb(..))  -- ,CoreDef
 import Language.HERMIT.Context (HermitC,HermitBindingSite(LAM),hermitC_bindings)
 
 -- import LambdaCCC.CCC
@@ -201,6 +204,15 @@ lambdaVars = map fst . filter (isLam . snd . snd) . M.toList . hermitC_bindings
 lambdaVarsT :: Applicative m => Translate HermitC m a [Var]
 lambdaVarsT = contextonlyT (pure . lambdaVars)
 
+retypeVar :: RewriteH Type -> RewriteH Var
+retypeVar tr = translate $ \ c -> \ v ->
+                 setVarType v <$> Kure.apply tr (c @@ crumb) (varType v)
+ where
+   crumb = error "retypeVar: what crumb to use?"
+
+-- TODO: Resolve crumb. IIRC, I could use an Int crumb, but then I couldn't use
+-- HermitC, due to functional dependency. How does type rewriting get done in
+-- HERMIT under this constraint? Maybe it doesn't.
 
 {--------------------------------------------------------------------
     Rewriting
@@ -240,10 +252,8 @@ findVar compFstSndId constId cxt x =
 
 -- TODO: Inspect and test findVar carefully.
 
-type Recore = RewriteH CoreExpr
-
-convert :: Recore
-convert =
+convertExpr :: RewriteH CoreExpr
+convertExpr =
   do curryId     <- findIdT 'curry
      constId     <- findIdT 'const
      sndId       <- findIdT 'snd
@@ -251,17 +261,17 @@ convert =
      applyCompId <- findIdT 'applyComp
      ampId       <- findIdT '(&&&)
      applyUnitId <- findIdT 'applyUnit
-     let rr :: Recore
+     let rr :: RewriteH CoreExpr
          rr = do c <- lambdaVarsT
                  observeR (printf "rr: %s" (showContext c)) >>= \_ ->
                    -- NB Pair before App
                    tries [("Var",rVar),("Pair",rPair),("App",rApp),("Lam",rLam)]
           where
-            tries :: [(String,Recore)] -> Recore
+            tries :: [(String,RewriteH CoreExpr)] -> RewriteH CoreExpr
             tries = foldr (<+) (observeR "Other" >>> fail "unhandled")
                   . map (uncurry try)
             try label rew = rew >>> observeR label
-         rVar, rPair, rApp, rLam :: Recore
+         rVar, rPair, rApp, rLam :: RewriteH CoreExpr
          rVar  = do cxt <- lambdaVarsT
                     varT $ arr $ findVar (compFstId,sndId) constId cxt
          rPair = pairT rr       rr $ mkAmp ampId
@@ -274,6 +284,27 @@ convert =
 --      compId    <- findIdT '(.)
 --      fstId     <- findIdT 'fst
 
+-- retypeVar :: RewriteH Type -> RewriteH Var
+
+tweakTy :: RewriteH Type
+tweakTy = id                            -- for now
+
+-- convertDef :: RewriteH CoreDef
+-- convertDef = defAllR (retypeVar (anybuR tweakTy)) convertExpr
+
+-- LambdaCCC/Core.hs:293:34:
+--     Couldn't match type `Crumb' with `Int'
+--     When using functional dependencies to combine
+--       ExtendPath HermitC Crumb,
+--         arising from the dependency `c -> crumb'
+--         in the instance declaration in `Language.HERMIT.Context'
+--       ExtendPath HermitC Int,
+--         arising from a use of `anybuR' at LambdaCCC/Core.hs:293:34-39
+--     In the first argument of `retypeVar', namely `(anybuR tweakTy)'
+--     In the first argument of `defAllR', namely
+--       `(retypeVar (anybuR tweakTy))'
+
+
 {--------------------------------------------------------------------
     Plugin
 --------------------------------------------------------------------}
@@ -283,7 +314,7 @@ plugin = optimize (phase 0 . interactive externals)
 
 externals :: [External]
 externals =
-    [ external "lambda-to-ccc" (promoteExprR convert)
+    [ external "lambda-to-ccc" (promoteExprR convertExpr)
         [ "top level lambda->CCC transformation, first version" ]
     , external "expr-type" (promoteExprT exprTypeT)
         [ "get the type of the current expression" ]
