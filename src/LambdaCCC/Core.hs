@@ -118,9 +118,7 @@ unPair = listToPair <=< unTuple
 mkCurry :: Id -> Unop CoreExpr
 mkCurry curryId f = apps curryId [a,b,c] [f]
  where
-   -- (unPairTy -> Just (a,b),c) = splitFunTy (exprType f)
-   (ab,c) = splitFunTy (exprType f)
-   Just (a,b) = unPairTy ab
+   (unPairTy -> Just (a,b), c) = splitFunTy (exprType f)
 
 -- apply :: forall a b. ((a :=> b) :* a) :-> b
 
@@ -233,9 +231,9 @@ selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
             then return (apps sndId [a,b] []) 
             else mkCompFst compFstId b =<< select vs a
 
--- Unsafe way to ppr in pure code.
-tr :: Outputable a => a -> a
-tr x = trace ("tr: " ++ showPpr tracingDynFlags x) x
+-- -- Unsafe way to ppr in pure code.
+-- tr :: Outputable a => a -> a
+-- tr x = trace ("tr: " ++ showPpr tracingDynFlags x) x
 
 -- Given comp, fst & snd ids, const, a variable, translate the variable in the context.
 findVar :: (Id,Id) -> Id -> LContext -> Id -> CoreExpr
@@ -245,7 +243,7 @@ findVar compFstSndId constId cxt x =
 
 -- TODO: Inspect and test findVar carefully.
 
-type Recore  = RewriteH CoreExpr
+type Recore = RewriteH CoreExpr
 
 convert :: Recore
 convert =
@@ -259,20 +257,20 @@ convert =
      let rr :: Recore
          rr = do c <- lambdaVarsT
                  observeR (printf "rr: %s" (showContext c)) >>= \_ -> 
-                    -- NB Pair before App
                     tries [("Var",rVar),("Pair",rPair),("App",rApp),("Lam",rLam)]
+                  -- NB Pair before App, since pairs are specialized apps.
           where
-            try label rew = rew >>> observeR label
             tries :: [(String,Recore)] -> Recore
             tries = foldr (<+) (observeR "Other" >>> fail "unhandled")
                   . map (uncurry try)
+            try label rew = rew >>> observeR label
          rVar, rPair, rApp, rLam :: Recore
          rVar  = do cxt <- lambdaVarsT
-                    varT $ findVar (compFstId,sndId) constId cxt
+                    varT (findVar (compFstId,sndId) constId cxt)
          rPair = pairT rr rr (mkAmp ampId)
          rApp  = appT  rr rr (mkApplyComp applyCompId)
-         rLam  = lamT  rr (const (mkCurry curryId))
-
+         rLam  = lamT  rr    (const (mkCurry curryId))
+     
      mkApplyUnit applyUnitId <$> rr
 
 --      appId     <- findIdT 'apply
