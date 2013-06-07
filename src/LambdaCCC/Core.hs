@@ -124,11 +124,11 @@ unType _ = error "unType: not a type"
 
 -- curry :: forall a b c. (a :* b :-> c) -> (a :-> b :=> c)
 
-mkCurry :: Id -> RewriteH CoreExpr
-mkCurry curryId = do
-    f <- observeR "mkCurry f"
-    (ab,c) <- maybe (fail "mkCurry splitFunTy") return $ splitFunTy_maybe $ exprType f
-    (tc,[a,b]) <- maybe (fail "mkCurry splitTyConApp") return $ splitTyConApp_maybe ab 
+-- mkCurry :: Id -> RewriteH CoreExpr
+-- mkCurry curryId = do
+--     f <- observeR "mkCurry f"
+--     (ab,c) <- maybe (fail "mkCurry splitFunTy") return $ splitFunTy_maybe $ exprType f
+--     (tc,[a,b]) <- maybe (fail "mkCurry splitTyConApp") return $ splitTyConApp_maybe ab 
 --     dflags <- constT getDynFlags
 --     constT $ liftIO $ do
 --         putStrLn $ showPpr dflags ab
@@ -137,8 +137,23 @@ mkCurry curryId = do
 --         putStrLn $ showPpr dflags a
 --         putStrLn $ showPpr dflags b
 --         return ()
-    guardMsg (isTupleTyCon tc) "mkCurry: tycon is not a tuple tycon"
-    return $ apps curryId [a,b,c] [f]
+--     guardMsg (isTupleTyCon tc) "mkCurry: tycon is not a tuple tycon"
+--     return $ apps curryId [a,b,c] [f]
+
+
+-- mkCurry :: Id -> Unop CoreExpr
+-- mkCurry curryId f = apps curryId [a,b,c] [f]
+--  where
+--    FunTy (unPairTy -> Just (a,b)) c = exprType f
+
+mkCurry :: Id -> Unop CoreExpr
+mkCurry curryId f = apps curryId [a,b,c] [f]
+ where
+   -- (unPairTy -> Just (a,b),c) = splitFunTy (exprType f)
+   (ab,c) = splitFunTy (exprType f)
+   Just (a,b) = unPairTy ab
+
+
 
 -- apply :: forall a b. ((a :=> b) :* a) :-> b
 
@@ -189,6 +204,12 @@ mkAmp ampId f g = apps ampId [a,c,d] [f,g]
    (_a,d) = splitFunTy (exprType g)
 
 -- TODO: consider some refactoring of mkXyz above
+
+mkApplyUnit :: Id -> Unop CoreExpr
+mkApplyUnit applyUnitId e = apps applyUnitId [r] [e]
+ where
+   (_unit,r) = splitFunTy (exprType e)
+   -- TODO: Check that _unit == Unit. How?
 
 {--------------------------------------------------------------------
     HERMIT utilities
@@ -262,7 +283,6 @@ findVar compFstSndId constId cxt x =
 -- TODO: Inspect and test findVar carefully.
 
 type Recore  = RewriteH CoreExpr
-type RecoreC = LContext -> Recore
 
 convert :: Recore
 convert =
@@ -273,36 +293,28 @@ convert =
      applyCompId <- findIdT 'applyComp
      ampId       <- findIdT '(&&&)
      applyUnitId <- findIdT 'applyUnit
-     let rr :: RecoreC
-         rr c = observeR (printf "rr: %s" (showContext c)) >>= \_ -> 
-                   -- NB Pair before App
-                   tries [("Var",rVar),("Pair",rPair),("App",rApp),("Lam",rLam)]
+     let rr :: Recore
+         rr = do c <- lambdaVarsT
+                 observeR (printf "rr: %s" (showContext c)) >>= \_ -> 
+                    -- NB Pair before App
+                    tries [("Var",rVar),("Pair",rPair),("App",rApp),("Lam",rLam)]
           where
-            try label rew = rew c >>> observeR label
-            tries :: [(String,RecoreC)] -> Recore
+            try label rew = rew >>> observeR label
+            tries :: [(String,Recore)] -> Recore
             tries = foldr (<+) (observeR "Other" >>> fail "unhandled")
                   . map (uncurry try)
-         rVar, rPair, rApp, rLam :: RecoreC
-         rVar  cxt = varT $ findVar (compFstId,sndId) constId cxt
-         rPair cxt = pairT (rr cxt) (rr cxt) $ mkAmp ampId
-         rApp  cxt = appT  (rr cxt) (rr cxt) $ mkApplyComp applyCompId
-         rLam  cxt = do 
-            x <- lamT (pure ()) const 
-            Lam _ b <- lamR (rr (x:cxt)) 
---             _ <- applyInContextT (observeR "b") b
---             tyStr <- applyInContextT exprTypeT b
---             constT $ liftIO $ putStrLn tyStr
-            applyInContextT (mkCurry curryId) b
+         rVar, rPair, rApp, rLam :: Recore
+         rVar  = do cxt <- lambdaVarsT
+                    varT $ findVar (compFstId,sndId) constId cxt
+         rPair = pairT rr rr (mkAmp ampId)
+         rApp  = appT  rr rr (mkApplyComp applyCompId)
+         rLam  = lamT  rr (const (mkCurry curryId))
 
-     e <- rr [] 
-     (_,r) <- maybe (fail "splitFunTy for applyUnit") return $ splitFunTy_maybe $ exprType e
-     return $ apps applyUnitId [r] [e]
+     mkApplyUnit applyUnitId <$> rr
 
 --      appId     <- findIdT 'apply
 --      compId    <- findIdT '(.)
 --      fstId     <- findIdT 'fst
-
--- TODO: Rework rew with simpler types, and adapt from idR.
 
 {--------------------------------------------------------------------
     Plugin
