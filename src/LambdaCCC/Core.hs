@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
-{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -74,8 +74,8 @@ ppT = contextfreeT ppH
 -- unhandledT :: Outputable a => a -> Translate c HermitM a b
 -- unhandledT e = ("Not yet handled: " ++) <$> ppT e >>= fail
 
-unhandledT :: Show a => a -> Translate c HermitM a b
-unhandledT e = fail $ "Not yet handled: " ++ show e
+-- unhandledT :: Show a => a -> Translate c HermitM a b
+-- unhandledT e = fail $ "Not yet handled: " ++ show e
 
 -- TODO: Use one of HERMIT's pretty-printers instead of CLasH's Show.
 
@@ -115,45 +115,12 @@ unTuple _ = Nothing
 unPair :: CoreExpr -> Maybe (CoreExpr,CoreExpr)
 unPair = listToPair <=< unTuple
 
--- TODO: Discard types returned from unTuple and unPair, since they're easy to
--- reconstruct.
-
-unType :: CoreExpr -> Type
-unType (Type t) = t
-unType _ = error "unType: not a type"
-
--- curry :: forall a b c. (a :* b :-> c) -> (a :-> b :=> c)
-
--- mkCurry :: Id -> RewriteH CoreExpr
--- mkCurry curryId = do
---     f <- observeR "mkCurry f"
---     (ab,c) <- maybe (fail "mkCurry splitFunTy") return $ splitFunTy_maybe $ exprType f
---     (tc,[a,b]) <- maybe (fail "mkCurry splitTyConApp") return $ splitTyConApp_maybe ab 
---     dflags <- constT getDynFlags
---     constT $ liftIO $ do
---         putStrLn $ showPpr dflags ab
---         putStrLn $ showPpr dflags c
---         putStrLn $ showPpr dflags tc
---         putStrLn $ showPpr dflags a
---         putStrLn $ showPpr dflags b
---         return ()
---     guardMsg (isTupleTyCon tc) "mkCurry: tycon is not a tuple tycon"
---     return $ apps curryId [a,b,c] [f]
-
-
--- mkCurry :: Id -> Unop CoreExpr
--- mkCurry curryId f = apps curryId [a,b,c] [f]
---  where
---    FunTy (unPairTy -> Just (a,b)) c = exprType f
-
 mkCurry :: Id -> Unop CoreExpr
 mkCurry curryId f = apps curryId [a,b,c] [f]
  where
    -- (unPairTy -> Just (a,b),c) = splitFunTy (exprType f)
    (ab,c) = splitFunTy (exprType f)
    Just (a,b) = unPairTy ab
-
-
 
 -- apply :: forall a b. ((a :=> b) :* a) :-> b
 
@@ -260,11 +227,7 @@ selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
    select :: LContext -> Type -> Maybe CoreExpr
    select []     _    = Nothing
    select (v:vs) cxTy = do 
-        -- - <- tr (return cxTy)
         (tc, [a,b]) <- splitTyConApp_maybe cxTy
-        -- _ <- tr (return a)
-        -- _ <- tr (return $ varName sndId)
-        -- _ <- tr (return b)
         guardMsg (isTupleTyCon tc) "select: not a tuple tycon"
         if v == x
             then return (apps sndId [a,b] []) 
