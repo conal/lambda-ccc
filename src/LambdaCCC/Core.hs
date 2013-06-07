@@ -182,16 +182,13 @@ mkApplyUnit applyUnitId e = apps applyUnitId [r] [e]
 
 -- | Translate a pair expression.
 pairT :: (Applicative m, Monad m, ExtendPath c Crumb) =>
-         Translate c m CoreExpr a1 -> Translate c m CoreExpr a2
-      -> (a1 -> a2 -> b) -> Translate c m CoreExpr b
-pairT t1 t2 f = translate $ \ c ->
-  \ case (unPair -> Just (e1,e2)) ->
-           f <$> Kure.apply t1 (c @@ Alt_Var 0) e1
-             <*> Kure.apply t2 (c @@ Alt_Var 1) e2
+         Translate c m CoreExpr a -> Translate c m CoreExpr b
+      -> (a -> b -> z) -> Translate c m CoreExpr z
+pairT ta tb f = translate $ \ c ->
+  \ case (unPair -> Just (a,b)) ->
+           f <$> Kure.apply ta (c @@ App_Fun @@ App_Arg) a
+             <*> Kure.apply tb (c            @@ App_Arg) b
          _         -> fail "not a pair node."
-
--- TODO: Revisit choice of crumb. I could use something App_Fun @@ App_Arg and
--- App_Arg.
 
 -- Just the lambda-bound variables in a HERMIT context
 lambdaVars :: HermitC -> [Var]
@@ -201,8 +198,8 @@ lambdaVars = map fst . filter (isLam . snd . snd) . M.toList . hermitC_bindings
    isLam _   = False
 
 -- | Extract just the lambda-bound variables in a HERMIT context
-lambdaVarsT :: Monad m => Translate HermitC m a [Var]
-lambdaVarsT = contextonlyT (return . lambdaVars)
+lambdaVarsT :: Applicative m => Translate HermitC m a [Var]
+lambdaVarsT = contextonlyT (pure . lambdaVars)
 
 
 {--------------------------------------------------------------------
