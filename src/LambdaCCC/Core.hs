@@ -10,10 +10,10 @@
 -- Module      :  LambdaCCC.Core
 -- Copyright   :  (c) 2013 Tabula, Inc.
 -- License     :  BSD3
--- 
+--
 -- Maintainer  :  conal@tabula.com
 -- Stability   :  experimental
--- 
+--
 -- Core version of ToCCC.
 -- With much help from Andrew Farmer and Neil Sculthorpe.
 ----------------------------------------------------------------------
@@ -90,7 +90,7 @@ tupleTy :: [Type] -> Type
 tupleTy = mkBoxedTupleTy -- from TysWiredIn
 
 unTupleTy :: Type -> Maybe [Type]
-unTupleTy (TyConApp tc tys) 
+unTupleTy (TyConApp tc tys)
   | isTupleTyCon tc && tyConArity tc == length tys = Just tys
 unTupleTy _ = Nothing
 
@@ -110,7 +110,7 @@ unTuple expr@(App {})
   , Just dc <- isDataConWorkId_maybe f
   , isTupleTyCon (dataConTyCon dc) && (valArgs `lengthIs` idArity f)
   = Just valArgs
-unTuple _ = Nothing               
+unTuple _ = Nothing
 
 unPair :: CoreExpr -> Maybe (CoreExpr,CoreExpr)
 unPair = listToPair <=< unTuple
@@ -228,7 +228,7 @@ selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
         (tc, [a,b]) <- splitTyConApp_maybe cxTy
         guardMsg (isTupleTyCon tc) "select: not a tuple tycon"
         if v == x
-            then return (apps sndId [a,b] []) 
+            then return (apps sndId [a,b] [])
             else mkCompFst compFstId b =<< select vs a
 
 -- -- Unsafe way to ppr in pure code.
@@ -256,9 +256,9 @@ convert =
      applyUnitId <- findIdT 'applyUnit
      let rr :: Recore
          rr = do c <- lambdaVarsT
-                 observeR (printf "rr: %s" (showContext c)) >>= \_ -> 
-                    tries [("Var",rVar),("Pair",rPair),("App",rApp),("Lam",rLam)]
-                  -- NB Pair before App, since pairs are specialized apps.
+                 observeR (printf "rr: %s" (showContext c)) >>= \_ ->
+                   -- NB Pair before App
+                   tries [("Var",rVar),("Pair",rPair),("App",rApp),("Lam",rLam)]
           where
             tries :: [(String,Recore)] -> Recore
             tries = foldr (<+) (observeR "Other" >>> fail "unhandled")
