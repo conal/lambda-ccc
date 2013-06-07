@@ -36,9 +36,9 @@ reifyR =  do compileE <- findEmbeddingE "compile"
              withPatFailMsg (wrongExprForm "App (App 'eval ty) e") $
                do (_eval, (Type _):_) <- callNameT $ TH.mkName $ addEmbeddingModule "eval"
                   let reifyR'  :: RewriteH CoreExpr
-                      reifyR'  =  varT (\ i -> mkCoreApp varE (varToStringLitE i))
+                      reifyR'  =  varT (arr $ \ i -> mkCoreApp varE (varToStringLitE i))
                                <+ appT reifyR' reifyR' (\ e1 e2 -> mkCoreApps appE [e1,e2])
-                               <+ lamT reifyR' (\ v e -> mkCoreApps lamE [varToStringLitE v, e])
+                               <+ lamT (arr varToStringLitE) reifyR' (\ v b -> mkCoreApps lamE [v, b])
                    in appAllR (return compileE) reifyR'
 
 -- For now (for testing purposes), just use the variable name.

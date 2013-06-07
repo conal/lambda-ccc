@@ -10,10 +10,10 @@
 -- Module      :  LambdaCCC.Core
 -- Copyright   :  (c) 2013 Tabula, Inc.
 -- License     :  BSD3
--- 
+--
 -- Maintainer  :  conal@tabula.com
 -- Stability   :  experimental
--- 
+--
 -- Core version of ToCCC.
 -- With much help from Andrew Farmer and Neil Sculthorpe.
 ----------------------------------------------------------------------
@@ -88,7 +88,7 @@ tupleTy :: [Type] -> Type
 tupleTy = mkBoxedTupleTy -- from TysWiredIn
 
 unTupleTy :: Type -> Maybe [Type]
-unTupleTy (TyConApp tc tys) 
+unTupleTy (TyConApp tc tys)
   | isTupleTyCon tc && tyConArity tc == length tys = Just tys
 unTupleTy _ = Nothing
 
@@ -108,7 +108,7 @@ unTuple expr@(App {})
   , Just dc <- isDataConWorkId_maybe f
   , isTupleTyCon (dataConTyCon dc) && (valArgs `lengthIs` idArity f)
   = Just valArgs
-unTuple _ = Nothing               
+unTuple _ = Nothing
 
 unPair :: CoreExpr -> Maybe (CoreExpr,CoreExpr)
 unPair = listToPair <=< unTuple
@@ -126,7 +126,7 @@ mkCurry :: Id -> RewriteH CoreExpr
 mkCurry curryId = do
     f <- observeR "mkCurry f"
     (ab,c) <- maybe (fail "mkCurry splitFunTy") return $ splitFunTy_maybe $ exprType f
-    (tc,[a,b]) <- maybe (fail "mkCurry splitTyConApp") return $ splitTyConApp_maybe ab 
+    (tc,[a,b]) <- maybe (fail "mkCurry splitTyConApp") return $ splitTyConApp_maybe ab
 --     dflags <- constT getDynFlags
 --     constT $ liftIO $ do
 --         putStrLn $ showPpr dflags ab
@@ -224,7 +224,7 @@ selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
  where
    select :: Context -> Type -> Maybe CoreExpr
    select []     _    = Nothing
-   select (v:vs) cxTy = do 
+   select (v:vs) cxTy = do
         -- - <- tr (return cxTy)
         (tc, [a,b]) <- splitTyConApp_maybe cxTy
         -- _ <- tr (return a)
@@ -232,7 +232,7 @@ selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
         -- _ <- tr (return b)
         guardMsg (isTupleTyCon tc) "select: not a tuple tycon"
         if v == x
-            then return (apps sndId [a,b] []) 
+            then return (apps sndId [a,b] [])
             else mkCompFst compFstId b =<< select vs a
 
 -- Unsafe way to ppr in pure code.
@@ -260,7 +260,7 @@ convert =
      ampId       <- findIdT '(&&&)
      applyUnitId <- findIdT 'applyUnit
      let rr :: RecoreC
-         rr c = observeR (printf "rr: %s" (showContext c)) >>= \_ -> 
+         rr c = observeR (printf "rr: %s" (showContext c)) >>= \_ ->
                    (rVar  c >>> observeR "Var")
                 <+ (rPair c >>> observeR "Pair") -- NB: before App
                 <+ (rApp  c >>> observeR "App")
@@ -268,7 +268,7 @@ convert =
                 <+ (observeR "Other" >>> fail "only Var, App, Lam currently handled")
 
          rVar :: RecoreC
-         rVar cxt = varT $ \ x -> findVar (compFstId,sndId) constId x cxt
+         rVar cxt = varT $ arr $ \ x -> findVar (compFstId,sndId) constId x cxt
 
          rPair :: RecoreC
          rPair cxt = pairT (rr cxt) (rr cxt) $ mkAmp ampId
@@ -276,17 +276,20 @@ convert =
 
          rApp :: RecoreC
          rApp cxt = appT (rr cxt) (rr cxt) $ \ u v -> mkApplyComp applyCompId u v
-    
+
          rLam :: RecoreC
-         rLam cxt = do 
-            x <- lamT (pure ()) const 
-            Lam _ b <- lamR (rr (x:cxt)) 
+         rLam cxt = do
+            Lam v _ <- idR
+            b <- lamT (pure ()) (rr (v:cxt)) (\ () b -> b)
+
+    --        x <- lamT (pure ()) const
+    --        Lam _ b <- lamR (rr (x:cxt))
 --             _ <- applyInContextT (observeR "b") b
 --             tyStr <- applyInContextT exprTypeT b
 --             constT $ liftIO $ putStrLn tyStr
             applyInContextT (mkCurry curryId) b
 
-     e <- rr [] 
+     e <- rr []
      (_,r) <- maybe (fail "splitFunTy for applyUnit") return $ splitFunTy_maybe $ exprType e
      return $ apps applyUnitId [r] [e]
 
@@ -304,7 +307,7 @@ convert =
 --                                return e   -- ???
          -- rew _   e         = unhandledT e
          -- rew _ _ = fail "convert: only Var, App, Lam currently handled"
---      in 
+--      in
 --        idR >>= rew []
 
 --      appId     <- findIdT 'apply
@@ -320,7 +323,7 @@ convert =
 
 -- rew [] :: CoreExpr -> HermitM CoreExpr
 -- idR :: Rewrite c m CoreExpr
--- idR >>= rew [] :: Rewrite 
+-- idR >>= rew [] :: Rewrite
 
 -- constT :: m b -> Translate c m a bSource
 
@@ -339,7 +342,7 @@ convert' =
      applyCompId <- findIdT 'applyComp
      let conv :: Convert
          conv = observeR "conv" >>= \ _ ->
-                varT (findVar (compFstId,sndId) constId)
+                varT (arr $ findVar (compFstId,sndId) constId)
              <+ appT conv conv (liftA2 (mkApplyComp applyCompId))
 --             <+ lamT conv (\ x u' cxt -> mkCurry curryId (u' (x : cxt)))
              <+ (idR >>= unhandledT)
