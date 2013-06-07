@@ -19,6 +19,7 @@ Library
                        ghc >= 7.6,
                        hermit >= 0.1.8.0,
                        template-haskell,
+                       containers,
                        ty
   Exposed-Modules:     LambdaCCC
                        LambdaCCC.Misc
