@@ -240,8 +240,8 @@ tr :: Outputable a => a -> a
 tr x = trace ("tr: " ++ showPpr tracingDynFlags x) x
 
 -- Given comp, fst & snd ids, const, a variable, translate the variable in the context.
-findVar :: (Id,Id) -> Id -> Id -> Context -> CoreExpr
-findVar compFstSndId constId x cxt =
+findVar :: (Id,Id) -> Id -> Context -> Id -> CoreExpr
+findVar compFstSndId constId cxt x =
   fromMaybe (mkConst constId (cxtType cxt) (Var x))
             (selectVar compFstSndId x cxt)
 
@@ -269,7 +269,7 @@ convert =
             tries = foldr (<+) (observeR "Other" >>> fail "unhandled")
                   . map (uncurry try)
          rVar, rPair, rApp, rLam :: RecoreC
-         rVar  cxt = varT $ \ x -> findVar (compFstId,sndId) constId x cxt
+         rVar  cxt = varT $ findVar (compFstId,sndId) constId cxt
          rPair cxt = pairT (rr cxt) (rr cxt) $ mkAmp ampId
          rApp  cxt = appT  (rr cxt) (rr cxt) $ mkApplyComp applyCompId
          rLam  cxt = do 
@@ -290,31 +290,6 @@ convert =
 
 -- TODO: Rework rew with simpler types, and adapt from idR.
 
-{-
-
--- Redo using varT, appT, lamT:
-
-type Convert = TranslateH CoreExpr (Context -> CoreExpr)
-
-convert' :: Recore
-convert' =
-  do -- curryId     <- findIdT 'curry
-     constId     <- findIdT 'const
-     sndId       <- findIdT 'snd
-     compFstId   <- findIdT 'compFst
-     applyCompId <- findIdT 'applyComp
-     let conv :: Convert
-         conv = observeR "conv" >>= \ _ ->
-                varT (findVar (compFstId,sndId) constId)
-             <+ appT conv conv (liftA2 (mkApplyComp applyCompId))
---             <+ lamT conv (\ x u' cxt -> mkCurry curryId (u' (x : cxt)))
-             <+ (idR >>= unhandledT)
-     ($ []) <$> conv
-
--- TODO: Maybe use HERMIT's binding context rather than building one of my own.
-
--}
-
 {--------------------------------------------------------------------
     Plugin
 --------------------------------------------------------------------}
@@ -326,8 +301,6 @@ externals :: [External]
 externals =
     [ external "lambda-to-ccc" (promoteExprR convert)
         [ "top level lambda->CCC transformation, first version" ]
---     , external "lambda-to-ccc'" (promoteExprR convert')
---         [ "top level lambda->CCC transformation, second version" ]
     , external "expr-type" (promoteExprT exprTypeT)
         [ "get the type of the current expression" ]
     ]
