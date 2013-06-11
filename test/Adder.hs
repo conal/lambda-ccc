@@ -8,6 +8,7 @@ import Prelude hiding (and)
 -- Needed for resolving names.
 -- TODO: Bug? Is there an alternative?
 import Data.Tuple (fst,snd)
+import GHC.Base (id,(.))
 
 -- import LambdaCCC.CCC
 import LambdaCCC.FunCCC

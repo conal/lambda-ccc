@@ -36,7 +36,7 @@ type (:->) = (->)
 apply :: forall a b. (a :=> b) :* a :-> b
 apply (f,a) = f a
 
-compFst :: forall b b' c. (b :-> c) -> (b :* b' :-> c)
+compFst :: forall b b' c. (b  :-> c) -> (b :* b' :-> c)
 compFst f = f . fst
 
 compSnd :: forall b b' c. (b' :-> c) -> (b :* b' :-> c)

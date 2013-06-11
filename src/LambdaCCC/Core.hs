@@ -20,9 +20,6 @@
 
 module LambdaCCC.Core (plugin,externals) where
 
-import Prelude hiding (id,(.))
-import Control.Category (id,(.))
-
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..)) -- ,liftA2
 import Control.Arrow ((>>>), arr)
@@ -85,6 +82,22 @@ ppT = contextfreeT ppH
 apps :: Id -> [Type] -> [CoreExpr] -> CoreExpr
 apps f ts es = mkCoreApps (varToCoreExpr f) (map Type ts ++ es)
 
+-- Somewhat more informative error messages:
+
+-- apps f ts0 es = mkCoreApps (mkTApps (exprType e0) e0 ts0) es
+--  where
+--    e0 = varToCoreExpr f
+--    -- Check that we have few enough type arguments.
+--    -- TODO: also check that we don't have too few.
+--    mkTApps :: Type -> CoreExpr -> [Type] -> CoreExpr
+--    mkTApps _  e [] = e
+--    mkTApps ty e ts | Just ty' <- coreView ty = mkTApps ty' e ts
+--    mkTApps ty@(ForAllTy {}) e (t:ts') =
+--      mkTApps (applyTy ty t) (App e (Type t)) ts'
+--    mkTApps _ _ (_:_) =
+--      error (printf "mkCoreTyApps: Too many type args for %s"
+--                    (uqName (varName f)))
+
 tupleTy :: [Type] -> Type
 tupleTy = mkBoxedTupleTy -- from TysWiredIn
 
@@ -133,20 +146,32 @@ mkConst constId a x = apps constId [exprType x,a] [x]
 
 -- (.) :: forall b c a. (b :-> c) -> (a :-> b) -> (a :-> c)
 
--- mkCompose :: Id -> Binop CoreExpr
--- mkCompose compId g f = apps compId [b,c,a] [g,f]
---  where
---    FunTy b  c = exprType g
---    FunTy a _b = exprType f
+mkCompose :: Id -> Binop CoreExpr
+mkCompose compId g f = apps compId [b,c,a] [g,f]
+ where
+   FunTy b  c = exprType g
+   FunTy a _b = exprType f
 
 -- fst :: forall a b. a :* b :-> a
 -- snd :: forall a b. a :* b :-> b
 -- (.) :: forall b c a. (b :-> c) -> (a :-> b) -> (a :-> c)
 
--- compFst :: forall b b' c. (b  :-> c) -> (b :* b' :-> c)
--- compSnd :: forall b b' c. (b' :-> c) -> (b :* b' :-> c)
+mkFst :: Id -> Type -> Type -> CoreExpr
+mkFst fstId a b = apps fstId [a,b] []
 
-mkCompFst :: Id -> Type -> CoreExpr -> CoreExpr
+mkSnd :: Id -> Type -> Type -> CoreExpr
+mkSnd sndId a b = apps sndId [a,b] []
+
+-- compFst :: forall b b' c. (b :-> c) -> (b :* b' :-> c)
+-- compFst f = f . fst
+
+mkCompFst' :: Id -> Id -> Type -> Unop CoreExpr
+mkCompFst' composeId fstId b' f =
+  apps composeId [b,c,b `pairTy`b'] [f, mkFst fstId b b']
+ where
+   (b,c) = splitFunTy (exprType f)
+
+mkCompFst :: Id -> Type -> Unop CoreExpr
 mkCompFst compFstId b' f = apps compFstId [b,b',c] [f]
  where
    (b,c) = splitFunTy (exprType f)
@@ -160,7 +185,32 @@ mkApplyComp applyCompId f g = apps applyCompId [a,b,c] [f,g]
     where
       ([a,b],c) = splitFunTysN 2 (exprType f)
 
--- TODO: Use applyId and compId to define mkApplyComp
+-- (&&&) :: forall a c d. (a :-> c) -> (a :-> d) -> (a :-> c :* d)
+-- apply :: forall a b. (a :=> b) :* a :-> b
+-- (.)   :: forall k b c a. (b :-> c) -> (a :-> b) -> (a :-> c)
+
+-- applyComp :: forall a b c. (a :-> (b :=> c)) -> (a :-> b) -> (a :-> c)
+-- applyComp h k = apply . (h &&& k)
+
+-- apply :: (b :=> c) :* b :-> c
+-- (.) :: ((b :=> c) :* b :-> c) -> (a :-> (b :=> c) :* b) -> (a :-> c)
+
+mkApply :: Id -> Type -> Type -> CoreExpr
+mkApply applyId a b = apps applyId [a,b] []
+
+mkApplyComp' :: (Id,Id,Id) -> Binop CoreExpr
+mkApplyComp' (applyId,composeId,ampId) f g =
+  apps composeId
+       [FunTy b c `pairTy` b, c, a]
+       [mkApply applyId b c,mkAmp ampId f g]
+    where
+      ([a,b],c) = splitFunTysN 2 (exprType f)
+
+-- Oh, weird. I get "too many type args for .", but I think I really have too
+-- few. What's up? I'm using the Category version.
+-- 
+-- TODO: Switch to the Prelude version.
+-- TODO: Maybe change back to applyComp and compFst.
 
 mkAmp :: Id -> Binop CoreExpr
 mkAmp ampId f g = apps ampId [a,c,d] [f,g]
@@ -240,26 +290,44 @@ selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
     where
       Just (a,b) = unPairTy cxTy
 
+selectVar' :: (Id,Id,Id) -> Id -> LContext -> Maybe CoreExpr
+selectVar' (composeId,fstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
+ where
+   select :: LContext -> Type -> Maybe CoreExpr
+   select [] _   = Nothing
+   select (v:vs) cxTy 
+     | v == x    = Just (apps sndId [a,b] [])
+     | otherwise = mkCompFst' composeId fstId b <$> select vs a
+    where
+      Just (a,b) = unPairTy cxTy
+
 -- -- Unsafe way to ppr in pure code.
 -- tr :: Outputable a => a -> a
 -- tr x = trace ("tr: " ++ showPpr tracingDynFlags x) x
 
 -- Given compFst & snd ids, const id, and a lambda context, translate a
 -- variable.
+
+findVar' :: (Id,Id,Id) -> Id -> LContext -> Id -> CoreExpr
+findVar' compFstSndId constId cxt x =
+  fromMaybe (mkConst constId (cxtType cxt) (Var x))
+            (selectVar' compFstSndId x cxt)
+
 findVar :: (Id,Id) -> Id -> LContext -> Id -> CoreExpr
 findVar compFstSndId constId cxt x =
   fromMaybe (mkConst constId (cxtType cxt) (Var x))
             (selectVar compFstSndId x cxt)
 
--- TODO: Inspect and test findVar carefully.
-
 convertExpr :: RewriteH CoreExpr
 convertExpr =
   do curryId     <- findIdT 'curry
      constId     <- findIdT 'const
+     composeId   <- findIdT '(Prelude..)
+     fstId       <- findIdT 'fst
      sndId       <- findIdT 'snd
-     compFstId   <- findIdT 'compFst
-     applyCompId <- findIdT 'applyComp
+  -- compFstId   <- findIdT 'compFst
+  -- applyCompId <- findIdT 'applyComp
+     applyId     <- findIdT 'apply
      ampId       <- findIdT '(&&&)
      applyUnitId <- findIdT 'applyUnit
      let rr :: RewriteH CoreExpr
@@ -274,28 +342,26 @@ convertExpr =
             try label rew = rew >>> observeR' label
          rVar, rPair, rApp, rLam :: RewriteH CoreExpr
          rVar  = do cxt <- lambdaVarsT
-                    varT $ arr $ findVar (compFstId,sndId) constId cxt
+                    varT $ arr $ findVar' (composeId,fstId,sndId) constId cxt
+                                 -- findVar (compFstId,sndId) constId cxt
          rPair = pairT rr       rr $ mkAmp ampId
-         rApp  = appT  rr       rr $ mkApplyComp applyCompId
+         rApp  = appT  rr       rr $ mkApplyComp' (applyId,composeId,ampId)
+                                     -- mkApplyComp applyCompId
          rLam  = lamT (pure ()) rr $ const (mkCurry curryId)
 
      mkApplyUnit applyUnitId <$> rr >>> observeR "Final"
 
 observing :: Bool
-observing = False
+observing = True
 
 observeR' :: String -> RewriteH CoreExpr
 observeR' | observing = observeR
-          | otherwise = const id
-
---      appId     <- findIdT 'apply
---      compId    <- findIdT '(.)
---      fstId     <- findIdT 'fst
+          | otherwise = const idR
 
 -- retypeVar :: RewriteH Type -> RewriteH Var
 
 tweakTy :: RewriteH Type
-tweakTy = id                            -- for now
+tweakTy = idR                            -- for now
 
 convertDef :: RewriteH CoreDef
 convertDef = defAllR (retypeVar (anybuR tweakTy)) convertExpr
