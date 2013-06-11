@@ -20,8 +20,6 @@
 
 module LambdaCCC.Core (plugin,externals) where
 
--- TODO: explicit exports
-
 import Prelude hiding (id,(.))
 import Control.Category (id,(.))
 
@@ -54,7 +52,9 @@ import Language.HERMIT.Context (HermitBindingSite(LAM),ReadBindings(..))
 import LambdaCCC.FunCCC  -- Function-only vocabulary
 
 -- TODO: Switch to real CCC vocabulary and revisit the types of mkCurry etc
--- below. The type parameters may change order.
+-- below. The type parameters may change order. Better yet, follow the
+-- function-specific (FunCCC) phase with a generalization using something like
+-- 'arr' to explicitly generalize from functions to morphisms.
 
 import CLasH.Utils.Core.CoreShow ()
 
@@ -147,13 +147,13 @@ mkConst constId a x = apps constId [exprType x,a] [x]
 -- snd :: forall a b. a :* b :-> b
 -- (.) :: forall b c a. (b :-> c) -> (a :-> b) -> (a :-> c)
 
--- compFst :: forall b b' c. (b :-> c) -> (b :* b' :-> c)
+-- compFst :: forall b b' c. (b  :-> c) -> (b :* b' :-> c)
 -- compSnd :: forall b b' c. (b' :-> c) -> (b :* b' :-> c)
 
-mkCompFst :: Id -> Type -> CoreExpr -> Maybe CoreExpr
-mkCompFst compFstId b' f = do
-    (b,c) <- splitFunTy_maybe $ exprType f
-    return $ apps compFstId [b,b',c] [f]
+mkCompFst :: Id -> Type -> CoreExpr -> CoreExpr
+mkCompFst compFstId b' f = apps compFstId [b,b',c] [f]
+ where
+   (b,c) = splitFunTy (exprType f)
 
 -- TODO: Use compId and fstId to define compFst
 
@@ -161,7 +161,8 @@ mkCompFst compFstId b' f = do
 
 mkApplyComp :: Id -> Binop CoreExpr
 mkApplyComp applyCompId f g = apps applyCompId [a,b,c] [f,g]
-    where ([a,b],c) = splitFunTysN 2 $ exprType f
+    where
+      ([a,b],c) = splitFunTysN 2 (exprType f)
 
 -- TODO: Use applyId and compId to define mkApplyComp
 
@@ -208,17 +209,15 @@ retypeVar :: RewriteH Type -> RewriteH Var
 retypeVar tr = translate $ \ c -> \ v ->
                  setVarType v <$> Kure.apply tr c (varType v)
 
--- Neil: We don't currently traverse into variables using generic traversals, so it is not neccassary to add a Crumb to the context at this point.
---       It's possible this may change in the future though (in which case, retypeVar would appear as a congruence combinator provided by HERMIT).
+-- Neil: We don't currently traverse into variables using generic traversals, so
+-- it is not neccassary to add a Crumb to the context at this point. It's
+-- possible this may change in the future though (in which case, retypeVar would
+-- appear as a congruence combinator provided by HERMIT).
 
 {-
    where
    crumb = error "retypeVar: what crumb to use?"
 -}
-
--- TODO: Resolve crumb. IIRC, I could use an Int crumb, but then I couldn't use
--- HermitC, due to functional dependency. How does type rewriting get done in
--- HERMIT under this constraint? Maybe it doesn't.
 
 {--------------------------------------------------------------------
     Rewriting
@@ -238,19 +237,19 @@ selectVar :: (Id,Id) -> Id -> LContext -> Maybe CoreExpr
 selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
  where
    select :: LContext -> Type -> Maybe CoreExpr
-   select []     _    = Nothing
-   select (v:vs) cxTy = do
-        (tc, [a,b]) <- splitTyConApp_maybe cxTy
-        guardMsg (isTupleTyCon tc) "select: not a tuple tycon"
-        if v == x
-            then return (apps sndId [a,b] [])
-            else mkCompFst compFstId b =<< select vs a
+   select [] _   = Nothing
+   select (v:vs) cxTy 
+     | v == x    = Just (apps sndId [a,b] [])
+     | otherwise = mkCompFst compFstId b <$> select vs a
+    where
+      Just (a,b) = unPairTy cxTy
 
 -- -- Unsafe way to ppr in pure code.
 -- tr :: Outputable a => a -> a
 -- tr x = trace ("tr: " ++ showPpr tracingDynFlags x) x
 
--- Given comp, fst & snd ids, const, a variable, translate the variable in the context.
+-- Given compFst & snd ids, const id, and a lambda context, translate a
+-- variable.
 findVar :: (Id,Id) -> Id -> LContext -> Id -> CoreExpr
 findVar compFstSndId constId cxt x =
   fromMaybe (mkConst constId (cxtType cxt) (Var x))
@@ -269,14 +268,14 @@ convertExpr =
      applyUnitId <- findIdT 'applyUnit
      let rr :: RewriteH CoreExpr
          rr = do c <- lambdaVarsT
-                 observeR (printf "rr: %s" (showContext c)) >>= \_ ->
+                 observeR' (printf "rr: %s" (showContext c)) >>= \_ ->
                    -- NB Pair before App
                    tries [("Var",rVar),("Pair",rPair),("App",rApp),("Lam",rLam)]
           where
             tries :: [(String,RewriteH CoreExpr)] -> RewriteH CoreExpr
-            tries = foldr (<+) (observeR "Other" >>> fail "unhandled")
+            tries = foldr (<+) (observeR' "Other" >>> fail "unhandled")
                   . map (uncurry try)
-            try label rew = rew >>> observeR label
+            try label rew = rew >>> observeR' label
          rVar, rPair, rApp, rLam :: RewriteH CoreExpr
          rVar  = do cxt <- lambdaVarsT
                     varT $ arr $ findVar (compFstId,sndId) constId cxt
@@ -284,7 +283,14 @@ convertExpr =
          rApp  = appT  rr       rr $ mkApplyComp applyCompId
          rLam  = lamT (pure ()) rr $ const (mkCurry curryId)
 
-     mkApplyUnit applyUnitId <$> rr
+     mkApplyUnit applyUnitId <$> rr >>> observeR "Final"
+
+observing :: Bool
+observing = False
+
+observeR' :: String -> RewriteH CoreExpr
+observeR' | observing = observeR
+          | otherwise = const id
 
 --      appId     <- findIdT 'apply
 --      compId    <- findIdT '(.)
