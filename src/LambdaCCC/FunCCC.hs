@@ -19,7 +19,8 @@
 
 module LambdaCCC.FunCCC
   ( (:->),(:*),(:=>),(&&&),apply
-  , compFst,compSnd,applyComp,applyUnit
+  -- , compFst,compSnd,applyComp
+  , applyUnit
   ) where
 
 import LambdaCCC.Misc ((:*),(:=>))
@@ -36,14 +37,14 @@ type (:->) = (->)
 apply :: forall a b. (a :=> b) :* a :-> b
 apply (f,a) = f a
 
-compFst :: forall b b' c. (b  :-> c) -> (b :* b' :-> c)
-compFst f = f . fst
+-- compFst :: forall b b' c. (b  :-> c) -> (b :* b' :-> c)
+-- compFst f = f . fst
 
-compSnd :: forall b b' c. (b' :-> c) -> (b :* b' :-> c)
-compSnd f = f . snd
+-- compSnd :: forall b b' c. (b' :-> c) -> (b :* b' :-> c)
+-- compSnd f = f . snd
 
-applyComp :: forall a b c. (a :-> (b :=> c)) -> (a :-> b) -> (a :-> c)
-applyComp h k = apply . (h &&& k)
+-- applyComp :: forall a b c. (a :-> (b :=> c)) -> (a :-> b) -> (a :-> c)
+-- applyComp h k = apply . (h &&& k)
 
 applyUnit :: forall a. (() -> a) -> a
 applyUnit f = f ()

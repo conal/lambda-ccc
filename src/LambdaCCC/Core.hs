@@ -165,25 +165,25 @@ mkSnd sndId a b = apps sndId [a,b] []
 -- compFst :: forall b b' c. (b :-> c) -> (b :* b' :-> c)
 -- compFst f = f . fst
 
-mkCompFst' :: Id -> Id -> Type -> Unop CoreExpr
-mkCompFst' composeId fstId b' f =
+mkCompFst :: Id -> Id -> Type -> Unop CoreExpr
+mkCompFst composeId fstId b' f =
   apps composeId [b,c,b `pairTy`b'] [f, mkFst fstId b b']
  where
    (b,c) = splitFunTy (exprType f)
 
-mkCompFst :: Id -> Type -> Unop CoreExpr
-mkCompFst compFstId b' f = apps compFstId [b,b',c] [f]
- where
-   (b,c) = splitFunTy (exprType f)
+-- mkCompFst :: Id -> Type -> Unop CoreExpr
+-- mkCompFst compFstId b' f = apps compFstId [b,b',c] [f]
+--  where
+--    (b,c) = splitFunTy (exprType f)
 
 -- TODO: Use compId and fstId to define compFst
 
 -- applyComp :: forall a b c. (a :-> (b :=> c)) -> (a :-> b) -> (a :-> c)
 
-mkApplyComp :: Id -> Binop CoreExpr
-mkApplyComp applyCompId f g = apps applyCompId [a,b,c] [f,g]
-    where
-      ([a,b],c) = splitFunTysN 2 (exprType f)
+-- mkApplyComp :: Id -> Binop CoreExpr
+-- mkApplyComp applyCompId f g = apps applyCompId [a,b,c] [f,g]
+--     where
+--       ([a,b],c) = splitFunTysN 2 (exprType f)
 
 -- (&&&) :: forall a c d. (a :-> c) -> (a :-> d) -> (a :-> c :* d)
 -- apply :: forall a b. (a :=> b) :* a :-> b
@@ -198,8 +198,8 @@ mkApplyComp applyCompId f g = apps applyCompId [a,b,c] [f,g]
 mkApply :: Id -> Type -> Type -> CoreExpr
 mkApply applyId a b = apps applyId [a,b] []
 
-mkApplyComp' :: (Id,Id,Id) -> Binop CoreExpr
-mkApplyComp' (applyId,composeId,ampId) f g =
+mkApplyComp :: (Id,Id,Id) -> Binop CoreExpr
+mkApplyComp (applyId,composeId,ampId) f g =
   apps composeId
        [FunTy b c `pairTy` b, c, a]
        [mkApply applyId b c,mkAmp ampId f g]
@@ -279,25 +279,14 @@ showContext = show . map (uqName.varName)
 cxtType :: LContext -> Type
 cxtType = foldr (flip pairTy) unitTy . map varType
 
-selectVar :: (Id,Id) -> Id -> LContext -> Maybe CoreExpr
-selectVar (compFstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
+selectVar :: (Id,Id,Id) -> Id -> LContext -> Maybe CoreExpr
+selectVar (composeId,fstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
  where
    select :: LContext -> Type -> Maybe CoreExpr
    select [] _   = Nothing
    select (v:vs) cxTy 
      | v == x    = Just (apps sndId [a,b] [])
-     | otherwise = mkCompFst compFstId b <$> select vs a
-    where
-      Just (a,b) = unPairTy cxTy
-
-selectVar' :: (Id,Id,Id) -> Id -> LContext -> Maybe CoreExpr
-selectVar' (composeId,fstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
- where
-   select :: LContext -> Type -> Maybe CoreExpr
-   select [] _   = Nothing
-   select (v:vs) cxTy 
-     | v == x    = Just (apps sndId [a,b] [])
-     | otherwise = mkCompFst' composeId fstId b <$> select vs a
+     | otherwise = mkCompFst composeId fstId b <$> select vs a
     where
       Just (a,b) = unPairTy cxTy
 
@@ -308,15 +297,15 @@ selectVar' (composeId,fstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
 -- Given compFst & snd ids, const id, and a lambda context, translate a
 -- variable.
 
-findVar' :: (Id,Id,Id) -> Id -> LContext -> Id -> CoreExpr
-findVar' compFstSndId constId cxt x =
-  fromMaybe (mkConst constId (cxtType cxt) (Var x))
-            (selectVar' compFstSndId x cxt)
-
-findVar :: (Id,Id) -> Id -> LContext -> Id -> CoreExpr
+findVar :: (Id,Id,Id) -> Id -> LContext -> Id -> CoreExpr
 findVar compFstSndId constId cxt x =
   fromMaybe (mkConst constId (cxtType cxt) (Var x))
             (selectVar compFstSndId x cxt)
+
+-- findVar :: (Id,Id) -> Id -> LContext -> Id -> CoreExpr
+-- findVar compFstSndId constId cxt x =
+--   fromMaybe (mkConst constId (cxtType cxt) (Var x))
+--             (selectVar compFstSndId x cxt)
 
 convertExpr :: RewriteH CoreExpr
 convertExpr =
@@ -342,10 +331,10 @@ convertExpr =
             try label rew = rew >>> observeR' label
          rVar, rPair, rApp, rLam :: RewriteH CoreExpr
          rVar  = do cxt <- lambdaVarsT
-                    varT $ arr $ findVar' (composeId,fstId,sndId) constId cxt
+                    varT $ arr $ findVar (composeId,fstId,sndId) constId cxt
                                  -- findVar (compFstId,sndId) constId cxt
          rPair = pairT rr       rr $ mkAmp ampId
-         rApp  = appT  rr       rr $ mkApplyComp' (applyId,composeId,ampId)
+         rApp  = appT  rr       rr $ mkApplyComp (applyId,composeId,ampId)
                                      -- mkApplyComp applyCompId
          rLam  = lamT (pure ()) rr $ const (mkCurry curryId)
 
