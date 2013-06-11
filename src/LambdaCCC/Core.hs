@@ -56,8 +56,6 @@ import LambdaCCC.FunCCC  -- Function-only vocabulary
 -- function-specific (FunCCC) phase with a generalization using something like
 -- 'arr' to explicitly generalize from functions to morphisms.
 
-import CLasH.Utils.Core.CoreShow ()
-
 {--------------------------------------------------------------------
     Misc utilities
 --------------------------------------------------------------------}
@@ -79,8 +77,6 @@ ppT = contextfreeT ppH
 
 -- unhandledT :: Show a => a -> Translate c HermitM a b
 -- unhandledT e = fail $ "Not yet handled: " ++ show e
-
--- TODO: Use one of HERMIT's pretty-printers instead of CLasH's Show.
 
 {--------------------------------------------------------------------
     Core utilities

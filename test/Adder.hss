@@ -1,6 +1,9 @@
+-- hermit Adder.hs -opt=LambdaCCC.Core +Adder Adder.hss
+
 -- set-pp-type Show
 -- set-auto-corelint True
-rhs-of 'baz
+rhs-of 'foo
 lambda-to-ccc
 -- expr-type
+-- any-bu (inline 'applyComp) ; any-bu beta-reduce
 resume

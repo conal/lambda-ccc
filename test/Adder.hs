@@ -5,6 +5,8 @@ module Adder where
 
 import Prelude hiding (and)
 
+-- Needed for resolving names.
+-- TODO: Bug? Is there an alternative?
 import Data.Tuple (fst,snd)
 
 -- import LambdaCCC.CCC

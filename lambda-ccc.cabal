@@ -33,6 +33,5 @@ Library
                        LambdaCCC.Core
                        LambdaCCCDemo.Reify
                        LambdaCCCDemo.Embedding
-                       CLasH.Utils.Core.CoreShow
   Other-Modules:
                        LambdaCCC.Tests
