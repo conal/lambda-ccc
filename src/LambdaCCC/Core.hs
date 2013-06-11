@@ -42,7 +42,9 @@ import Language.HERMIT.Optimize
 import Language.HERMIT.Primitive.Common
 import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.GHC (uqName)
-import Language.HERMIT.Core (Crumb(..),CoreDef)
+import Language.HERMIT.Primitive.Unfold (cleanupUnfoldR)
+import Language.HERMIT.Primitive.GHC (rule)
+import Language.HERMIT.Core (Crumb(..),CoreDef(..))
 import Language.HERMIT.Context (HermitBindingSite(LAM),ReadBindings(..))
 
 -- import LambdaCCC.CCC
@@ -338,10 +340,10 @@ convertExpr =
                                      -- mkApplyComp applyCompId
          rLam  = lamT (pure ()) rr $ const (mkCurry curryId)
 
-     mkApplyUnit applyUnitId <$> rr >>> observeR "Final"
+     mkApplyUnit applyUnitId <$> rr -- >>> observeR "Final"
 
 observing :: Bool
-observing = True
+observing = False
 
 observeR' :: String -> RewriteH CoreExpr
 observeR' | observing = observeR
@@ -353,7 +355,8 @@ tweakTy :: RewriteH Type
 tweakTy = idR                            -- for now
 
 convertDef :: RewriteH CoreDef
-convertDef = defAllR (retypeVar (anybuR tweakTy)) convertExpr
+convertDef = defAllR idR convertExpr
+-- convertDef = defAllR (retypeVar (anybuR tweakTy)) convertExpr
 
 
 {--------------------------------------------------------------------
@@ -366,10 +369,20 @@ plugin = optimize (phase 0 . interactive externals)
 externals :: [External]
 externals =
     [ external "lambda-to-ccc" (promoteExprR convertExpr)
-        [ "top level lambda->CCC transformation, first version" ]
-    , external "expr-type" (promoteExprT exprTypeT)
-        [ "get the type of the current expression" ]
+        [ "top level lambda->CCC transformation on expressions" ]
+    , external "lambda-to-ccc-def" (promoteDefR convertDef)
+        [ "top level lambda->CCC transformation on definitions" ]
+
+--     , external "expr-type" (promoteExprT exprTypeT)
+--         [ "get the type of the current expression" ]
+
+    , external "unfold-rules" (promoteExprR . unfoldRules)
+        [ "Apply a named GHC rule" ] .+ Deep .+ Context -- TODO: does not work with rules with no arguments
+
     ]
+
+unfoldRules :: [String] -> RewriteH CoreExpr
+unfoldRules nms = catchesM (rule <$> nms) >>> cleanupUnfoldR
 
 exprTypeT :: TranslateH CoreExpr String
 exprTypeT = arr exprType >>> ppT

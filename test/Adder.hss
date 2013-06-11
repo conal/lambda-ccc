@@ -2,8 +2,19 @@
 
 -- set-pp-type Show
 set-auto-corelint True
-rhs-of 'foo
+-- {
+
+rhs-of 'halfAdd
 lambda-to-ccc
--- expr-type
--- any-bu (inline 'applyComp) ; any-bu beta-reduce
-resume
+repeat (any-bu (unfold-rules ["apply/amp to compose", "amp/compose", "curry/compose/snd", "applyUnit/const"]))
+
+-- Works fine. However,
+
+-- consider 'halfAdd
+-- lambda-to-ccc-def
+-- repeat (any-bu (unfold-rules ["apply/amp to compose", "amp/compose", "curry/compose/snd", "applyUnit/const"]))
+-- 
+-- Rewrite failed: user error (This rewrite can only succeed at recursive definition nodes.)
+
+-- }
+-- resume

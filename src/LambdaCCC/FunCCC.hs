@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeOperators, ExplicitForAll #-}
 {-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-} -- for "curry/compose/snd" rule
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
@@ -37,14 +38,23 @@ type (:->) = (->)
 apply :: forall a b. (a :=> b) :* a :-> b
 apply (f,a) = f a
 
--- compFst :: forall b b' c. (b  :-> c) -> (b :* b' :-> c)
--- compFst f = f . fst
+{-
+compFst :: forall b b' c. (b  :-> c) -> (b :* b' :-> c)
+compFst f = f . fst
 
--- compSnd :: forall b b' c. (b' :-> c) -> (b :* b' :-> c)
--- compSnd f = f . snd
+compSnd :: forall b b' c. (b' :-> c) -> (b :* b' :-> c)
+compSnd f = f . snd
 
--- applyComp :: forall a b c. (a :-> (b :=> c)) -> (a :-> b) -> (a :-> c)
--- applyComp h k = apply . (h &&& k)
+applyComp :: forall a b c. (a :-> (b :=> c)) -> (a :-> b) -> (a :-> c)
+applyComp h k = apply . (h &&& k)
+-}
 
 applyUnit :: forall a. (() -> a) -> a
 applyUnit f = f ()
+
+{-# RULES
+"apply/amp to compose" forall g f   . apply . (const g &&& f) = g . f
+"amp/compose"          forall h g f . (h . f) &&& (g . f) = (h &&& g) . f
+"curry/compose/snd"    forall h     . curry (h . snd) = const h
+"applyUnit/const"      forall h     . applyUnit (const h) = h
+ #-}
