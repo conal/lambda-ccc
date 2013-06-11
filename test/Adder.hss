@@ -4,16 +4,17 @@
 set-auto-corelint True
 -- {
 
+-- Works fine:
+
 rhs-of 'halfAdd
 lambda-to-ccc
 repeat (any-bu (unfold-rules ["apply/amp to compose", "amp/compose", "curry/compose/snd", "applyUnit/const"]))
 
--- Works fine. However,
+-- Bombs:
+consider 'halfAdd
+lambda-to-ccc-def
+repeat (any-bu (unfold-rules ["apply/amp to compose", "amp/compose", "curry/compose/snd", "applyUnit/const"]))
 
--- consider 'halfAdd
--- lambda-to-ccc-def
--- repeat (any-bu (unfold-rules ["apply/amp to compose", "amp/compose", "curry/compose/snd", "applyUnit/const"]))
--- 
 -- Rewrite failed: user error (This rewrite can only succeed at recursive definition nodes.)
 
 -- }
