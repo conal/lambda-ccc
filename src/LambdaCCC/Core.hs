@@ -208,12 +208,6 @@ mkApplyComp (applyId,composeId,ampId) f g =
     where
       ([a,b],c) = splitFunTysN 2 (exprType f)
 
--- Oh, weird. I get "too many type args for .", but I think I really have too
--- few. What's up? I'm using the Category version.
--- 
--- TODO: Switch to the Prelude version.
--- TODO: Maybe change back to applyComp and compFst.
-
 mkAmp :: Id -> Binop CoreExpr
 mkAmp ampId f g = apps ampId [a,c,d] [f,g]
  where
