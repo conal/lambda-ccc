@@ -373,15 +373,15 @@ convertDef = rhsR convertExpr
 -- convertDef = defAllR idR convertExpr
 -- convertDef = defAllR (retypeVar (anybuR tweakTy)) convertExpr
 
-cccSimplify :: RewriteH CoreExpr
-cccSimplify = unfoldRules ["apply/amp to compose", "amp/compose", "curry/compose/snd", "applyUnit/const"]
+cccSimplify :: RewriteH Core
+cccSimplify = anybuR $ promoteExprR $ unfoldRules 
+                ["apply/amp to compose", "amp/compose", "curry/compose/snd", "applyUnit/const"]
 
 convertExprSimplify :: RewriteH Core
-convertExprSimplify = promoteExprR convertExpr
-                  >>> anybuR (promoteExprR cccSimplify)
+convertExprSimplify = promoteExprR convertExpr >>> cccSimplify
 
 convertDefSimplify :: RewriteH Core
-convertDefSimplify = convertDef >>> anybuR (promoteExprR cccSimplify)
+convertDefSimplify = convertDef >>> cccSimplify
 
 
 {--------------------------------------------------------------------
@@ -397,7 +397,7 @@ externals =
         [ "top level lambda->CCC transformation on expressions" ]
     , external "lambda-to-ccc-def" convertDef
         [ "top level lambda->CCC transformation on definitions" ]
-    , external "ccc-simplify" (promoteExprR cccSimplify)
+    , external "ccc-simplify" cccSimplify
         [ "apply CCC simplification rules" ]
     , external "lambda-to-ccc-simplify" convertExprSimplify
         [ "top level lambda->CCC transformation on expressions, followed by CCC simplification" ]
