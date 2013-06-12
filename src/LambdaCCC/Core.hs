@@ -44,7 +44,7 @@ import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.GHC (uqName)
 import Language.HERMIT.Primitive.Unfold (cleanupUnfoldR)
 import Language.HERMIT.Primitive.GHC (rule)
-import Language.HERMIT.Core (Crumb(..),CoreDef(..))
+import Language.HERMIT.Core (Crumb(..),Core) -- ,CoreDef(..)
 import Language.HERMIT.Context (HermitBindingSite(LAM),ReadBindings(..))
 
 -- import LambdaCCC.CCC
@@ -125,6 +125,12 @@ unTuple expr@(App {})
   , isTupleTyCon (dataConTyCon dc) && (valArgs `lengthIs` idArity f)
   = Just valArgs
 unTuple _ = Nothing
+
+-- tuple :: [CoreExpr] -> CoreExpr 
+-- tuple es = ... ?
+-- 
+-- pair :: Binop CoreExpr
+-- pair a b = tuple [a,b]
 
 unPair :: CoreExpr -> Maybe (CoreExpr,CoreExpr)
 unPair = listToPair <=< unTuple
@@ -235,6 +241,19 @@ pairT ta tb f = translate $ \ c ->
            f <$> Kure.apply ta (c @@ App_Fun @@ App_Arg) a
              <*> Kure.apply tb (c            @@ App_Arg) b
          _         -> fail "not a pair node."
+
+{-
+rhsT :: (Functor m, Monad m) =>
+        Translate c m CoreExpr a -> (Id -> a -> z) -> Translate c m CoreDef z
+rhsT ef h = translate $ \ c ->
+  \ case (Def v rhs) -> h v <$> Kure.apply ef (c {- ... -}) rhs
+
+rhsR :: (Functor m, Monad m) => Rewrite c m CoreExpr -> Rewrite c m CoreDef
+rhsR ef = rhsT ef Def
+-}
+
+rhsR :: RewriteH CoreExpr -> RewriteH Core
+rhsR r = prunetdR (promoteDefR (defAllR idR r) <+ promoteBindR (nonRecAllR idR r))
 
 -- Just the lambda-bound variables in a HERMIT context
 lambdaVars :: ReadBindings c => c -> [Var]
@@ -348,9 +367,21 @@ observeR' | observing = observeR
 tweakTy :: RewriteH Type
 tweakTy = idR                            -- for now
 
-convertDef :: RewriteH CoreDef
-convertDef = defAllR idR convertExpr
+convertDef :: RewriteH Core
+convertDef = rhsR convertExpr
+
+-- convertDef = defAllR idR convertExpr
 -- convertDef = defAllR (retypeVar (anybuR tweakTy)) convertExpr
+
+cccSimplify :: RewriteH CoreExpr
+cccSimplify = unfoldRules ["apply/amp to compose", "amp/compose", "curry/compose/snd", "applyUnit/const"]
+
+convertExprSimplify :: RewriteH Core
+convertExprSimplify = promoteExprR convertExpr
+                  >>> anybuR (promoteExprR cccSimplify)
+
+convertDefSimplify :: RewriteH Core
+convertDefSimplify = convertDef >>> anybuR (promoteExprR cccSimplify)
 
 
 {--------------------------------------------------------------------
@@ -364,8 +395,15 @@ externals :: [External]
 externals =
     [ external "lambda-to-ccc" (promoteExprR convertExpr)
         [ "top level lambda->CCC transformation on expressions" ]
-    , external "lambda-to-ccc-def" (promoteDefR convertDef)
+    , external "lambda-to-ccc-def" convertDef
         [ "top level lambda->CCC transformation on definitions" ]
+    , external "ccc-simplify" (promoteExprR cccSimplify)
+        [ "apply CCC simplification rules" ]
+    , external "lambda-to-ccc-simplify" convertExprSimplify
+        [ "top level lambda->CCC transformation on expressions, followed by CCC simplification" ]
+
+    , external "lambda-to-ccc-def-simplify" convertDefSimplify
+        [ "top level lambda->CCC transformation on definitions, followed by CCC simplification" ]
 
 --     , external "expr-type" (promoteExprT exprTypeT)
 --         [ "get the type of the current expression" ]
