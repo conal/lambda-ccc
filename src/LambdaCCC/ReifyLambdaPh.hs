@@ -31,7 +31,7 @@ import Data.List (intercalate)
 import GhcPlugins
 import TypeRep (Type(..))
 import Var
-import PrelNames (unpackCStringUtf8Name,unpackCStringName)
+import PrelNames (unpackCStringName)
 
 -- TODO: Pare down
 import Language.HERMIT.Monad (HermitM,liftCoreM)
@@ -113,8 +113,7 @@ reifyCoreExpr =
      lamvId    <- findIdT 'E.lamv
      -- varString <- varToStringLitE' <$> findIdT 'unpackCString#
      -- unpackId  <- findIdT 'unpackCString#
-     -- unpackId <- constT (lookupId unpackCStringName)
-     unpackId <- constT (lookupId unpackCStringUtf8Name)
+     unpackId <- constT (lookupId unpackCStringName)
      let varString = varToStringLitE' unpackId
      let reifyE :: Unop CoreExpr
          reifyE e | tr e `seq` False = undefined
