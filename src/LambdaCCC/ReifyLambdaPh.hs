@@ -55,40 +55,19 @@ import qualified LambdaCCC.LambdaPh as E
 --------------------------------------------------------------------}
 
 apps :: Id -> [Type] -> [CoreExpr] -> CoreExpr
-apps _ [t] _ | trace (printf "apps: t==%s" (pretty t)) False = error "kownT"
-apps _ _ [e] | trace (printf "apps: e==%s" (pretty e)) False = error "kownE"  -- BOMBS!
 apps f ts es
   | tyArity f /= length ts =
       error $ printf "apps: Id %s wants %d arguments but got %d."
                      (var2String f) arity ntys
-  | trace (printf "apps #tys==%d, #vals==%d" (length ts) (length es)) False = error "wonk?"
-  | trace (printf "apps %s %s %s"
-            (var2String f) "Q" "R" {-(pretties ts) (pretties es)-})
-          False = error "urk??"
-  | trace (printf "apps: %s has arity %d" (var2String f) arity) False = error "urk?"
   | otherwise = mkCoreApps (varToCoreExpr f) (map Type ts ++ es)
  where
    arity = tyArity f
    ntys  = length ts
 
--- apps f ts0 es = mkCoreApps (mkTApps (exprType e0) e0 ts0) es
---  where
---    e0 = varToCoreExpr f
---    -- Check that we have few enough type arguments.
---    -- TODO: also check that we don't have too few.
---    mkTApps :: Type -> CoreExpr -> [Type] -> CoreExpr
---    mkTApps (ForAllTy {}) _ [] = oops "few"
---    mkTApps _  e [] = e
---    mkTApps ty e ts | Just ty' <- coreView ty = mkTApps ty' e ts
---    mkTApps ty@(ForAllTy {}) e (t:ts') =
---      mkTApps (applyTy ty t) (App e (Type t)) ts'
---    mkTApps _ _ (_:_) = oops "many"
---    oops x = error (printf "mkCoreTyApps: Too %s type args for %s"
---                           x (var2String f))
-
 tyArity :: Id -> Int
 tyArity = length . fst . splitForAllTys . varType
 
+{-
 -- Unsafe way to ppr in pure code.
 tr :: Outputable a => a -> a
 tr x = trace ("tr: " ++ pretty x) x
@@ -98,6 +77,7 @@ pretty = showPpr tracingDynFlags
 
 pretties :: Outputable a => [a] -> String
 pretties = intercalate "," . map pretty
+-}
 
 {--------------------------------------------------------------------
     Reification
@@ -111,21 +91,9 @@ reifyCoreExpr =
   do varId     <- findIdT 'E.var
      appId     <- findIdT '(E.:^)
      lamvId    <- findIdT 'E.lamv
-     -- varString <- varToStringLitE' <$> findIdT 'unpackCString#
-     -- unpackId  <- findIdT 'unpackCString#
-     unpackId <- constT (lookupId unpackCStringName)
-     let varString = varToStringLitE' unpackId
+     varString <- varToStringLitE' <$> findIdT 'E.unpackCStr
      let reifyE :: Unop CoreExpr
-         reifyE e | tr e `seq` False = undefined
-         reifyE (Var v) = trace (printf "Var %s :: %s" (var2String v) (pretty (varType v))) $
-                          trace ("varId == " ++ var2String varId) $
-                          trace ("unpackId/seq: " ++ (unpackId `seq` "HNF okay")) $  -- CRASH!
-                          trace ("unpackId == " ++ var2String unpackId) $   -- CRASH!
-                          trace (printf "varString %s == " (var2String v)) $
-                          trace (printf "%s" (pretty (varString v))) $  -- BOMBS!
-                          -- trace (printf "varString %s == %s" (var2String v) (pretty (varString v))) $
-                          let e' = apps varId [varType v] [varString v] in
-                            trace (printf "e' == %s" (pretty e')) e'
+         reifyE (Var v) = apps varId [varType v] [varString v]
          reifyE (Lit _) = error "reifyE: Lit not handled"
          reifyE (App u v@(Type{})) = App (reifyE u) v
          -- TODO: Pairs
@@ -136,8 +104,10 @@ reifyCoreExpr =
                           | otherwise = apps lamvId [varType v, exprType e]
                                                     [varString v,reifyE e]
          reifyE _ = error "reifyE: incomplete"
-     reifyE <$> idR
-
+     -- reifyE <$> idR
+     do e      <- idR
+        evalId <- findIdT 'E.evalE
+        return $ apps evalId [exprType e] [reifyE e]
 
 -- mkStringExpr is hanging for some reason, so for now I'm just creating
 -- (type-incorrect) unboxed strings (NS)
@@ -152,7 +122,6 @@ stringLitE' unpackId = App (Var unpackId) . Lit . mkMachString
 
 varToStringLitE' :: Id -> Var -> CoreExpr
 varToStringLitE' unpackId = stringLitE' unpackId . var2String
-
 
 
 {--------------------------------------------------------------------

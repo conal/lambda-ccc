@@ -1,3 +1,4 @@
 :set -package ghc
 :set -XTemplateHaskell
+:set -XMagicHash
 -- :set -fprint-explicit-foralls

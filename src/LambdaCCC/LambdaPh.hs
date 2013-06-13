@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
 {-# LANGUAGE ExistentialQuantification, PatternGuards #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE CPP #-}
 
 {-# OPTIONS_GHC -Wall #-}
@@ -20,8 +21,10 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.LambdaPh
-  ( Name, V(..), Pat(..), E(..)
+  ( Name, unpackCStr
+  , V(..), Pat(..), E(..)
   , var, lamv
+  , evalE
   , (#), notE, (||*), (&&*), xor, (+@)
   , vars, vars2
   ) where
@@ -32,12 +35,18 @@ import Unsafe.Coerce (unsafeCoerce)  -- for eval (unnecessary)
 import LambdaCCC.Misc
 import LambdaCCC.ShowUtils
 import LambdaCCC.Prim
+import GHC.Prim (Addr#)   -- from ghc-prim
+import GHC.Pack (unpackCString#)
 
 -- Whether to simply (fold) during show
 #define ShowFolded
 
 -- | Variable names
 type Name = String
+
+-- | Alias for unpackCString# for easier lookup.
+unpackCStr :: Addr# -> Name
+unpackCStr = unpackCString#
 
 -- | Typed variable
 newtype V a = V Name

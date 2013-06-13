@@ -9,16 +9,7 @@ import Prelude hiding (and)
 
 -- Needed for resolving names.
 -- TODO: Bug? Is there an alternative?
-import Data.Tuple (fst,snd)
-import GHC.Base (id,(.))
-import GHC.Pack (unpackCString#)
--- import LambdaCCC.CCC
-import LambdaCCC.FunCCC
-
--- import LambdaCCC.Ty (Ty(..))
--- import LambdaCCC.Lambda (Pat(..),E(..))
-
-import LambdaCCC.LambdaPh (E(..),var,lamv)
+import LambdaCCC.LambdaPh (E(..),var,lamv,evalE,unpackCStr)
 
 constPair :: (Bool,Bool)
 constPair = (True,False)
