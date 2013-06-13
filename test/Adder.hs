@@ -1,4 +1,6 @@
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE MagicHash #-} -- for unpackCString# import
+
 {-# OPTIONS_GHC -Wall -fno-warn-unused-imports #-}
 
 module Adder where
@@ -9,9 +11,14 @@ import Prelude hiding (and)
 -- TODO: Bug? Is there an alternative?
 import Data.Tuple (fst,snd)
 import GHC.Base (id,(.))
-
+import GHC.Pack (unpackCString#)
 -- import LambdaCCC.CCC
 import LambdaCCC.FunCCC
+
+-- import LambdaCCC.Ty (Ty(..))
+-- import LambdaCCC.Lambda (Pat(..),E(..))
+
+import LambdaCCC.LambdaPh (E(..),var,lamv)
 
 constPair :: (Bool,Bool)
 constPair = (True,False)
@@ -36,6 +43,11 @@ quux p = (p,True)
 
 p1 :: Bool -> (Bool,Bool)
 p1 a = (a,not a)
+
+-- Polymorphic example
+
+swap :: (a,b) -> (b,a)
+swap p = (snd p, fst p)
 
 -- The rest don't yet transform successfully. They become 'case' expressions,
 -- which we're not yet handling.

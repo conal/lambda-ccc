@@ -33,7 +33,7 @@ data Ty :: * -> * where
   UnitT :: Ty Unit
   IntT  :: Ty Int
   BoolT :: Ty Bool
-  (:*)  :: Ty a -> Ty b -> Ty (a :* b)
+  (:*)  :: Ty a -> Ty b -> Ty (a :*  b)
   (:=>) :: Ty a -> Ty b -> Ty (a :=> b)
 
 instance Show (Ty a) where

@@ -393,23 +393,17 @@ plugin = optimize (phase 0 . interactive externals)
 
 externals :: [External]
 externals =
-    [ external "lambda-to-ccc" (promoteExprR convertExpr)
-        [ "top level lambda->CCC transformation on expressions" ]
-    , external "lambda-to-ccc-def" convertDef
+    [ external "lambda-to-ccc" convertDef
         [ "top level lambda->CCC transformation on definitions" ]
     , external "ccc-simplify" cccSimplify
         [ "apply CCC simplification rules" ]
-    , external "lambda-to-ccc-simplify" convertExprSimplify
-        [ "top level lambda->CCC transformation on expressions, followed by CCC simplification" ]
-
-    , external "lambda-to-ccc-def-simplify" convertDefSimplify
+    , external "lambda-to-ccc-simplify" convertDefSimplify
         [ "top level lambda->CCC transformation on definitions, followed by CCC simplification" ]
 
+--     , external "unfold-rules" (promoteExprR . unfoldRules)
+--         [ "Apply some named GHC rule" ] .+ Deep .+ Context -- TODO: does not work with rules with no arguments
 --     , external "expr-type" (promoteExprT exprTypeT)
 --         [ "get the type of the current expression" ]
-
-    , external "unfold-rules" (promoteExprR . unfoldRules)
-        [ "Apply a named GHC rule" ] .+ Deep .+ Context -- TODO: does not work with rules with no arguments
 
     ]
 

@@ -1,27 +1,23 @@
 -- hermit Adder.hs -opt=LambdaCCC.Core +Adder Adder.hss
+-- hermit Adder.hs -opt=LambdaCCC.ReifyLambda +Adder Adder.hss
+-- hermit Adder.hs -opt=LambdaCCC.ReifyLambdaPh +Adder Adder.hss
 
--- set-pp-type Show
+set-pp-type Show
 set-auto-corelint True
 -- {
 
--- Works fine:
-
--- rhs-of 'halfAdd
--- lambda-to-ccc
--- any-bu (unfold-rules ["apply/amp to compose", "amp/compose", "curry/compose/snd", "applyUnit/const"])
-
--- lambda-to-ccc-simplify
-
--- -- Bombs:
+-- {
 -- consider 'halfAdd
--- lambda-to-ccc-def
--- repeat (any-bu (unfold-rules ["apply/amp to compose", "amp/compose", "curry/compose/snd", "applyUnit/const"]))
+-- lambda-to-ccc-simplify
+-- -- Or: lambda-to-ccc ; ccc-simplify
+-- }
 
--- Rewrite failed: user error (This rewrite can only succeed at recursive definition nodes.)
+-- consider 'baz
+-- lambda-to-ccc
+-- ccc-simplify
 
--- Works:
-consider 'halfAdd
-lambda-to-ccc-def-simplify
+rhs-of 'bar
+reify-core
 
 -- }
 -- resume
