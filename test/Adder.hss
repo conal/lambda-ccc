@@ -1,5 +1,3 @@
--- hermit Adder.hs -opt=LambdaCCC.Core +Adder Adder.hss
--- hermit Adder.hs -opt=LambdaCCC.ReifyLambda +Adder Adder.hss
 -- hermit Adder.hs -opt=LambdaCCC.ReifyLambdaPh +Adder Adder.hss
 
 set-pp-type Show
