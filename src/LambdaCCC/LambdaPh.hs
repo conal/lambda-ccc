@@ -24,7 +24,7 @@ module LambdaCCC.LambdaPh
   ( Name
   , V(..), Pat(..), E(..)
   , var, lamv
-  , evalE
+  , reifyE, evalE
   , (#), notE, (||*), (&&*), xor, (+@)
   , vars, vars2
   ) where
@@ -79,7 +79,6 @@ data E :: * -> * where
 -- I've placed the quantifiers explicitly to reflect what I learned from GHCi
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
 -- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
-
 
 var :: forall a. Addr# -> E a
 var a = Var (addrV a)
@@ -145,6 +144,9 @@ infixl 6 +@
 data Bind = forall a. Bind Name a
 -- | Variable environment
 type Env = [Bind]
+
+reifyE :: a -> E a
+reifyE = error "reifyE: Not implemented. I hoped the uses would all disappear."
 
 -- We evaluate *closed* expressions (no free variables)
 instance Evalable (E a) where

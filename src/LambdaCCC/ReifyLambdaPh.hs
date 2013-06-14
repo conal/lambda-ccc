@@ -91,22 +91,21 @@ reifyCoreExpr =
   do varId     <- findIdT 'E.var
      appId     <- findIdT '(E.:^)
      lamvId    <- findIdT 'E.lamv
-     let reifyE :: Unop CoreExpr
-         reifyE (Var v) = apps varId [varType v] [varMachStr v]
-         reifyE (Lit _) = error "reifyE: Lit not handled"
-         reifyE (App u v@(Type{})) = App (reifyE u) v
-         -- TODO: Pairs
-         reifyE (App u v) = apps appId [b,a] [reifyE u, reifyE v] -- note b,a
+     let reify :: Unop CoreExpr
+         reify (Var v) = apps varId [varType v] [varMachStr v]
+         reify (Lit _) = error "reifyCoreExpr: Lit not handled"
+         reify (App u v@(Type{})) = App (reify u) v
+         -- TODO: Perhaps handle pairing specially
+         reify (App u v) = apps appId [b,a] [reify u, reify v] -- note b,a
           where
             (a,b) = splitFunTy (exprType u)
-         reifyE (Lam v e) | isTyVar v = Lam v (reifyE e)
+         reify (Lam v e) | isTyVar v = Lam v (reify e)
                           | otherwise = apps lamvId [varType v, exprType e]
-                                                    [varMachStr v,reifyE e]
-         reifyE _ = error "reifyE: incomplete"
-     -- reifyE <$> idR
+                                                    [varMachStr v,reify e]
+         reify _ = error "reify: incomplete"
      do e      <- idR
         evalId <- findIdT 'E.evalE
-        return $ apps evalId [exprType e] [reifyE e]
+        return $ apps evalId [exprType e] [reify e]
 
 varMachStr :: Var -> CoreExpr
 varMachStr = Lit . mkMachString . var2String

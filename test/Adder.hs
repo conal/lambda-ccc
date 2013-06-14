@@ -9,7 +9,7 @@ import Prelude hiding (and)
 
 -- Needed for resolving names.
 -- TODO: Bug? Is there an alternative?
-import LambdaCCC.LambdaPh (E(..),var,lamv,evalE)
+import LambdaCCC.LambdaPh (E(..),var,lamv,reifyE,evalE)
 
 constPair :: (Bool,Bool)
 constPair = (True,False)
