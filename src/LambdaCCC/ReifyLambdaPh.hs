@@ -91,37 +91,33 @@ reifyCoreExpr =
   do varId     <- findIdT 'E.var
      appId     <- findIdT '(E.:^)
      lamvId    <- findIdT 'E.lamv
-     varString <- varToStringLitE' <$> findIdT 'E.unpackCStr
      let reifyE :: Unop CoreExpr
-         reifyE (Var v) = apps varId [varType v] [varString v]
+         reifyE (Var v) = apps varId [varType v] [varMachStr v]
          reifyE (Lit _) = error "reifyE: Lit not handled"
          reifyE (App u v@(Type{})) = App (reifyE u) v
          -- TODO: Pairs
-         reifyE (App u v) = apps appId [a,b] [reifyE u, reifyE v]
+         reifyE (App u v) = apps appId [b,a] [reifyE u, reifyE v] -- note b,a
           where
             (a,b) = splitFunTy (exprType u)
          reifyE (Lam v e) | isTyVar v = Lam v (reifyE e)
                           | otherwise = apps lamvId [varType v, exprType e]
-                                                    [varString v,reifyE e]
+                                                    [varMachStr v,reifyE e]
          reifyE _ = error "reifyE: incomplete"
      -- reifyE <$> idR
      do e      <- idR
         evalId <- findIdT 'E.evalE
         return $ apps evalId [exprType e] [reifyE e]
 
--- mkStringExpr is hanging for some reason, so for now I'm just creating
--- (type-incorrect) unboxed strings (NS)
-varToStringLitE :: Var -> CoreExpr
--- varToStringLitE = mkStringExpr . var2String
-varToStringLitE = Lit . mkMachString . var2String
+varMachStr :: Var -> CoreExpr
+varMachStr = Lit . mkMachString . var2String
 
 -- mkStringExpr :: MonadThings m => String -> m CoreExpr  -- Result :: String
 
-stringLitE' :: Id -> String -> CoreExpr
-stringLitE' unpackId = App (Var unpackId) . Lit . mkMachString
+-- stringLitE' :: Id -> String -> CoreExpr
+-- stringLitE' unpackId = App (Var unpackId) . Lit . mkMachString
 
-varToStringLitE' :: Id -> Var -> CoreExpr
-varToStringLitE' unpackId = stringLitE' unpackId . var2String
+-- varMachStr' :: Id -> Var -> CoreExpr
+-- varMachStr' unpackId = stringLitE' unpackId . var2String
 
 
 {--------------------------------------------------------------------

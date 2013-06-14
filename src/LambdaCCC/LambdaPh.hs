@@ -21,7 +21,7 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.LambdaPh
-  ( Name, unpackCStr
+  ( Name
   , V(..), Pat(..), E(..)
   , var, lamv
   , evalE
@@ -44,14 +44,14 @@ import GHC.Pack (unpackCString#)
 -- | Variable names
 type Name = String
 
--- | Alias for unpackCString# for easier lookup.
-unpackCStr :: Addr# -> Name
-unpackCStr = unpackCString#
-
 -- | Typed variable
 newtype V a = V Name
 
 instance Show (V a) where show (V n) = n
+
+-- Unpack into a variable.
+addrV :: Addr# -> V a
+addrV a = V (unpackCString# a)
 
 -- | Lambda patterns
 data Pat :: * -> * where
@@ -70,17 +70,22 @@ infix 1 :#
 
 -- | Lambda expressions
 data E :: * -> * where
-  Var   :: V a -> E a
-  Const :: Prim a -> E a
-  (:#)  :: E a -> E b -> E (a :* b)
-  (:^)  :: E (a :=> b) -> E a -> E b
-  Lam   :: Pat a -> E b -> E (a :=> b)
+  Var   :: forall a   . V a -> E a
+  Const :: forall a   . Prim a -> E a
+  (:#)  :: forall a b . E a -> E b -> E (a :* b)
+  (:^)  :: forall b a . E (a :=> b) -> E a -> E b
+  Lam   :: forall a b . Pat a -> E b -> E (a :=> b)
 
-var :: forall a. Name -> E a
-var = Var . V
+-- I've placed the quantifiers explicitly to reflect what I learned from GHCi
+-- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
+-- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
 
-lamv :: forall a b. Name -> E b -> E (a :=> b)
-lamv = Lam . VarP . V
+
+var :: forall a. Addr# -> E a
+var a = Var (addrV a)
+
+lamv :: forall a b. Addr# -> E b -> E (a :=> b)
+lamv a = Lam (VarP (addrV a))
 
 instance Show (E a) where
 #ifdef ShowFolded
