@@ -54,3 +54,9 @@ xor _            = False
 
 and (True,True) = True
 and _           = False
+
+fiddle = length "Fiddle"
+
+{-# RULES
+-- "fiddle" length "Fiddle" = length "Faddle"
+  #-}

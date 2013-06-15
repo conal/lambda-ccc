@@ -197,3 +197,15 @@ vars2 (na,nb) = (PairP ap bp, (ae,be))
  where
    (ap,ae) = vars na
    (bp,be) = vars nb
+
+{--------------------------------------------------------------------
+    Rules
+--------------------------------------------------------------------}
+
+{-# RULES
+
+"var/xor"  Var (V "xor") = Const Xor
+"var/and"  Var (V "and") = Const And
+"var/pair" forall a b. Var (V "(,)") :^ a :^ b = a :# b
+
+  #-}

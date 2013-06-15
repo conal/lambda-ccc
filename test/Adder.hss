@@ -1,6 +1,6 @@
 -- hermit Adder.hs -opt=LambdaCCC.ReifyLambdaPh +Adder Adder.hss
 
-set-pp-type Show
+-- set-pp-type Show
 -- set-auto-corelint True
 -- {
 
@@ -14,8 +14,11 @@ set-pp-type Show
 -- lambda-to-ccc
 -- ccc-simplify
 
-rhs-of 'baz
+rhs-of 'bar
 reify-core
+any-bu (unfold 'var <+ cleanup-unfold)
+
+-- rhs-of 'fiddle
 
 -- }
 -- resume

@@ -23,6 +23,7 @@ module LambdaCCC.ReifyLambdaPh where
 -- TODO: explicit exports
 
 import Data.Functor ((<$>))
+import Control.Arrow ((>>>))
 import GHC.Pack (unpackCString#)
 import Text.Printf (printf)
 import Debug.Trace
@@ -79,6 +80,24 @@ pretties :: Outputable a => [a] -> String
 pretties = intercalate "," . map pretty
 -}
 
+varMachStr :: Var -> CoreExpr
+varMachStr = Lit . mkMachString . var2String
+
+-- mkStringExpr :: MonadThings m => String -> m CoreExpr  -- Result :: String
+
+-- stringLitE' :: Id -> String -> CoreExpr
+-- stringLitE' unpackId = App (Var unpackId) . Lit . mkMachString
+
+-- varMachStr' :: Id -> Var -> CoreExpr
+-- varMachStr' unpackId = stringLitE' unpackId . var2String
+
+{--------------------------------------------------------------------
+    HERMIT utilities
+--------------------------------------------------------------------}
+
+unfoldRules :: [String] -> RewriteH CoreExpr
+unfoldRules nms = catchesM (rule <$> nms) >>> cleanupUnfoldR
+
 {--------------------------------------------------------------------
     Reification
 --------------------------------------------------------------------}
@@ -107,17 +126,10 @@ reifyCoreExpr =
         evalId <- findIdT 'E.evalE
         return $ apps evalId [exprType e] [reify e]
 
-varMachStr :: Var -> CoreExpr
-varMachStr = Lit . mkMachString . var2String
 
--- mkStringExpr :: MonadThings m => String -> m CoreExpr  -- Result :: String
-
--- stringLitE' :: Id -> String -> CoreExpr
--- stringLitE' unpackId = App (Var unpackId) . Lit . mkMachString
-
--- varMachStr' :: Id -> Var -> CoreExpr
--- varMachStr' unpackId = stringLitE' unpackId . var2String
-
+varToConst :: RewriteH Core
+varToConst = anybuR $ promoteExprR $ unfoldRules 
+               ["var/xor", "var/and", "var/pair"]
 
 {--------------------------------------------------------------------
     Plugin
@@ -130,4 +142,6 @@ externals :: [External]
 externals =
     [ external "reify-core" (promoteExprR reifyCoreExpr)
         [ "Turn a Core expression into a GADT construction" ]
+    , external "var-to-const" varToConst
+        [ "convert some non-local vars to consts" ]
     ]
