@@ -55,6 +55,7 @@ xor _            = False
 and (True,True) = True
 and _           = False
 
+fiddle :: Int
 fiddle = length "Fiddle"
 
 {-# RULES
