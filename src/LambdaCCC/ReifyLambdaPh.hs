@@ -11,10 +11,10 @@
 -- Module      :  LambdaCCC.ReifyLambda
 -- Copyright   :  (c) 2013 Tabula, Inc.
 -- LICENSE     :  BSD3
--- 
+--
 -- Maintainer  :  conal@tabula.com
 -- Stability   :  experimental
--- 
+--
 -- Reify a Core expression into GADT
 ----------------------------------------------------------------------
 
@@ -44,7 +44,7 @@ import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.GHC (uqName,var2String)
 import Language.HERMIT.Primitive.Unfold (cleanupUnfoldR)
 import Language.HERMIT.Primitive.GHC (rule)
-import Language.HERMIT.Core (Crumb(..),Core) -- ,CoreDef(..)
+import Language.HERMIT.Core (Crumb(..)) -- ,CoreDef(..)
 import Language.HERMIT.Context (HermitBindingSite(LAM),ReadBindings(..))
 
 import LambdaCCC.Misc (Unop)
