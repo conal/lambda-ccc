@@ -10,10 +10,10 @@
 -- Module      :  LambdaCCC.ReifyLambda
 -- Copyright   :  (c) 2013 Tabula, Inc.
 -- LICENSE     :  BSD3
--- 
+--
 -- Maintainer  :  conal@tabula.com
 -- Stability   :  experimental
--- 
+--
 -- Reify a Core expression into GADT
 ----------------------------------------------------------------------
 
@@ -39,7 +39,7 @@ import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.GHC (uqName,var2String)
 import Language.HERMIT.Primitive.Unfold (cleanupUnfoldR)
 import Language.HERMIT.Primitive.GHC (rule)
-import Language.HERMIT.Core (Crumb(..),Core) -- ,CoreDef(..)
+import Language.HERMIT.Core (Crumb(..)) -- ,CoreDef(..)
 import Language.HERMIT.Context (HermitBindingSite(LAM),ReadBindings(..))
 
 import LambdaCCC.Misc (Unop)
@@ -75,7 +75,7 @@ reifyCoreExpr =
      varPId    <- findIdT 'E.VarP
      varString <- varToStringLitE' <$> findIdT 'unpackCString#
      let reifyT :: Type -> CoreExpr
-         -- reifyT (TyVarTy v) 
+         -- reifyT (TyVarTy v)
          reifyT (TyConApp tc [])
            | isTupleTyCon tc && tyConArity tc == 0 = Var unitTId
            | tc ==  intTyCon                       = Var  intTId
@@ -85,7 +85,7 @@ reifyCoreExpr =
              apps pairTId tys (reifyT <$> tys)
           where
             tys = [a,b]
---         reifyT (ForAllTy v t) = ForAllTy v (reifyT t)  -- ??  
+--         reifyT (ForAllTy v t) = ForAllTy v (reifyT t)  -- ??
          reifyT (splitFunTy_maybe -> Just (a,b)) =
            apps funTId tys (reifyT <$> tys)
           where

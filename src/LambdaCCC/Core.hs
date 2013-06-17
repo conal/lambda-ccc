@@ -44,7 +44,7 @@ import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.GHC (uqName)
 import Language.HERMIT.Primitive.Unfold (cleanupUnfoldR)
 import Language.HERMIT.Primitive.GHC (rule)
-import Language.HERMIT.Core (Crumb(..),Core) -- ,CoreDef(..)
+import Language.HERMIT.Core (Crumb(..)) -- ,CoreDef(..)
 import Language.HERMIT.Context (HermitBindingSite(LAM),ReadBindings(..))
 
 -- import LambdaCCC.CCC
@@ -126,9 +126,9 @@ unTuple expr@(App {})
   = Just valArgs
 unTuple _ = Nothing
 
--- tuple :: [CoreExpr] -> CoreExpr 
+-- tuple :: [CoreExpr] -> CoreExpr
 -- tuple es = ... ?
--- 
+--
 -- pair :: Binop CoreExpr
 -- pair a b = tuple [a,b]
 
@@ -299,7 +299,7 @@ selectVar (composeId,fstId,sndId) x cxt0 = select cxt0 (cxtType cxt0)
  where
    select :: LContext -> Type -> Maybe CoreExpr
    select [] _   = Nothing
-   select (v:vs) cxTy 
+   select (v:vs) cxTy
      | v == x    = Just (apps sndId [a,b] [])
      | otherwise = mkCompFst composeId fstId b <$> select vs a
     where
@@ -374,7 +374,7 @@ convertDef = rhsR convertExpr
 -- convertDef = defAllR (retypeVar (anybuR tweakTy)) convertExpr
 
 cccSimplify :: RewriteH Core
-cccSimplify = anybuR $ promoteExprR $ unfoldRules 
+cccSimplify = anybuR $ promoteExprR $ unfoldRules
                 ["apply/amp to compose", "amp/compose", "curry/compose/snd", "applyUnit/const"]
 
 convertExprSimplify :: RewriteH Core
