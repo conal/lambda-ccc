@@ -81,17 +81,6 @@ pretties :: Outputable a => [a] -> String
 pretties = intercalate "," . map pretty
 -}
 
-varMachStr :: Var -> CoreExpr
-varMachStr = Lit . mkMachString . var2String
-
--- mkStringExpr :: MonadThings m => String -> m CoreExpr  -- Result :: String
-
--- stringLitE' :: Id -> String -> CoreExpr
--- stringLitE' unpackId = App (Var unpackId) . Lit . mkMachString
-
--- varMachStr' :: Id -> Var -> CoreExpr
--- varMachStr' unpackId = stringLitE' unpackId . var2String
-
 {--------------------------------------------------------------------
     HERMIT utilities
 --------------------------------------------------------------------}
@@ -152,22 +141,12 @@ reifyCoreExpr =
         let mkEval e' = apps evalId [exprType e] [e']
         mkEval <$> rew
 
--- contextfreeT :: (a -> m b) -> Translate c m a b
-
 mkVarName :: MonadThings m => Translate c m Var (CoreExpr,Type)
 mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType
-
--- ... :: Var -> HermitC CoreExpr
--- arr varType :: Translate c m Var Type
 
 varToConst :: RewriteH Core
 varToConst = anybuR $ promoteExprR $ unfoldRules 
                ["var/xor", "var/and", "var/pair"]
-
--- contextonlyT :: (c -> m b) -> Translate c m a b
-
--- constT :: m b -> Translate c m a b
--- mkStringExpr :: MonadThings m => String -> m CoreExpr
 
 
 {--------------------------------------------------------------------
