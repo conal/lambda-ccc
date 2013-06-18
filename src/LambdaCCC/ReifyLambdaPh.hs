@@ -102,66 +102,51 @@ unfoldRules nms = catchesM (rule <$> nms) >>> cleanupUnfoldR
     Reification
 --------------------------------------------------------------------}
 
+type ReExpr = RewriteH CoreExpr
+
 observing :: Bool
 observing = False
 
-observeR' :: String -> RewriteH CoreExpr
+observeR' :: String -> ReExpr
 observeR' | observing = observeR
           | otherwise = const idR
 
-reifyCoreExpr :: RewriteH CoreExpr
+reifyCoreExpr :: ReExpr
 reifyCoreExpr =
-  do varId     <- findIdT 'E.var
-     appId     <- findIdT '(E.:^)
-     lamvId    <- findIdT 'E.lamv
-     let rr :: RewriteH CoreExpr
-         rr = tries [ ("Var",rVar)
-                  --, ("Pair",rPair)
-                    , ("AppT",rAppT), ("App",rApp)
-                    , ("LamT",rLamT), ("Lam",rLam)]
+  do varId  <- findIdT 'E.var
+     appId  <- findIdT '(E.:^)
+     lamvId <- findIdT 'E.lamv
+     evalId <- findIdT 'E.evalE
+     let rew :: ReExpr
+         rew = tries [ ("Var",rVar)
+                   --, ("Pair",rPair)
+                     , ("AppT",rAppT), ("App",rApp)
+                     , ("LamT",rLamT), ("Lam",rLam)]
           where
-            tries :: [(String,RewriteH CoreExpr)] -> RewriteH CoreExpr
+            tries :: [(String,ReExpr)] -> ReExpr
             tries = foldr (<+) (observeR' "Other" >>> fail "unhandled")
                   . map (uncurry try)
-            try label rew = rew >>> observeR' label
+            try label = (>>> observeR' label)
 
-         rVar{-, rPair-}, rAppT, rApp, rLamT, rLam :: RewriteH CoreExpr
+         rVar{-, rPair-}, rAppT, rApp, rLamT, rLam :: ReExpr
          rVar  = varT $ arr $ \ v ->
                    apps varId [varType v] [varMachStr v]
---          rPair = pairT rr rr $ ...
-                   
+--          rPair = pairT rew rew $ ...
          rAppT = do App _ (Type {}) <- idR
-                    appT rr idR (arr App)
+                    appT rew idR (arr App)
          rApp  = do App u _ <- idR
-                    appT  rr rr $ arr $ \ u' v' ->
+                    appT  rew rew $ arr $ \ u' v' ->
                       let (a,b) = splitFunTy (exprType u) in
                         apps appId [b,a] [u', v'] -- note b,a
          rLamT = do Lam (isTyVar -> True) _ <- idR
-                    lamT idR rr (arr Lam)
+                    lamT idR rew (arr Lam)
          rLam  = do Lam v e <- idR
-                    lamT (arr varMachStr) rr $ arr $ \ v' e' ->
+                    lamT (arr varMachStr) rew $ arr $ \ v' e' ->
                       apps lamvId [varType v, exprType e] [v',e']
-
          -- TODO: Maybe merge rAppT/rApp and rLamT/rLam, using one match.
-
-{-
-         reify (Var v) = apps varId [varType v] [varMachStr v]
-         reify (Lit _) = error "reifyCoreExpr: Lit not handled"
-         reify (App u v@(Type{})) = App (reify u) v
-         -- TODO: Perhaps handle pairing specially
-         reify (App u v) = apps appId [b,a] [reify u, reify v] -- note b,a
-          where
-            (a,b) = splitFunTy (exprType u)
-         reify (Lam v e) | isTyVar v = Lam v (reify e)
-                         | otherwise = apps lamvId [varType v, exprType e]
-                                                   [varMachStr v,reify e]
-         reify _ = error "reify: incomplete"
--}
-
-     do evalId <- findIdT 'E.evalE
-        e <- idR
+     do e      <- idR
         let mkEval e' = apps evalId [exprType e] [e']
-        mkEval <$> rr
+        mkEval <$> rew
 
 varToConst :: RewriteH Core
 varToConst = anybuR $ promoteExprR $ unfoldRules 
