@@ -158,13 +158,11 @@ observeR' | observing = observeR
 reifyExpr :: ReExpr
 reifyExpr =
   do varId  <- findIdT 'E.var
-     pairId <- findIdT '(E.:#)
      appId  <- findIdT '(E.:^)
      lamvId <- findIdT 'E.lamv
      evalId <- findIdT 'E.evalE
      let rew :: ReExpr
          rew = tries [ ("Var",rVar)
-                  -- , ("Pair",rPair)
                      , ("AppT",rAppT), ("App",rApp)
                      , ("LamT",rLamT), ("Lam",rLam)]
           where
@@ -172,14 +170,12 @@ reifyExpr =
             tries = foldr (<+) (observeR' "Other" >>> fail "unhandled")
                   . map (uncurry try)
             try label = (>>> observeR' label)
-         rVar, rPair, rAppT, rApp, rLamT, rLam :: ReExpr
+         rVar, rAppT, rApp, rLamT, rLam :: ReExpr
          -- TODO: Maybe merge rAppT/rApp and rLamT/rLam, using one match.
          rVar  = varT $
                    do (name,ty) <- mkVarName
                       -- TODO: mkVarName as TranslateH Var Expr
                       return $ apps varId [ty] [name]
-         rPair = pairT rew rew $ \ a b u v -> apps pairId [a,b] [u,v]
-         -- TODO: Replace rVar with rAppT
          rAppT = do e <- idR            -- TODO: ty <- arr exprType
                     appVTysT mkVarName $ \ (name,_) _ ->
                       apps varId [exprType e] [name]
