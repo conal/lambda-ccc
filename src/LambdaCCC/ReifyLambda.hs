@@ -3,7 +3,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# OPTIONS_GHC -Wall #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -23,32 +23,22 @@ module LambdaCCC.ReifyLambda where
 -- TODO: explicit exports
 
 import Data.Functor ((<$>))
-import Control.Applicative (pure)
 import Control.Arrow (arr,(>>>),(&&&))
-import GHC.Pack (unpackCString#)
 import Text.Printf (printf)
-import Debug.Trace
-import Data.List (intercalate)
 
 import GhcPlugins hiding (mkStringExpr)
-import TypeRep (Type(..))
-import Var
 
 -- TODO: Pare down
-import Language.HERMIT.Monad (HermitM,liftCoreM)
+
 import Language.HERMIT.External
 import Language.HERMIT.Kure hiding (apply)
-import qualified Language.HERMIT.Kure as Kure
 import Language.HERMIT.Optimize
 import Language.HERMIT.Primitive.Common
 import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.GHC (uqName,var2String)
 import Language.HERMIT.Primitive.Unfold (cleanupUnfoldR)
 import Language.HERMIT.Primitive.GHC (rule)
-import Language.HERMIT.Core (Crumb(..)) -- ,CoreDef(..)
-import Language.HERMIT.Context (HermitBindingSite(LAM),ReadBindings(..))
 
-import LambdaCCC.Misc (Unop)
 import qualified LambdaCCC.Lambda as E
 import LambdaCCC.MkStringExpr (mkStringExpr)
 

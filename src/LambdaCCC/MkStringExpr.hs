@@ -8,6 +8,7 @@
 -- |
 -- Module      :  LambdaCCC.MkStringExpr
 -- Copyright   :  (c) 2013 Tabula, Inc.
+-- LICENSE     :  BSD3
 -- 
 -- Maintainer  :  conal@tabula.com
 -- Stability   :  experimental
@@ -22,7 +23,7 @@ module LambdaCCC.MkStringExpr (mkStringExpr) where
 import Control.Monad (liftM)
 import Data.Char (ord)
 
-import GhcPlugins hiding (mkStringExpr,mkStringExprFS)
+import GhcPlugins hiding (mkStringExpr)
 import PrelNames (unpackCStringName,unpackCStringUtf8Name)
 
 -- | Create a 'CoreExpr' which will evaluate to the given @String@
