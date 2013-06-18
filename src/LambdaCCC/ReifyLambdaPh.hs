@@ -23,7 +23,7 @@ module LambdaCCC.ReifyLambdaPh where
 -- TODO: explicit exports
 
 import Data.Functor ((<$>))
-import Control.Arrow ((>>>))
+import Control.Arrow (arr,(>>>))
 import GHC.Pack (unpackCString#)
 import Text.Printf (printf)
 import Debug.Trace
@@ -102,15 +102,49 @@ unfoldRules nms = catchesM (rule <$> nms) >>> cleanupUnfoldR
     Reification
 --------------------------------------------------------------------}
 
--- reify :: a -> E a
--- reify = error "reify: not implemented."
+observing :: Bool
+observing = False
+
+observeR' :: String -> RewriteH CoreExpr
+observeR' | observing = observeR
+          | otherwise = const idR
 
 reifyCoreExpr :: RewriteH CoreExpr
 reifyCoreExpr =
   do varId     <- findIdT 'E.var
      appId     <- findIdT '(E.:^)
      lamvId    <- findIdT 'E.lamv
-     let reify :: Unop CoreExpr
+     let rr :: RewriteH CoreExpr
+         rr = tries [ ("Var",rVar)
+                  --, ("Pair",rPair)
+                    , ("AppT",rAppT), ("App",rApp)
+                    , ("LamT",rLamT), ("Lam",rLam)]
+          where
+            tries :: [(String,RewriteH CoreExpr)] -> RewriteH CoreExpr
+            tries = foldr (<+) (observeR' "Other" >>> fail "unhandled")
+                  . map (uncurry try)
+            try label rew = rew >>> observeR' label
+
+         rVar{-, rPair-}, rAppT, rApp, rLamT, rLam :: RewriteH CoreExpr
+         rVar  = varT $ arr $ \ v ->
+                   apps varId [varType v] [varMachStr v]
+--          rPair = pairT rr rr $ ...
+                   
+         rAppT = do App _ (Type {}) <- idR
+                    appT rr idR (arr App)
+         rApp  = do App u _ <- idR
+                    appT  rr rr $ arr $ \ u' v' ->
+                      let (a,b) = splitFunTy (exprType u) in
+                        apps appId [b,a] [u', v'] -- note b,a
+         rLamT = do Lam (isTyVar -> True) _ <- idR
+                    lamT idR rr (arr Lam)
+         rLam  = do Lam v e <- idR
+                    lamT (arr varMachStr) rr $ arr $ \ v' e' ->
+                      apps lamvId [varType v, exprType e] [v',e']
+
+         -- TODO: Maybe merge rAppT/rApp and rLamT/rLam, using one match.
+
+{-
          reify (Var v) = apps varId [varType v] [varMachStr v]
          reify (Lit _) = error "reifyCoreExpr: Lit not handled"
          reify (App u v@(Type{})) = App (reify u) v
@@ -119,13 +153,15 @@ reifyCoreExpr =
           where
             (a,b) = splitFunTy (exprType u)
          reify (Lam v e) | isTyVar v = Lam v (reify e)
-                          | otherwise = apps lamvId [varType v, exprType e]
-                                                    [varMachStr v,reify e]
+                         | otherwise = apps lamvId [varType v, exprType e]
+                                                   [varMachStr v,reify e]
          reify _ = error "reify: incomplete"
-     do e      <- idR
-        evalId <- findIdT 'E.evalE
-        return $ apps evalId [exprType e] [reify e]
+-}
 
+     do evalId <- findIdT 'E.evalE
+        e <- idR
+        let mkEval e' = apps evalId [exprType e] [e']
+        mkEval <$> rr
 
 varToConst :: RewriteH Core
 varToConst = anybuR $ promoteExprR $ unfoldRules 
