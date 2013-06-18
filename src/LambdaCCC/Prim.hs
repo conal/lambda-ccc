@@ -23,11 +23,12 @@ import LambdaCCC.Misc
 -- | Primitives
 data Prim :: * -> * where
   LitP        :: Show a => a -> Prim a
-  NotP        :: Prim (Bool :=> Bool)
-  AndP,OrP,XorP :: Prim (Bool :* Bool :=> Bool)
-  AddP        :: Num  a => Prim (a :* a :=> a)
-  FstP        :: Prim (a :* b :=> a)
-  SndP        :: Prim (a :* b :=> b)
+  NotP        :: Prim (Bool -> Bool)
+  AndP,OrP,XorP :: Prim (Bool :* Bool -> Bool)
+  AddP        :: Num  a => Prim (a :* a -> a)
+  FstP        :: Prim (a :* b -> a)
+  SndP        :: Prim (a :* b -> b)
+  PairP       :: Prim (a -> b -> a :* b)
   -- More here
 
 instance Show (Prim a) where
@@ -39,6 +40,7 @@ instance Show (Prim a) where
   showsPrec _ AddP     = showString "add"
   showsPrec _ FstP     = showString "fst"
   showsPrec _ SndP     = showString "snd"
+  showsPrec _ PairP    = showString "(,)"
 
 instance Evalable (Prim a) where
   type ValT (Prim a) = a
@@ -50,3 +52,4 @@ instance Evalable (Prim a) where
   eval AddP     = uncurry (+)
   eval FstP     = fst
   eval SndP     = snd
+  eval PairP    = (,)

@@ -48,24 +48,24 @@ type V a = Name
 
 -- | Lambda patterns
 data Pat :: * -> * where
-  UnitP :: Pat Unit
-  VarP  :: V a -> Pat a
-  PairP :: Pat a -> Pat b -> Pat (a :* b)
+  UnitPat :: Pat Unit
+  VarPat  :: V a -> Pat a
+  PairPat :: Pat a -> Pat b -> Pat (a :* b)
 
 instance Show (Pat a) where
-  showsPrec _ UnitP       = showString "()"
-  showsPrec p (VarP v)    = showsPrec p v
-  showsPrec p (PairP a b) = showsPair p a b
+  showsPrec _ UnitPat       = showString "()"
+  showsPrec _ (VarPat v)    = (v ++)
+  showsPrec p (PairPat a b) = showsPair p a b
 
 infixl 9 :^
 
-infix 1 :#
+-- infix 1 :#
 
 -- | Lambda expressions
 data E :: * -> * where
   Var   :: forall a   . V a -> E a
   Const :: forall a   . Prim a -> E a
-  (:#)  :: forall a b . E a -> E b -> E (a :* b)
+--  (:#)  :: forall a b . E a -> E b -> E (a :* b)
   (:^)  :: forall b a . E (a :=> b) -> E a -> E b
   Lam   :: forall a b . Pat a -> E b -> E (a :=> b)
 
@@ -80,17 +80,20 @@ var :: forall a. Name -> E a
 var = Var
 
 lamv :: forall a b. Name -> E b -> E (a -> b)
--- lamv = Lam . VarP
-lamv name body = Lam (VarP name) body
+-- lamv = Lam . VarPat
+lamv name body = Lam (VarPat name) body
 
 instance Show (E a) where
 #ifdef ShowFolded
-  showsPrec p (Const prim :^ (u :# v)) | Just (OpInfo op fixity) <- opInfo prim =
+--   showsPrec p (Const prim :^ (u :# v)) | Just (OpInfo op fixity) <- opInfo prim =
+--     showsOp2' op fixity p u v
+  showsPrec p (Const PairP :^ u :^ v) = showsPair p u v
+  showsPrec p (Const prim :^ (Const PairP :^ u :^ v)) | Just (OpInfo op fixity) <- opInfo prim =
     showsOp2' op fixity p u v
 #endif
-  showsPrec p (Var v)   = showsPrec p v
+  showsPrec _ (Var v)   = (v ++)
   showsPrec p (Const c) = showsPrec p c
-  showsPrec p (u :# v)  = showsPair p u v
+--  showsPrec p (u :# v)  = showsPair p u v
   showsPrec p (u :^ v)  = showsApp p u v
   showsPrec p (Lam q e) = showParen (p > 0) $
                           showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
@@ -116,7 +119,8 @@ opInfo _   = Nothing
 infixr 1 #
 (#) :: E a -> E b -> E (a :* b)
 -- (Const Fst :^ p) # (Const Snd :^ p') | ... = ...
-a # b = a :# b
+-- a # b = a :# b
+a # b = Const PairP :^ a :^ b
 
 notE :: Unop (E Bool)
 notE b = Const NotP :^ b
@@ -164,14 +168,14 @@ eval' :: E a -> Env -> a
 eval' (Var v)   env = fromMaybe (error $ "eval': unbound variable: " ++ show v) $
                       lookupVar v env
 eval' (Const p) _   = eval p
-eval' (u :# v)  env = (eval' u env, eval' v env)
+-- eval' (u :# v)  env = (eval' u env, eval' v env)
 eval' (u :^ v)  env = (eval' u env) (eval' v env)
 eval' (Lam p e) env = \ x -> eval' e (extendEnv p x env)
 
 extendEnv :: Pat b -> b -> Env -> Env
-extendEnv UnitP       ()    = id
-extendEnv (VarP nb)   b     = (Bind nb b :)
-extendEnv (PairP p q) (a,b) = extendEnv q b . extendEnv p a
+extendEnv UnitPat       ()    = id
+extendEnv (VarPat nb)   b     = (Bind nb b :)
+extendEnv (PairPat p q) (a,b) = extendEnv q b . extendEnv p a
 
 lookupVar :: V a -> Env -> Maybe a
 lookupVar na = look
@@ -181,17 +185,17 @@ lookupVar na = look
                            | otherwise = look env'
 
 -- Oh, hm. I'm using a difference (Hughes) list representation. extendEnv maps
--- UnitP, VarP, and PairP to mempty, singleton, and mappend, respectively.
+-- UnitPat, VarPat, and PairPat to mempty, singleton, and mappend, respectively.
 -- 
 -- TODO: adopt another representation, such as Seq. Replace the explicit
 -- recursion in lookupVar with a fold or something. It's almost a mconcat. Could
 -- use toList and catMaybes.
 
 vars :: Name -> (Pat a, E a)
-vars = VarP &&& Var
+vars = VarPat &&& Var
 
 vars2 :: (Name,Name) -> (Pat (a,b), (E a,E b))
-vars2 (na,nb) = (PairP ap bp, (ae,be))
+vars2 (na,nb) = (PairPat ap bp, (ae,be))
  where
    (ap,ae) = vars na
    (bp,be) = vars nb
@@ -204,8 +208,9 @@ vars2 (na,nb) = (PairP ap bp, (ae,be))
 
 "var/xor"  var "xor" = Const XorP
 "var/and"  var "and" = Const AndP
-"var/pair" forall a b. var "(,)" :^ a :^ b = a :# b
 "var/fst"  var "fst" = Const FstP
 "var/snd"  var "snd" = Const SndP
+-- "var/pair" forall a b. var "(,)" :^ a :^ b = a :# b
+"var/pair"  var "(,)" = Const PairP
 
   #-}
