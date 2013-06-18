@@ -53,11 +53,11 @@ convert k (Lam p e)  = Curry (convert (PairP k p) e)
 
 -- Convert a variable in context
 convertVar :: forall b a. V b -> Pat a -> Maybe (a :-> b)
-convertVar (V b) = conv
+convertVar b = conv
  where
    conv :: forall c. Pat c -> Maybe (c :-> b)
-   conv (VarP (V c)) | c == b    = Just (unsafeCoerce Id)
-                     | otherwise = Nothing
+   conv (VarP c) | c == b    = Just (unsafeCoerce Id)
+                 | otherwise = Nothing
    conv UnitP = Nothing
    conv (PairP p q) = ((@. Snd) <$> conv q) `mplus` ((@. Fst) <$> conv p)
 

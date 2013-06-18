@@ -22,13 +22,14 @@
 
 module LambdaCCC.Lambda
   ( Name
-  , V(..), Pat(..), E(..)
+  , V, Pat(..), E(..)
   , var, lamv
   , reifyE, evalE
   , (#), notE, (||*), (&&*), xor, (+@)
   , vars, vars2
   ) where
 
+import Control.Arrow ((&&&))
 import Data.Maybe (fromMaybe)
 import Unsafe.Coerce (unsafeCoerce)  -- for eval (unnecessary)
 
@@ -43,9 +44,7 @@ import LambdaCCC.Prim
 type Name = String
 
 -- | Typed variable
-data V a = V Name
-
-instance Show (V a) where show (V n) = n
+type V a = Name
 
 -- | Lambda patterns
 data Pat :: * -> * where
@@ -75,10 +74,10 @@ data E :: * -> * where
 -- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
 
 var :: forall a. Name -> E a
-var = Var . V
+var = Var
 
 lamv :: forall a b. Name -> E b -> E (a -> b)
-lamv = Lam . VarP . V
+lamv = Lam . VarP
 
 instance Show (E a) where
 #ifdef ShowFolded
@@ -166,12 +165,12 @@ eval' (u :^ v)  env = (eval' u env) (eval' v env)
 eval' (Lam p e) env = \ x -> eval' e (extendEnv p x env)
 
 extendEnv :: Pat b -> b -> Env -> Env
-extendEnv UnitP         ()    = id
-extendEnv (VarP (V nb)) b     = (Bind nb b :)
-extendEnv (PairP p q)   (a,b) = extendEnv q b . extendEnv p a
+extendEnv UnitP       ()    = id
+extendEnv (VarP nb)   b     = (Bind nb b :)
+extendEnv (PairP p q) (a,b) = extendEnv q b . extendEnv p a
 
 lookupVar :: V a -> Env -> Maybe a
-lookupVar (V na) = look
+lookupVar na = look
  where
    look []                             = Nothing
    look (Bind nb b : env') | nb == na  = Just (unsafeCoerce b)  -- !
@@ -185,7 +184,7 @@ lookupVar (V na) = look
 -- use toList and catMaybes.
 
 vars :: Name -> (Pat a, E a)
-vars n = (VarP v, Var v) where v = V n
+vars = VarP &&& Var
 
 vars2 :: (Name,Name) -> (Pat (a,b), (E a,E b))
 vars2 (na,nb) = (PairP ap bp, (ae,be))

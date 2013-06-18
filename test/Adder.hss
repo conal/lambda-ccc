@@ -6,7 +6,7 @@ set-pp-coercion Show
 -- set-pp ast
 -- set-pp ghc
 
--- set-auto-corelint True
+set-auto-corelint True
 -- {
 
 -- {
@@ -22,7 +22,7 @@ set-pp-coercion Show
 rhs-of 'idBool
 reify-core
 try var-to-const
--- any-bu (unfold 'var <+ cleanup-unfold)
+any-bu (unfold 'var <+ unfold 'lamv <+ cleanup-unfold)
 
 -- rhs-of 'fiddle
 
