@@ -22,32 +22,26 @@ module LambdaCCC.MkStringExpr (mkStringExpr) where
 import Data.Char (ord)
 
 import GhcPlugins hiding (mkStringExpr,mkStringExprFS)
-import FastString (fastStringToByteString)
 import PrelNames (unpackCStringName,unpackCStringUtf8Name)
 
 -- | Create a 'CoreExpr' which will evaluate to the given @String@
 mkStringExpr   :: MonadThings m => String     -> m CoreExpr  -- Result :: String
--- | Create a 'CoreExpr' which will evaluate to a string morally equivalent to the given @FastString@
-mkStringExprFS :: MonadThings m => FastString -> m CoreExpr  -- Result :: String
+mkStringExpr str
 
-mkStringExpr str = mkStringExprFS (mkFastString str)
+--   | null str
+--   = return (mkNilExpr charTy)
 
-mkStringExprFS str
-  | nullFS str
-  = return (mkNilExpr charTy)
+--   | length str == 1
+--   = do let the_char = mkCharExpr (head str)
+--        return (mkConsExpr charTy the_char (mkNilExpr charTy))
 
-  | lengthFS str == 1
-  = do let the_char = mkCharExpr (headFS str)
-       return (mkConsExpr charTy the_char (mkNilExpr charTy))
-
-  | all safeChar chars
+  | all safeChar str
   = do unpack_id <- lookupId unpackCStringName
-       return (App (Var unpack_id) (Lit (MachStr (fastStringToByteString str))))
+       return (App (Var unpack_id) (Lit (mkMachString str)))
 
   | otherwise
   = do unpack_id <- lookupId unpackCStringUtf8Name
-       return (App (Var unpack_id) (Lit (MachStr (fastStringToByteString str))))
+       return (App (Var unpack_id) (Lit (mkMachString str)))
 
   where
-    chars = unpackFS str
     safeChar c = ord c >= 1 && ord c <= 0x7F
