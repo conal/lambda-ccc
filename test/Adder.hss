@@ -19,7 +19,7 @@ set-pp-coercion Show
 -- lambda-to-ccc
 -- ccc-simplify
 
-rhs-of 'halfAdd
+rhs-of 'idBool
 reify-core
 try var-to-const
 -- any-bu (unfold 'var <+ cleanup-unfold)

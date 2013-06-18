@@ -43,7 +43,7 @@ import LambdaCCC.Prim
 type Name = String
 
 -- | Typed variable
-newtype V a = V Name
+data V a = V Name
 
 instance Show (V a) where show (V n) = n
 
