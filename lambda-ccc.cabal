@@ -32,6 +32,7 @@ Library
                        LambdaCCC.ToCCC
                        LambdaCCC.FunCCC
                        LambdaCCC.Core
+                       LambdaCCC.MkStringExpr
                        LambdaCCC.ReifyLambda
                        LambdaCCCDemo.Reify
                        LambdaCCCDemo.Embedding

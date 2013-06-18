@@ -30,10 +30,9 @@ import Text.Printf (printf)
 import Debug.Trace
 import Data.List (intercalate)
 
-import GhcPlugins
+import GhcPlugins hiding (mkStringExpr)
 import TypeRep (Type(..))
 import Var
-import PrelNames (unpackCStringName)
 
 -- TODO: Pare down
 import Language.HERMIT.Monad (HermitM,liftCoreM)
@@ -51,6 +50,7 @@ import Language.HERMIT.Context (HermitBindingSite(LAM),ReadBindings(..))
 
 import LambdaCCC.Misc (Unop)
 import qualified LambdaCCC.Lambda as E
+import LambdaCCC.MkStringExpr (mkStringExpr)
 
 {--------------------------------------------------------------------
     Core utilities

@@ -13,35 +13,23 @@
 -- Stability   :  experimental
 -- 
 -- Tweaked mkStringExpr from coreSyn/MkCore in GHC API. The standard version
--- treats single-character strings specially, which makes for more
--- complicated-looking Core.
+-- treats empty and single-character strings specially, which makes for less
+-- uniform-looking Core.
 ----------------------------------------------------------------------
 
 module LambdaCCC.MkStringExpr (mkStringExpr) where
 
+import Control.Monad (liftM)
 import Data.Char (ord)
 
 import GhcPlugins hiding (mkStringExpr,mkStringExprFS)
 import PrelNames (unpackCStringName,unpackCStringUtf8Name)
 
 -- | Create a 'CoreExpr' which will evaluate to the given @String@
-mkStringExpr   :: MonadThings m => String     -> m CoreExpr  -- Result :: String
-mkStringExpr str
-
---   | null str
---   = return (mkNilExpr charTy)
-
---   | length str == 1
---   = do let the_char = mkCharExpr (head str)
---        return (mkConsExpr charTy the_char (mkNilExpr charTy))
-
-  | all safeChar str
-  = do unpack_id <- lookupId unpackCStringName
-       return (App (Var unpack_id) (Lit (mkMachString str)))
-
-  | otherwise
-  = do unpack_id <- lookupId unpackCStringUtf8Name
-       return (App (Var unpack_id) (Lit (mkMachString str)))
-
-  where
-    safeChar c = ord c >= 1 && ord c <= 0x7F
+mkStringExpr :: MonadThings m => String -> m CoreExpr
+mkStringExpr str = liftM mk (lookupId unpackName)
+ where
+   mk unpackId = App (Var unpackId) (Lit (mkMachString str))
+   unpackName | all safeChar str = unpackCStringName
+              | otherwise        = unpackCStringUtf8Name
+   safeChar c = ord c >= 1 && ord c <= 0x7F
