@@ -19,10 +19,10 @@ set-auto-corelint True
 -- lambda-to-ccc
 -- ccc-simplify
 
-rhs-of 'idBool
-reify-core
-try var-to-const
-any-bu (unfold 'var <+ unfold 'lamv <+ cleanup-unfold)
+-- rhs-of 'idBool
+-- reify-core
+-- try var-to-const
+-- any-bu (unfold 'var <+ unfold 'lamv <+ cleanup-unfold)
 
 -- rhs-of 'fiddle
 

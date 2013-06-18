@@ -3,7 +3,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# OPTIONS_GHC -Wall #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -26,17 +26,19 @@ import Data.Functor ((<$>))
 import Control.Arrow (arr,(>>>),(&&&))
 import Text.Printf (printf)
 
+import qualified Language.Haskell.TH as TH
+
 import GhcPlugins hiding (mkStringExpr)
 
 -- TODO: Pare down
-
 import Language.HERMIT.External
 import Language.HERMIT.Kure hiding (apply)
 import Language.HERMIT.Optimize
+import Language.HERMIT.Primitive.Navigation (rhsOf)
 import Language.HERMIT.Primitive.Common
 import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.GHC (uqName,var2String)
-import Language.HERMIT.Primitive.Unfold (cleanupUnfoldR)
+import Language.HERMIT.Primitive.Unfold (unfoldNameR,cleanupUnfoldR)
 import Language.HERMIT.Primitive.GHC (rule)
 
 import qualified LambdaCCC.Lambda as E
@@ -138,6 +140,17 @@ varToConst :: RewriteH Core
 varToConst = anybuR $ promoteExprR $ unfoldRules 
                ["var/xor", "var/and", "var/pair"]
 
+reifyName :: TH.Name -> RewriteH Core
+reifyName name = rhsOf name >> reifyPlus
+
+-- reifyPlus doesn't work: "Rewrite failed: user error (This rewrite can only
+-- succeed at expression nodes.)". Maybe because rhsOf yields a path?
+
+reifyPlus :: RewriteH Core
+reifyPlus =
+      promoteExprR reifyCoreExpr
+  >>> tryR varToConst
+  >>> anybuR (promoteExprR ((unfoldNameR 'E.var <+ unfoldNameR 'E.lamv) >> cleanupUnfoldR))
 
 {--------------------------------------------------------------------
     Plugin
@@ -152,4 +165,9 @@ externals =
         [ "Turn a Core expression into a GADT construction" ]
     , external "var-to-const" varToConst
         [ "convert some non-local vars to consts" ]
+    , external "reify-plus" reifyPlus
+        [ "reify-core followed by var-to-const and some inlining" ]
+    , external "reify-name" reifyName
+        [ "reify-plus for a named definition" ]
+        -- NOTE: doesn't work. See reifyName comment above.
     ]
