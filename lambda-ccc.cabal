@@ -36,9 +36,5 @@ Library
                        LambdaCCCDemo.Reify
                        LambdaCCCDemo.Embedding
 
-                       LambdaCCC.LambdaPh
-                       LambdaCCC.ToCCCPh
-                       LambdaCCC.ReifyLambdaPh
-
   Other-Modules:
                        LambdaCCC.Tests

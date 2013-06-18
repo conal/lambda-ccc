@@ -24,14 +24,14 @@ import LambdaCCC.Lambda
 import LambdaCCC.ToCCC
 
 va,vb,vc :: E Int
-va = Var "a" IntT
-vb = Var "b" IntT
-vc = Var "c" IntT
+va = var "a"
+vb = var "b"
+vc = var "c"
 
-ty1 :: Ty (Int :=> Int)
+ty1 :: Ty (Int -> Int)
 ty1 = IntT :=> IntT
 
-ty2 :: Ty ((Int :=> Int) :* Bool)
+ty2 :: Ty ((Int -> Int) :* Bool)
 ty2 = (IntT :=> IntT) :* BoolT
 
 e1 :: E Bool
@@ -41,7 +41,7 @@ e2 :: E Bool
 e2 = notE e1
 
 infixr 1 :+>
-type a :+> b = E (a :=> b)
+type a :+> b = E (a -> b)
 
 -- \ x -> not
 e3 :: Bool :+> Bool

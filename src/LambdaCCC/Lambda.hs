@@ -20,7 +20,7 @@
 -- Lambda expressions -- phantom variable type edition
 ----------------------------------------------------------------------
 
-module LambdaCCC.LambdaPh
+module LambdaCCC.Lambda
   ( Name
   , V(..), Pat(..), E(..)
   , var, lamv

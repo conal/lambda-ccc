@@ -18,7 +18,7 @@
 -- Reify a Core expression into GADT
 ----------------------------------------------------------------------
 
-module LambdaCCC.ReifyLambdaPh where
+module LambdaCCC.ReifyLambda where
 
 -- TODO: explicit exports
 
@@ -50,7 +50,7 @@ import Language.HERMIT.Core (Crumb(..)) -- ,CoreDef(..)
 import Language.HERMIT.Context (HermitBindingSite(LAM),ReadBindings(..))
 
 import LambdaCCC.Misc (Unop)
-import qualified LambdaCCC.LambdaPh as E
+import qualified LambdaCCC.Lambda as E
 
 {--------------------------------------------------------------------
     Core utilities

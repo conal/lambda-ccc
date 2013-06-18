@@ -16,7 +16,7 @@
 -- Convert lambda expressions to CCC combinators
 ----------------------------------------------------------------------
 
-module LambdaCCC.ToCCCPh (toCCC, toCCC') where
+module LambdaCCC.ToCCC (toCCC, toCCC') where
 
 import Data.Functor ((<$>))
 import Control.Monad (mplus)
@@ -25,7 +25,7 @@ import Unsafe.Coerce (unsafeCoerce)
 
 import LambdaCCC.Misc
 import LambdaCCC.CCC
-import LambdaCCC.LambdaPh
+import LambdaCCC.Lambda
 
 {--------------------------------------------------------------------
     Conversion
