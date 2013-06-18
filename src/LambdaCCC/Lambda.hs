@@ -77,7 +77,8 @@ var :: forall a. Name -> E a
 var = Var
 
 lamv :: forall a b. Name -> E b -> E (a -> b)
-lamv = Lam . VarP
+-- lamv = Lam . VarP
+lamv name body = Lam (VarP name) body
 
 instance Show (E a) where
 #ifdef ShowFolded

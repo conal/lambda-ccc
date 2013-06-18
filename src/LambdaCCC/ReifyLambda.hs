@@ -1,5 +1,6 @@
 {-# LANGUAGE TemplateHaskell, TypeOperators, GADTs, KindSignatures #-}
-{-# LANGUAGE ViewPatterns, PatternGuards #-}
+{-# LANGUAGE ViewPatterns, PatternGuards, LambdaCase #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MagicHash #-}
 {-# OPTIONS_GHC -Wall #-}
 
@@ -23,6 +24,8 @@ module LambdaCCC.ReifyLambda where
 -- TODO: explicit exports
 
 import Data.Functor ((<$>))
+import Control.Applicative (Applicative(..))
+import Control.Monad ((<=<))
 import Control.Arrow (arr,(>>>),(&&&))
 import Text.Printf (printf)
 
@@ -33,6 +36,8 @@ import GhcPlugins hiding (mkStringExpr)
 -- TODO: Pare down
 import Language.HERMIT.External
 import Language.HERMIT.Kure hiding (apply)
+import qualified Language.HERMIT.Kure as Kure
+import Language.HERMIT.Core (Crumb(..))
 import Language.HERMIT.Optimize
 import Language.HERMIT.Primitive.Navigation (rhsOf)
 import Language.HERMIT.Primitive.Common
@@ -61,6 +66,27 @@ apps f ts es
 tyArity :: Id -> Int
 tyArity = length . fst . splitForAllTys . varType
 
+listToPair :: [a] -> Maybe (a,a)
+listToPair [a,b] = Just (a,b)
+listToPair _     = Nothing
+
+unTuple :: CoreExpr -> Maybe [CoreExpr]
+unTuple expr@(App {})
+  | (Var f, dropWhile isTypeArg -> valArgs) <- collectArgs expr
+  , Just dc <- isDataConWorkId_maybe f
+  , isTupleTyCon (dataConTyCon dc) && (valArgs `lengthIs` idArity f)
+  = Just valArgs
+unTuple _ = Nothing
+
+-- tuple :: [CoreExpr] -> CoreExpr
+-- tuple es = ... ?
+--
+-- pair :: Binop CoreExpr
+-- pair a b = tuple [a,b]
+
+unPair :: CoreExpr -> Maybe (CoreExpr,CoreExpr)
+unPair = listToPair <=< unTuple
+
 {-
 -- Unsafe way to ppr in pure code.
 tr :: Outputable a => a -> a
@@ -80,6 +106,23 @@ pretties = intercalate "," . map pretty
 unfoldRules :: [String] -> RewriteH CoreExpr
 unfoldRules nms = catchesM (rule <$> nms) >>> cleanupUnfoldR
 
+-- | Translate a pair expression.
+pairT :: (Applicative m, Monad m, ExtendPath c Crumb) =>
+         Translate c m CoreExpr a -> Translate c m CoreExpr b
+      -> (Type -> Type -> a -> b -> z) -> Translate c m CoreExpr z
+pairT tu tv f = translate $ \ c ->
+  \ case (unPair -> Just (u,v)) ->
+           f (exprType u) (exprType v)
+             <$> Kure.apply tu (c @@ App_Fun @@ App_Arg) u
+             <*> Kure.apply tv (c            @@ App_Arg) v
+         _         -> fail "not a pair node."
+
+rhsR :: RewriteH CoreExpr -> RewriteH Core
+rhsR r = prunetdR (promoteDefR (defAllR idR r) <+ promoteBindR (nonRecAllR idR r))
+
+unfoldNames :: [TH.Name] -> RewriteH CoreExpr
+unfoldNames nms = catchesM (unfoldNameR <$> nms) -- >>> cleanupUnfoldR
+
 {--------------------------------------------------------------------
     Reification
 --------------------------------------------------------------------}
@@ -93,15 +136,16 @@ observeR' :: String -> ReExpr
 observeR' | observing = observeR
           | otherwise = const idR
 
-reifyCoreExpr :: ReExpr
-reifyCoreExpr =
+reifyExpr :: ReExpr
+reifyExpr =
   do varId  <- findIdT 'E.var
+     pairId <- findIdT '(E.:#)
      appId  <- findIdT '(E.:^)
      lamvId <- findIdT 'E.lamv
      evalId <- findIdT 'E.evalE
      let rew :: ReExpr
          rew = tries [ ("Var",rVar)
-                   --, ("Pair",rPair)
+                     , ("Pair",rPair)
                      , ("AppT",rAppT), ("App",rApp)
                      , ("LamT",rLamT), ("Lam",rLam)]
           where
@@ -110,13 +154,14 @@ reifyCoreExpr =
                   . map (uncurry try)
             try label = (>>> observeR' label)
 
-         rVar{-, rPair-}, rAppT, rApp, rLamT, rLam :: ReExpr
+         rVar, rPair, rAppT, rApp, rLamT, rLam :: ReExpr
          -- TODO: Maybe merge rAppT/rApp and rLamT/rLam, using one match.
          rVar  = varT $
                    do (name,ty) <- mkVarName
                       -- TODO: mkVarName as TranslateH Var Expr
                       return $ apps varId [ty] [name]
---          rPair = pairT rew rew $ ...
+         rPair = pairT rew rew $ \ a b u v ->
+                   apps pairId [a,b] [u,v]
          rAppT = do App _ (Type {}) <- idR
                     appT rew idR (arr App)
          rApp  = do App u _ <- idR
@@ -140,17 +185,26 @@ varToConst :: RewriteH Core
 varToConst = anybuR $ promoteExprR $ unfoldRules 
                ["var/xor", "var/and", "var/pair"]
 
-reifyName :: TH.Name -> RewriteH Core
-reifyName name = rhsOf name >> reifyPlus
+cleanupReifyR :: RewriteH Core
+cleanupReifyR =
+      tryR varToConst
+  >>> anybuR (promoteExprR (unfoldNames ['E.var,'E.lamv]))
+  >>> anybuR (promoteExprR cleanupUnfoldR)
 
--- reifyPlus doesn't work: "Rewrite failed: user error (This rewrite can only
--- succeed at expression nodes.)". Maybe because rhsOf yields a path?
+-- I thought the following line would be equivalent to the previous two, but I
+-- don't get cleanup after lamv unfolding.
 
-reifyPlus :: RewriteH Core
-reifyPlus =
-      promoteExprR reifyCoreExpr
-  >>> tryR varToConst
-  >>> anybuR (promoteExprR ((unfoldNameR 'E.var <+ unfoldNameR 'E.lamv) >> cleanupUnfoldR))
+--   >>> anybuR (promoteExprR (unfoldNames ['E.var,'E.lamv] >>> cleanupUnfoldR))
+
+reifyDef :: RewriteH Core
+reifyDef = rhsR reifyExpr
+
+-- reifyExprPlus :: RewriteH Core
+-- reifyExprPlus = promoteExprR reifyExpr >>> cleanupReifyR
+
+-- reifyDefPlus :: RewriteH Core
+-- reifyDefPlus = reifyDef >>> cleanupReifyR
+
 
 {--------------------------------------------------------------------
     Plugin
@@ -161,13 +215,16 @@ plugin = optimize (phase 0 . interactive externals)
 
 externals :: [External]
 externals =
-    [ external "reify-core" (promoteExprR reifyCoreExpr)
-        [ "Turn a Core expression into a GADT construction" ]
+    [ external "reify-expr" (promoteExprR reifyExpr)
+        [ "Reify a Core expression into a GADT construction" ]
     , external "var-to-const" varToConst
         [ "convert some non-local vars to consts" ]
-    , external "reify-plus" reifyPlus
-        [ "reify-core followed by var-to-const and some inlining" ]
-    , external "reify-name" reifyName
-        [ "reify-plus for a named definition" ]
-        -- NOTE: doesn't work. See reifyName comment above.
+    , external "cleanup-reify" cleanupReifyR
+        [ "convert some non-local vars to consts" ]
+    , external "reify-def" reifyDef
+        [ "reify for definitions" ]
+    , external "reify-expr-cleanup" (promoteExprR reifyExpr >>> cleanupReifyR)
+        [ "reify-core and cleanup for expressions" ]
+    , external "reify-def-cleanup" (reifyDef >>> cleanupReifyR)
+        [ "reify-core and cleanup for definitions" ]
     ]

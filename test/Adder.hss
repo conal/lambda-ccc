@@ -19,7 +19,9 @@ set-auto-corelint True
 -- lambda-to-ccc
 -- ccc-simplify
 
--- rhs-of 'idBool
+-- consider 'halfAdd
+-- reify-def-cleanup
+
 -- reify-core
 -- try var-to-const
 -- any-bu (unfold 'var <+ unfold 'lamv <+ cleanup-unfold)
