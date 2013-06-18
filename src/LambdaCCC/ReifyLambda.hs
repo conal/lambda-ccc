@@ -162,20 +162,14 @@ reifyExpr =
      lamvId <- findIdT 'E.lamv
      evalId <- findIdT 'E.evalE
      let rew :: ReExpr
-         rew = tries [ ("Var",rVar)
-                     , ("AppT",rAppT), ("App",rApp)
+         rew = tries [ ("AppT",rAppT), ("App",rApp)
                      , ("LamT",rLamT), ("Lam",rLam)]
           where
             tries :: [(String,ReExpr)] -> ReExpr
             tries = foldr (<+) (observeR' "Other" >>> fail "unhandled")
                   . map (uncurry try)
             try label = (>>> observeR' label)
-         rVar, rAppT, rApp, rLamT, rLam :: ReExpr
-         -- TODO: Maybe merge rAppT/rApp and rLamT/rLam, using one match.
-         rVar  = varT $
-                   do (name,ty) <- mkVarName
-                      -- TODO: mkVarName as TranslateH Var Expr
-                      return $ apps varId [ty] [name]
+         rAppT, rApp, rLamT, rLam :: ReExpr
          rAppT = do e <- idR            -- TODO: ty <- arr exprType
                     appVTysT mkVarName $ \ (name,_) _ ->
                       apps varId [exprType e] [name]
