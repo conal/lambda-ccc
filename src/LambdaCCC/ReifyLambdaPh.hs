@@ -23,7 +23,8 @@ module LambdaCCC.ReifyLambdaPh where
 -- TODO: explicit exports
 
 import Data.Functor ((<$>))
-import Control.Arrow (arr,(>>>))
+import Control.Applicative (pure)
+import Control.Arrow (arr,(>>>),(&&&))
 import GHC.Pack (unpackCString#)
 import Text.Printf (printf)
 import Debug.Trace
@@ -129,8 +130,11 @@ reifyCoreExpr =
             try label = (>>> observeR' label)
 
          rVar{-, rPair-}, rAppT, rApp, rLamT, rLam :: ReExpr
-         rVar  = varT $ arr $ \ v ->
-                   apps varId [varType v] [varMachStr v]
+         -- TODO: Maybe merge rAppT/rApp and rLamT/rLam, using one match.
+         rVar  = varT $
+                   do (name,ty) <- mkVarName
+                      -- TODO: mkVarName as TranslateH Var Expr
+                      return $ apps varId [ty] [name]
 --          rPair = pairT rew rew $ ...
          rAppT = do App _ (Type {}) <- idR
                     appT rew idR (arr App)
@@ -140,17 +144,31 @@ reifyCoreExpr =
                         apps appId [b,a] [u', v'] -- note b,a
          rLamT = do Lam (isTyVar -> True) _ <- idR
                     lamT idR rew (arr Lam)
-         rLam  = do Lam v e <- idR
-                    lamT (arr varMachStr) rew $ arr $ \ v' e' ->
-                      apps lamvId [varType v, exprType e] [v',e']
-         -- TODO: Maybe merge rAppT/rApp and rLamT/rLam, using one match.
+         rLam  = do Lam _ e <- idR
+                    lamT mkVarName rew $ arr $ \ (name,ty) e' ->
+                      apps lamvId [ty, exprType e] [name,e']
+         -- TODO: Literals
      do e      <- idR
         let mkEval e' = apps evalId [exprType e] [e']
         mkEval <$> rew
 
+-- contextfreeT :: (a -> m b) -> Translate c m a b
+
+mkVarName :: MonadThings m => Translate c m Var (CoreExpr,Type)
+mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType
+
+-- ... :: Var -> HermitC CoreExpr
+-- arr varType :: Translate c m Var Type
+
 varToConst :: RewriteH Core
 varToConst = anybuR $ promoteExprR $ unfoldRules 
                ["var/xor", "var/and", "var/pair"]
+
+-- contextonlyT :: (c -> m b) -> Translate c m a b
+
+-- constT :: m b -> Translate c m a b
+-- mkStringExpr :: MonadThings m => String -> m CoreExpr
+
 
 {--------------------------------------------------------------------
     Plugin

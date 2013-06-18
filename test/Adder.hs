@@ -15,7 +15,7 @@ constPair :: (Bool,Bool)
 constPair = (True,False)
 
 idBool :: Bool -> Bool
-idBool p = p
+idBool a = a
 
 bar :: (Bool,Bool) -> Bool
 bar = xor

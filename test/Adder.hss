@@ -19,9 +19,10 @@ set-pp-coercion Show
 -- lambda-to-ccc
 -- ccc-simplify
 
-rhs-of 'bar
+rhs-of 'halfAdd
 reify-core
-any-bu (unfold 'var <+ cleanup-unfold)
+try var-to-const
+-- any-bu (unfold 'var <+ cleanup-unfold)
 
 -- rhs-of 'fiddle
 

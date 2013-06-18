@@ -35,10 +35,10 @@ import Unsafe.Coerce (unsafeCoerce)  -- for eval (unnecessary)
 import LambdaCCC.Misc
 import LambdaCCC.ShowUtils
 import LambdaCCC.Prim
-import GHC.Prim (Addr#)   -- from ghc-prim
-import GHC.Pack (unpackCString#)
+-- import GHC.Prim (Addr#)   -- from ghc-prim
+-- import GHC.Pack (unpackCString#)
 
--- Whether to simply (fold) during show
+-- Whether to fold simple definitions during show
 #define ShowFolded
 
 -- | Variable names
@@ -49,9 +49,9 @@ newtype V a = V Name
 
 instance Show (V a) where show (V n) = n
 
--- Unpack into a variable.
-addrV :: Addr# -> V a
-addrV a = V (unpackCString# a)
+-- -- Unpack into a variable.
+-- addrV :: Addr# -> V a
+-- addrV a = V (unpackCString# a)
 
 -- | Lambda patterns
 data Pat :: * -> * where
@@ -80,11 +80,17 @@ data E :: * -> * where
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
 -- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
 
-var :: forall a. Addr# -> E a
-var a = Var (addrV a)
+-- var :: forall a. Addr# -> E a
+-- var a = Var (addrV a)
 
-lamv :: forall a b. Addr# -> E b -> E (a :=> b)
-lamv a = Lam (VarP (addrV a))
+-- lamv :: forall a b. Addr# -> E b -> E (a :=> b)
+-- lamv a = Lam (VarP (addrV a))
+
+var :: forall a. Name -> E a
+var = Var . V
+
+lamv :: forall a b. Name -> E b -> E (a -> b)
+lamv = Lam . VarP . V
 
 instance Show (E a) where
 #ifdef ShowFolded
@@ -204,8 +210,8 @@ vars2 (na,nb) = (PairP ap bp, (ae,be))
 
 {-# RULES
 
-"var/xor"  Var (V "xor") = Const Xor
-"var/and"  Var (V "and") = Const And
-"var/pair" forall a b. Var (V "(,)") :^ a :^ b = a :# b
+"var/xor"  var "xor" = Const Xor
+"var/and"  var "and" = Const And
+"var/pair" forall a b. var "(,)" :^ a :^ b = a :# b
 
   #-}
