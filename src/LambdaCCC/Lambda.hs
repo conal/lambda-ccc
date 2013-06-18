@@ -73,6 +73,9 @@ data E :: * -> * where
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
 -- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
 
+-- TODO: Consider replacing (:#) with a Pair Prim and simplifying the
+-- implementation accordingly. (Note that Fst and Snd are prims.)
+
 var :: forall a. Name -> E a
 var = Var
 
@@ -95,10 +98,10 @@ instance Show (E a) where
 data OpInfo = OpInfo String Fixity
 
 opInfo :: Prim a -> Maybe OpInfo
-opInfo Add = Just $ OpInfo "+"     (6,AssocLeft )
-opInfo And = Just $ OpInfo "&&&"   (3,AssocRight)
-opInfo Or  = Just $ OpInfo "|||"   (2,AssocRight)
-opInfo Xor = Just $ OpInfo "`xor`" (2,AssocRight)
+opInfo AddP = Just $ OpInfo "+"     (6,AssocLeft )
+opInfo AndP = Just $ OpInfo "&&&"   (3,AssocRight)
+opInfo OrP  = Just $ OpInfo "|||"   (2,AssocRight)
+opInfo XorP = Just $ OpInfo "`xor`" (2,AssocRight)
 opInfo _   = Nothing
 
 
@@ -116,7 +119,7 @@ infixr 1 #
 a # b = a :# b
 
 notE :: Unop (E Bool)
-notE b = Const Not :^ b
+notE b = Const NotP :^ b
 
 infixr 2 ||*, `xor`
 infixr 3 &&*
@@ -125,13 +128,13 @@ binop :: Prim (a :* b :=> c) -> E a -> E b -> E c
 binop op a b = Const op :^ (a # b)
 
 (&&*), (||*), xor :: Binop (E Bool)
-(&&*) = binop And
-(||*) = binop Or
-xor   = binop Xor
+(&&*) = binop AndP
+(||*) = binop OrP
+xor   = binop XorP
 
 infixl 6 +@
 (+@) :: Num a => Binop (E a)
-(+@) = binop Add
+(+@) = binop AddP
 
 -- TODO: Use Num and Boolean classes
 
@@ -199,8 +202,10 @@ vars2 (na,nb) = (PairP ap bp, (ae,be))
 
 {-# RULES
 
-"var/xor"  var "xor" = Const Xor
-"var/and"  var "and" = Const And
+"var/xor"  var "xor" = Const XorP
+"var/and"  var "and" = Const AndP
 "var/pair" forall a b. var "(,)" :^ a :^ b = a :# b
+"var/fst"  var "fst" = Const FstP
+"var/snd"  var "snd" = Const SndP
 
   #-}

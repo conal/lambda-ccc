@@ -35,7 +35,7 @@ ty2 :: Ty ((Int -> Int) :* Bool)
 ty2 = (IntT :=> IntT) :* BoolT
 
 e1 :: E Bool
-e1 = Const (Lit False)
+e1 = Const (LitP False)
 
 e2 :: E Bool
 e2 = notE e1
@@ -45,7 +45,7 @@ type a :+> b = E (a -> b)
 
 -- \ x -> not
 e3 :: Bool :+> Bool
-e3 = Const Not
+e3 = Const NotP
 
 -- \ x -> x
 e4 :: Int :+> Int

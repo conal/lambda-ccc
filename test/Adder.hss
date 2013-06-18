@@ -1,12 +1,16 @@
 -- hermit Adder.hs -opt=LambdaCCC.ReifyLambdaPh +Adder Adder.hss
 
 set-pp-coercion Show
--- set-pp-type Show
+set-pp-type Show
 -- Pretty-printing alternatives
 -- set-pp ast
 -- set-pp ghc
 
-set-auto-corelint True
+-- set-auto-corelint True
+
+-- consider 'fst2
+-- reify-def
+
 -- {
 
 -- {

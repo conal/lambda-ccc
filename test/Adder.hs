@@ -17,6 +17,15 @@ constPair = (True,False)
 idBool :: Bool -> Bool
 idBool a = a
 
+fst1 :: (s,t) -> s
+fst1 = fst
+
+fst2 :: (Bool,Int) -> Bool
+fst2 = fst
+
+fst3 :: (Bool,Int) -> Bool
+fst3 p = fst p
+
 bar :: (Bool,Bool) -> Bool
 bar = xor
 
@@ -37,8 +46,11 @@ p1 a = (a,not a)
 
 -- Polymorphic example
 
-swap :: (a,b) -> (b,a)
+swap :: (s,t) -> (t,s)
 swap p = (snd p, fst p)
+
+-- Or
+-- swap :: (Int,Bool) -> (Bool,Int)
 
 -- The rest don't yet transform successfully. They become 'case' expressions,
 -- which we're not yet handling.

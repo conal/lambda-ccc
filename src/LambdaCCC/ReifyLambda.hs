@@ -25,7 +25,7 @@ module LambdaCCC.ReifyLambda where
 
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..))
-import Control.Monad ((<=<))
+import Control.Monad ((<=<),liftM2)
 import Control.Arrow (arr,(>>>),(&&&))
 import Text.Printf (printf)
 
@@ -99,6 +99,14 @@ pretties :: Outputable a => [a] -> String
 pretties = intercalate "," . map pretty
 -}
 
+-- | Variant of GHC's 'collectArgs'
+collectTypeArgs :: CoreExpr -> (CoreExpr, [Type])
+collectTypeArgs expr = go expr []
+  where
+    go (App f (Type t)) ts = go f (t:ts)
+    go e 	        ts = (e, ts)
+
+
 {--------------------------------------------------------------------
     HERMIT utilities
 --------------------------------------------------------------------}
@@ -107,15 +115,26 @@ unfoldRules :: [String] -> RewriteH CoreExpr
 unfoldRules nms = catchesM (rule <$> nms) >>> cleanupUnfoldR
 
 -- | Translate a pair expression.
-pairT :: (Applicative m, Monad m, ExtendPath c Crumb) =>
+pairT :: (Monad m, ExtendPath c Crumb) =>
          Translate c m CoreExpr a -> Translate c m CoreExpr b
       -> (Type -> Type -> a -> b -> z) -> Translate c m CoreExpr z
 pairT tu tv f = translate $ \ c ->
   \ case (unPair -> Just (u,v)) ->
-           f (exprType u) (exprType v)
-             <$> Kure.apply tu (c @@ App_Fun @@ App_Arg) u
-             <*> Kure.apply tv (c            @@ App_Arg) v
+           liftM2 (f (exprType u) (exprType v))
+                  (Kure.apply tu (c @@ App_Fun @@ App_Arg) u)
+                  (Kure.apply tv (c            @@ App_Arg) v)
          _         -> fail "not a pair node."
+
+-- | Translate an n-ary type-instantiation of a variable, where n >= 0.
+appVTysT :: Monad m =>
+            Translate c m Var a -> (a -> [Type] -> b) -> Translate c m CoreExpr b
+appVTysT tv h = translate $ \c ->
+  \ case (collectTypeArgs -> (Var v, ts)) ->
+           liftM2 h (Kure.apply tv c v)      -- TODO: Crumbs
+                    (return ts)
+         _ -> fail "not an application of a variable to types."
+
+
 
 rhsR :: RewriteH CoreExpr -> RewriteH Core
 rhsR r = prunetdR (promoteDefR (defAllR idR r) <+ promoteBindR (nonRecAllR idR r))
@@ -145,7 +164,7 @@ reifyExpr =
      evalId <- findIdT 'E.evalE
      let rew :: ReExpr
          rew = tries [ ("Var",rVar)
-                     , ("Pair",rPair)
+                  -- , ("Pair",rPair)
                      , ("AppT",rAppT), ("App",rApp)
                      , ("LamT",rLamT), ("Lam",rLam)]
           where
@@ -153,17 +172,17 @@ reifyExpr =
             tries = foldr (<+) (observeR' "Other" >>> fail "unhandled")
                   . map (uncurry try)
             try label = (>>> observeR' label)
-
          rVar, rPair, rAppT, rApp, rLamT, rLam :: ReExpr
          -- TODO: Maybe merge rAppT/rApp and rLamT/rLam, using one match.
          rVar  = varT $
                    do (name,ty) <- mkVarName
                       -- TODO: mkVarName as TranslateH Var Expr
                       return $ apps varId [ty] [name]
-         rPair = pairT rew rew $ \ a b u v ->
-                   apps pairId [a,b] [u,v]
-         rAppT = do App _ (Type {}) <- idR
-                    appT rew idR (arr App)
+         rPair = pairT rew rew $ \ a b u v -> apps pairId [a,b] [u,v]
+         -- TODO: Replace rVar with rAppT
+         rAppT = do e <- idR            -- TODO: ty <- arr exprType
+                    appVTysT mkVarName $ \ (name,_) _ ->
+                      apps varId [exprType e] [name]
          rApp  = do App u _ <- idR
                     appT  rew rew $ arr $ \ u' v' ->
                       let (a,b) = splitFunTy (exprType u) in
@@ -178,18 +197,22 @@ reifyExpr =
         let mkEval e' = apps evalId [exprType e] [e']
         mkEval <$> rew
 
+
+-- TODO: Remove pairing recognition (and supporting code), and instead use the
+-- rewrite in Lambda.
+
 mkVarName :: MonadThings m => Translate c m Var (CoreExpr,Type)
 mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType
 
 varToConst :: RewriteH Core
-varToConst = anybuR $ promoteExprR $ unfoldRules 
-               ["var/xor", "var/and", "var/pair"]
+varToConst = anybuR $ promoteExprR $ unfoldRules $ map ("var/" ++)
+               ["xor","and","fst","snd","pair"]
 
 cleanupReifyR :: RewriteH Core
 cleanupReifyR =
       tryR varToConst
-  >>> anybuR (promoteExprR (unfoldNames ['E.var,'E.lamv]))
-  >>> anybuR (promoteExprR cleanupUnfoldR)
+  >>> (tryR $ anybuR $ promoteExprR $ unfoldNames ['E.var,'E.lamv])
+  >>> (tryR $ anybuR $ promoteExprR $ cleanupUnfoldR)
 
 -- I thought the following line would be equivalent to the previous two, but I
 -- don't get cleanup after lamv unfolding.
