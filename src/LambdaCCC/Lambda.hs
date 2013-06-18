@@ -35,8 +35,6 @@ import Unsafe.Coerce (unsafeCoerce)  -- for eval (unnecessary)
 import LambdaCCC.Misc
 import LambdaCCC.ShowUtils
 import LambdaCCC.Prim
--- import GHC.Prim (Addr#)   -- from ghc-prim
--- import GHC.Pack (unpackCString#)
 
 -- Whether to fold simple definitions during show
 #define ShowFolded
@@ -48,10 +46,6 @@ type Name = String
 newtype V a = V Name
 
 instance Show (V a) where show (V n) = n
-
--- -- Unpack into a variable.
--- addrV :: Addr# -> V a
--- addrV a = V (unpackCString# a)
 
 -- | Lambda patterns
 data Pat :: * -> * where
@@ -79,12 +73,6 @@ data E :: * -> * where
 -- I've placed the quantifiers explicitly to reflect what I learned from GHCi
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
 -- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
-
--- var :: forall a. Addr# -> E a
--- var a = Var (addrV a)
-
--- lamv :: forall a b. Addr# -> E b -> E (a :=> b)
--- lamv a = Lam (VarP (addrV a))
 
 var :: forall a. Name -> E a
 var = Var . V
@@ -118,6 +106,10 @@ opInfo _   = Nothing
     Convenient notation for expression building
 --------------------------------------------------------------------}
 
+-- TODO: Maybe eliminate this notation or move it elsewhere, since we're mainly
+-- translating automatically rather than hand-coding. I'm using this vocabulary
+-- for tests.
+
 infixr 1 #
 (#) :: E a -> E b -> E (a :* b)
 -- (Const Fst :^ p) # (Const Snd :^ p') | ... = ...
@@ -142,9 +134,6 @@ infixl 6 +@
 (+@) = binop Add
 
 -- TODO: Use Num and Boolean classes
-
--- Out for now, since I'm trying to drop explicit type representations.
--- If I really want an eval, maybe use unsafeCoerce. :/
 
 -- | Single variable binding
 data Bind = forall a. Bind Name a
