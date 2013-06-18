@@ -129,7 +129,7 @@ reifyCoreExpr =
                     lamT mkVarName rew $ arr $ \ (name,ty) e' ->
                       apps lamvId [ty, exprType e] [name,e']
          -- TODO: Literals
-     do e      <- idR
+     do e <- idR
         let mkEval e' = apps evalId [exprType e] [e']
         mkEval <$> rew
 
