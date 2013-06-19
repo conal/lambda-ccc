@@ -28,6 +28,7 @@ import Control.Applicative (Applicative(..))
 import Control.Monad ((<=<),liftM2)
 import Control.Arrow (arr,(>>>),(&&&))
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Text.Printf (printf)
 
 import qualified Language.Haskell.TH as TH
@@ -127,13 +128,17 @@ pairT tu tv f = translate $ \ c ->
          _         -> fail "not a pair node."
 
 -- | Translate an n-ary type-instantiation of a variable, where n >= 0.
-appVTysT :: Monad m =>
+appVTysT :: (ExtendPath c Crumb, Monad m) =>
             Translate c m Var a -> (a -> [Type] -> b) -> Translate c m CoreExpr b
 appVTysT tv h = translate $ \c ->
   \ case (collectTypeArgs -> (Var v, ts)) ->
-           liftM2 h (Kure.apply tv c v)      -- TODO: Crumbs
+           liftM2 h (Kure.apply tv (applyN (length ts) (@@ App_Fun) c) v)
                     (return ts)
          _ -> fail "not an application of a variable to types."
+  where
+    applyN :: Int -> (a -> a) -> a -> a
+    applyN n f a = foldr ($) a (replicate n f)
+
 
 rhsR :: RewriteH CoreExpr -> RewriteH Core
 rhsR r = prunetdR (promoteDefR (defAllR idR r) <+ promoteBindR (nonRecAllR idR r))
@@ -142,14 +147,14 @@ unfoldNames :: [TH.Name] -> RewriteH CoreExpr
 unfoldNames nms = catchesM (unfoldNameR <$> nms) -- >>> cleanupUnfoldR
 
 -- Just the lambda-bound variables in a HERMIT context
-lambdaVars :: ReadBindings c => c -> [Var]
-lambdaVars = map fst . filter (isLam . snd . snd) . M.toList . hermitBindings
+lambdaVars :: ReadBindings c => c -> S.Set Var
+lambdaVars = M.keysSet .  M.filter (isLam . snd) . hermitBindings
  where
    isLam LAM = True
    isLam _   = False
 
 -- | Extract just the lambda-bound variables in a HERMIT context
-lambdaVarsT :: (ReadBindings c, Applicative m) => Translate c m a [Var]
+lambdaVarsT :: (ReadBindings c, Applicative m) => Translate c m a (S.Set Var)
 lambdaVarsT = contextonlyT (pure . lambdaVars)
 
 {--------------------------------------------------------------------
@@ -187,7 +192,7 @@ reifyExpr =
          rVar  = do bvars <- lambdaVarsT
                     varT $
                       do v <- idR
-                         if v `elem` bvars then
+                         if S.member v bvars then
                            do (name,ty) <- mkVarName
                               return $ apps varId [ty] [name]
                           else
