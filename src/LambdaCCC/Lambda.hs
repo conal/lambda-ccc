@@ -116,6 +116,13 @@ type Env = [Bind]
 reifyE :: a -> E a
 reifyE = error "reifyE: Not implemented. I hoped all uses would disappear."
 
+{-# RULES
+
+"reify/eval" forall e. reifyE (evalE e) = e
+"eval/reify" forall x. evalE (reifyE x) = x
+
+  #-}
+
 -- We evaluate *closed* expressions (no free variables)
 instance Evalable (E a) where
   type ValT (E a) = a
