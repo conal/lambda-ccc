@@ -28,6 +28,7 @@ import Control.Applicative (Applicative(..))
 import Control.Monad ((<=<),liftM2)
 import Control.Arrow (arr,(>>>),(&&&))
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Text.Printf (printf)
 
 import qualified Language.Haskell.TH as TH
@@ -142,14 +143,14 @@ unfoldNames :: [TH.Name] -> RewriteH CoreExpr
 unfoldNames nms = catchesM (unfoldNameR <$> nms) -- >>> cleanupUnfoldR
 
 -- Just the lambda-bound variables in a HERMIT context
-lambdaVars :: ReadBindings c => c -> [Var]
-lambdaVars = map fst . filter (isLam . snd . snd) . M.toList . hermitBindings
+lambdaVars :: ReadBindings c => c -> S.Set Var
+lambdaVars = M.keysSet .  M.filter (isLam . snd) . hermitBindings
  where
    isLam LAM = True
    isLam _   = False
 
 -- | Extract just the lambda-bound variables in a HERMIT context
-lambdaVarsT :: (ReadBindings c, Applicative m) => Translate c m a [Var]
+lambdaVarsT :: (ReadBindings c, Applicative m) => Translate c m a (S.Set Var)
 lambdaVarsT = contextonlyT (pure . lambdaVars)
 
 {--------------------------------------------------------------------
@@ -187,7 +188,7 @@ reifyExpr =
          rVar  = do bvars <- lambdaVarsT
                     varT $
                       do v <- idR
-                         if v `elem` bvars then
+                         if S.member v bvars then
                            do (name,ty) <- mkVarName
                               return $ apps varId [ty] [name]
                           else
