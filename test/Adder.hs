@@ -5,11 +5,13 @@
 
 module Main where
 
-import Prelude hiding (and)
+import Prelude
 
 -- Needed for resolving names.
 -- TODO: Bug? Is there an alternative?
 import LambdaCCC.Lambda (E(..),var,lamv,reifyE,evalE)
+
+import LambdaCCC.Prim (xor)
 
 constPair :: (Bool,Bool)
 constPair = (True,False)
@@ -26,17 +28,17 @@ fst2 = fst
 fst3 :: (Bool,Int) -> Bool
 fst3 p = fst p
 
-bar :: (Bool,Bool) -> Bool
+bar :: Bool -> Bool -> Bool
 bar = xor
 
 foo :: (Bool,Bool) -> Bool
-foo p = xor p
+foo (a,b) = a `xor` b
 
 baz :: (Bool,Bool) -> (Bool,Bool) -> Bool
-baz p q = xor (xor p, xor q)
+baz p q = (fst p `xor` snd p) `xor` (fst q `xor` snd q) 
 
 halfAdd :: (Bool,Bool) -> (Bool,Bool)
-halfAdd p = (xor p, and p)
+halfAdd p = (fst p && snd p, fst p `xor` snd p)
 
 quux :: Bool -> (Bool,Bool)
 quux p = (p,True)
@@ -55,21 +57,18 @@ swapBS p = (snd p, fst p)
 -- which we're not yet handling.
 
 halfAdd' :: (Bool,Bool) -> (Bool,Bool)
-halfAdd' (a,b) = (xor (a,b), and (a,b))
+halfAdd' (a,b) = (a `xor` b, a && b)
 
-xor, and :: (Bool,Bool) -> Bool
+fiddle :: Int
+fiddle = length "Fiddle"
 
-xor (True,False) = True
-xor (False,True) = True
-xor _            = False
-
-and (True,True) = True
-and _           = False
-
--- fiddle :: Int
--- fiddle = length "Fiddle"
+-- WEIRD: sometimes when I comment out this fiddle definition, I get the dread
+-- "expectJust initTcInteractive" GHC panic.
 
 ------
 
 main :: IO ()
-main = print (swapBS (False,"Hello"))
+main = print t
+ where
+   -- t = swapBS (False,"Hello")
+   t = halfAdd (True,False)

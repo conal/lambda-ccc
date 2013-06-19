@@ -4,7 +4,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# OPTIONS_GHC -Wall #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -27,24 +27,26 @@ import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..))
 import Control.Monad ((<=<),liftM2)
 import Control.Arrow (arr,(>>>),(&&&))
+import qualified Data.Map as M
 import Text.Printf (printf)
 
 import qualified Language.Haskell.TH as TH
 
 import GhcPlugins hiding (mkStringExpr)
 
--- TODO: Pare down
-import Language.HERMIT.External
-import Language.HERMIT.Kure hiding (apply)
-import qualified Language.HERMIT.Kure as Kure
+import Language.HERMIT.Context
+  (ReadBindings,HermitBindingSite(LAM),hermitBindings)
 import Language.HERMIT.Core (Crumb(..))
+import Language.HERMIT.External
+import Language.HERMIT.GHC (uqName,var2String)
+import Language.HERMIT.Kure hiding (apply)
 import Language.HERMIT.Optimize
-import Language.HERMIT.Primitive.Navigation (rhsOf)
 import Language.HERMIT.Primitive.Common
 import Language.HERMIT.Primitive.Debug (observeR)
-import Language.HERMIT.GHC (uqName,var2String)
-import Language.HERMIT.Primitive.Unfold (unfoldNameR,cleanupUnfoldR)
 import Language.HERMIT.Primitive.GHC (rule)
+-- import Language.HERMIT.Primitive.Navigation (rhsOf)
+import Language.HERMIT.Primitive.Unfold (unfoldNameR,cleanupUnfoldR)
+import qualified Language.HERMIT.Kure as Kure
 
 import qualified LambdaCCC.Lambda as E
 import LambdaCCC.MkStringExpr (mkStringExpr)
@@ -56,7 +58,7 @@ import LambdaCCC.MkStringExpr (mkStringExpr)
 apps :: Id -> [Type] -> [CoreExpr] -> CoreExpr
 apps f ts es
   | tyArity f /= length ts =
-      error $ printf "apps: Id %s wants %d arguments but got %d."
+      error $ printf "apps: Id %s wants %d type arguments but got %d."
                      (var2String f) arity ntys
   | otherwise = mkCoreApps (varToCoreExpr f) (map Type ts ++ es)
  where
@@ -106,7 +108,6 @@ collectTypeArgs expr = go expr []
     go (App f (Type t)) ts = go f (t:ts)
     go e 	        ts = (e, ts)
 
-
 {--------------------------------------------------------------------
     HERMIT utilities
 --------------------------------------------------------------------}
@@ -134,13 +135,22 @@ appVTysT tv h = translate $ \c ->
                     (return ts)
          _ -> fail "not an application of a variable to types."
 
-
-
 rhsR :: RewriteH CoreExpr -> RewriteH Core
 rhsR r = prunetdR (promoteDefR (defAllR idR r) <+ promoteBindR (nonRecAllR idR r))
 
 unfoldNames :: [TH.Name] -> RewriteH CoreExpr
 unfoldNames nms = catchesM (unfoldNameR <$> nms) -- >>> cleanupUnfoldR
+
+-- Just the lambda-bound variables in a HERMIT context
+lambdaVars :: ReadBindings c => c -> [Var]
+lambdaVars = map fst . filter (isLam . snd . snd) . M.toList . hermitBindings
+ where
+   isLam LAM = True
+   isLam _   = False
+
+-- | Extract just the lambda-bound variables in a HERMIT context
+lambdaVarsT :: (ReadBindings c, Applicative m) => Translate c m a [Var]
+lambdaVarsT = contextonlyT (pure . lambdaVars)
 
 {--------------------------------------------------------------------
     Reification
@@ -157,22 +167,35 @@ observeR' | observing = observeR
 
 reifyExpr :: ReExpr
 reifyExpr =
-  do varId  <- findIdT 'E.var
-     appId  <- findIdT '(E.:^)
-     lamvId <- findIdT 'E.lamv
-     evalId <- findIdT 'E.evalE
+  do varId   <- findIdT 'E.var
+     appId   <- findIdT '(E.:^)
+     lamvId  <- findIdT 'E.lamv
+     evalId  <- findIdT 'E.evalE
+     reifyId <- findIdT 'E.reifyE
      let rew :: ReExpr
-         rew = tries [ ("AppT",rAppT), ("App",rApp)
-                     , ("LamT",rLamT), ("Lam",rLam)]
+         rew = tries [ ("Var",rVar)
+                     , ("Reify", rReify)
+                     , ("App",rApp)
+                     , ("LamT",rLamT), ("Lam",rLam)
+                     ]
           where
             tries :: [(String,ReExpr)] -> ReExpr
             tries = foldr (<+) (observeR' "Other" >>> fail "unhandled")
                   . map (uncurry try)
             try label = (>>> observeR' label)
-         rAppT, rApp, rLamT, rLam :: ReExpr
-         rAppT = do ty <- arr exprType
-                    appVTysT mkVarName $ \ (name,_) _ ->
-                      apps varId [ty] [name]
+         rVar, rApp, rLamT, rLam :: ReExpr
+         rVar  = do bvars <- lambdaVarsT
+                    varT $
+                      do v <- idR
+                         if v `elem` bvars then
+                           do (name,ty) <- mkVarName
+                              return $ apps varId [ty] [name]
+                          else
+                           fail "rVar: not a lambda-bound variable"
+                            -- return $ apps reifyId [varType v] [Var v]
+         -- Reify (non-lambda) variables and their polymorphic instantiations.
+         rReify = do e@(collectTypeArgs -> (Var _, _)) <- idR
+                     return $ apps reifyId [exprType e] [e]
          rApp  = do App (exprType -> funTy) _ <- idR
                     appT  rew rew $ arr $ \ u' v' ->
                       let (a,b) = splitFunTy funTy in
@@ -194,13 +217,13 @@ reifyExpr =
 mkVarName :: MonadThings m => Translate c m Var (CoreExpr,Type)
 mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType
 
-varToConst :: RewriteH Core
-varToConst = anybuR $ promoteExprR $ unfoldRules $ map ("var/" ++)
-               ["xor","and","fst","snd","pair"]
+reifyRules :: RewriteH Core
+reifyRules = anybuR $ promoteExprR $ unfoldRules $ map ("reify/" ++)
+               ["not","(&&)","(||)","xor","(+)","fst","snd","pair"]
 
 cleanupReifyR :: RewriteH Core
 cleanupReifyR =
-      tryR varToConst
+      tryR reifyRules
   >>> (tryR $ anybuR $ promoteExprR $ unfoldNames ['E.var,'E.lamv])
   >>> (tryR $ anybuR $ promoteExprR $ cleanupUnfoldR)
 
@@ -208,6 +231,8 @@ cleanupReifyR =
 -- don't get cleanup after lamv unfolding.
 
 --   >>> anybuR (promoteExprR (unfoldNames ['E.var,'E.lamv] >>> cleanupUnfoldR))
+
+-- I think I could remove cleanupReifyR and rely on GHC, but I'm unsure.
 
 reifyDef :: RewriteH Core
 reifyDef = rhsR reifyExpr
@@ -230,7 +255,7 @@ externals :: [External]
 externals =
     [ external "reify-expr" (promoteExprR reifyExpr)
         [ "Reify a Core expression into a GADT construction" ]
-    , external "var-to-const" varToConst
+    , external "reify-rules" reifyRules
         [ "convert some non-local vars to consts" ]
     , external "cleanup-reify" cleanupReifyR
         [ "convert some non-local vars to consts" ]

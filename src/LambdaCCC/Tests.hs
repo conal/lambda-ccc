@@ -23,6 +23,45 @@ import LambdaCCC.Ty (Ty(..))
 import LambdaCCC.Lambda
 import LambdaCCC.ToCCC
 
+{--------------------------------------------------------------------
+    Convenient notation for expression building
+--------------------------------------------------------------------}
+
+-- TODO: Maybe eliminate this notation or move it elsewhere, since we're mainly
+-- translating automatically rather than hand-coding. I'm using this vocabulary
+-- for tests.
+
+infixr 1 #
+(#) :: E a -> E b -> E (a :* b)
+-- (Const Fst :^ p) # (Const Snd :^ p') | ... = ...
+-- a # b = a :# b
+a # b = Const PairP :^ a :^ b
+
+notE :: Unop (E Bool)
+notE b = Const NotP :^ b
+
+infixr 2 ||*, `xorE`
+infixr 3 &&*
+
+binop :: Prim (a -> b -> c) -> E a -> E b -> E c
+binop op a b = Const op :^ a :^ b
+
+(&&*), (||*), xorE :: Binop (E Bool)
+(&&*) = binop AndP
+(||*) = binop OrP
+xorE  = binop XorP
+
+infixl 6 +@
+(+@) :: Num a => Binop (E a)
+(+@) = binop AddP
+
+-- TODO: Use Num and Boolean classes
+
+
+{--------------------------------------------------------------------
+    Examples
+--------------------------------------------------------------------}
+
 va,vb,vc :: E Int
 va = var "a"
 vb = var "b"
@@ -77,7 +116,7 @@ e8 = Lam p (b # a) where (p,(a,b)) = vars2 ("a","b")
 
 -- Half adder: \ (a,b) -> (a `xor` b, a && b)
 e9 :: Bool :* Bool :+> Bool :* Bool
-e9 = Lam p ((a `xor` b) # (a &&* b))   -- half-adder
+e9 = Lam p ((a `xorE` b) # (a &&* b))   -- half-adder
  where
    (p,(a,b)) = vars2 ("a","b")
 

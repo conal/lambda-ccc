@@ -25,7 +25,7 @@ module LambdaCCC.Lambda
   , V, Pat(..), E(..)
   , var, lamv
   , reifyE, evalE
-  , (#), notE, (||*), (&&*), xor, (+@)
+  -- , (#), notE, (||*), (&&*), xor, (+@)
   , vars, vars2
   ) where
 
@@ -89,7 +89,7 @@ instance Show (E a) where
 --   showsPrec p (Const prim :^ (u :# v)) | Just (OpInfo op fixity) <- opInfo prim =
 --     showsOp2' op fixity p u v
   showsPrec p (Const PairP :^ u :^ v) = showsPair p u v
-  showsPrec p (Const prim :^ (Const PairP :^ u :^ v)) | Just (OpInfo op fixity) <- opInfo prim =
+  showsPrec p (Const prim :^ u :^ v) | Just (OpInfo op fixity) <- opInfo prim =
     showsOp2' op fixity p u v
 #endif
   showsPrec _ (Var v)   = (v ++)
@@ -107,41 +107,6 @@ opInfo AndP = Just $ OpInfo "&&&"   (3,AssocRight)
 opInfo OrP  = Just $ OpInfo "|||"   (2,AssocRight)
 opInfo XorP = Just $ OpInfo "`xor`" (2,AssocRight)
 opInfo _   = Nothing
-
-
-{--------------------------------------------------------------------
-    Convenient notation for expression building
---------------------------------------------------------------------}
-
--- TODO: Maybe eliminate this notation or move it elsewhere, since we're mainly
--- translating automatically rather than hand-coding. I'm using this vocabulary
--- for tests.
-
-infixr 1 #
-(#) :: E a -> E b -> E (a :* b)
--- (Const Fst :^ p) # (Const Snd :^ p') | ... = ...
--- a # b = a :# b
-a # b = Const PairP :^ a :^ b
-
-notE :: Unop (E Bool)
-notE b = Const NotP :^ b
-
-infixr 2 ||*, `xor`
-infixr 3 &&*
-
-binop :: Prim (a :* b :=> c) -> E a -> E b -> E c
-binop op a b = Const op :^ (a # b)
-
-(&&*), (||*), xor :: Binop (E Bool)
-(&&*) = binop AndP
-(||*) = binop OrP
-xor   = binop XorP
-
-infixl 6 +@
-(+@) :: Num a => Binop (E a)
-(+@) = binop AddP
-
--- TODO: Use Num and Boolean classes
 
 -- | Single variable binding
 data Bind = forall a. Bind Name a
@@ -207,12 +172,14 @@ vars2 (na,nb) = (PairPat ap bp, (ae,be))
 --------------------------------------------------------------------}
 
 {-# RULES
-
-"var/xor"  var "xor" = Const XorP
-"var/and"  var "and" = Const AndP
-"var/fst"  var "fst" = Const FstP
-"var/snd"  var "snd" = Const SndP
--- "var/pair" forall a b. var "(,)" :^ a :^ b = a :# b
-"var/pair" var "(,)" = Const PairP
-
+ 
+"reify/not"  reifyE not  = Const NotP
+"reify/(&&)" reifyE (&&) = Const AndP
+"reify/(||)" reifyE (||) = Const OrP
+"reify/xor"  reifyE xor  = Const XorP
+"reify/(+)"  reifyE (+)  = Const AddP
+"reify/fst"  reifyE fst  = Const FstP
+"reify/snd"  reifyE snd  = Const SndP
+"reify/pair" reifyE (,)  = Const PairP
+ 
   #-}

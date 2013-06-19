@@ -16,26 +16,26 @@
 -- Primitives
 ----------------------------------------------------------------------
 
-module LambdaCCC.Prim (Prim(..)) where
+module LambdaCCC.Prim (Prim(..),xor) where
 
 import LambdaCCC.Misc
 
 -- | Primitives
 data Prim :: * -> * where
-  LitP        :: Show a => a -> Prim a
-  NotP        :: Prim (Bool -> Bool)
-  AndP,OrP,XorP :: Prim (Bool :* Bool -> Bool)
-  AddP        :: Num  a => Prim (a :* a -> a)
-  FstP        :: Prim (a :* b -> a)
-  SndP        :: Prim (a :* b -> b)
-  PairP       :: Prim (a -> b -> a :* b)
+  LitP          :: Show a => a -> Prim a
+  NotP          :: Prim (Bool -> Bool)
+  AndP,OrP,XorP :: Prim (Bool -> Bool -> Bool)
+  AddP          :: Num  a => Prim (a -> a -> a)
+  FstP          :: Prim (a :* b -> a)
+  SndP          :: Prim (a :* b -> b)
+  PairP         :: Prim (a -> b -> a :* b)
   -- More here
 
 instance Show (Prim a) where
   showsPrec p (LitP a) = showsPrec p a
   showsPrec _ NotP     = showString "not"
-  showsPrec _ AndP     = showString "and"
-  showsPrec _ OrP      = showString "or"
+  showsPrec _ AndP     = showString "(&&)"
+  showsPrec _ OrP      = showString "(||)"
   showsPrec _ XorP     = showString "xor"
   showsPrec _ AddP     = showString "add"
   showsPrec _ FstP     = showString "fst"
@@ -46,10 +46,17 @@ instance Evalable (Prim a) where
   type ValT (Prim a) = a
   eval (LitP x) = x
   eval NotP     = not
-  eval AndP     = uncurry (&&)
-  eval OrP      = uncurry (||)
-  eval XorP     = uncurry (/=)
-  eval AddP     = uncurry (+)
+  eval AndP     = (&&)
+  eval OrP      = (||)
+  eval XorP     = (/=)
+  eval AddP     = (+)
   eval FstP     = fst
   eval SndP     = snd
   eval PairP    = (,)
+
+infixr 3 `xor`
+
+xor :: Binop Bool
+xor = (/=)
+
+-- TODO: Replace xor with (/=)
