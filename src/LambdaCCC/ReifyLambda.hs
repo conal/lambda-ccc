@@ -215,10 +215,6 @@ reifyExpr =
         let mkEval e' = apps evalId [ty] [e']
         mkEval <$> rew
 
-
--- TODO: Remove pairing recognition (and supporting code), and instead use the
--- rewrite in Lambda.
-
 mkVarName :: MonadThings m => Translate c m Var (CoreExpr,Type)
 mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType
 
