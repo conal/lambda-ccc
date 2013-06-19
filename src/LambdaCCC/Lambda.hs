@@ -32,6 +32,7 @@ module LambdaCCC.Lambda
 import Control.Arrow ((&&&))
 import Data.Maybe (fromMaybe)
 import Unsafe.Coerce (unsafeCoerce)  -- for eval (unnecessary)
+import Debug.Trace (trace)
 
 import LambdaCCC.Misc
 import LambdaCCC.ShowUtils
@@ -156,7 +157,8 @@ instance Evalable (E a) where
   eval = evalE
 
 evalE :: E a -> a
-evalE e = eval' e []  -- provide empty environment
+evalE e = trace ("evalE: " ++ show e) $
+          eval' e []  -- provide empty environment
 
 -- TODO: Rework so that eval' can work independently of env. Will save repeated
 -- evals.

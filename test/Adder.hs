@@ -3,7 +3,10 @@
 
 {-# OPTIONS_GHC -Wall -fno-warn-unused-imports #-}
 
-module Main where
+-- module Main where
+module Adder where
+
+-- Odd: with module Main, the Adder.hss script doesn't get processed.
 
 import Prelude hiding (and)
 

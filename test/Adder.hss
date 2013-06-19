@@ -7,5 +7,7 @@
 -- set-pp ast
 -- set-pp ghc
 
+-- crash!
+
 consider 'swapBS
 reify-def-cleanup
