@@ -151,15 +151,15 @@ konst not
 > toCCC e4
 curry snd
 > toCCC e5
-curry (prim add . (snd &&& snd))
+curry (apply . (prim add . snd &&& snd))
 > toCCC e6
 curry (snd &&& snd)
 > toCCC e7
-curry (prim not . prim and . (prim not . fst . snd &&& prim not . snd . snd))
+curry (prim not . apply . (prim (&&) . prim not . fst . snd &&& prim not . snd . snd))
 > toCCC e8
 curry (snd . snd &&& fst . snd)
 > toCCC e9
-curry (prim xor . (fst . snd &&& snd . snd) &&& prim and . (fst . snd &&& snd . snd))
+curry (apply . (prim xor . fst . snd &&& snd . snd) &&& apply . (prim (&&) . fst . snd &&& snd . snd))
 
 -}
 
@@ -169,30 +169,30 @@ Without Simplify and without ShowFolded:
 
 > apply . (konst not &&& id)
 > id
-> apply . (konst add &&& id &&& id)
+> apply . (apply . (konst add &&& id) &&& id)
 > id &&& id
-> apply . (konst not &&& apply . (konst and &&& apply . (konst not &&& id . fst) &&& apply . (konst not &&& id . snd)))
+> apply . (konst not &&& apply . (apply . (konst (&&) &&& apply . (konst not &&& id . fst)) &&& apply . (konst not &&& id . snd)))
 > id . snd &&& id . fst
-> apply . (konst xor &&& id . fst &&& id . snd) &&& apply . (konst and &&& id . fst &&& id . snd)
+> apply . (apply . (konst xor &&& id . fst) &&& id . snd) &&& apply . (apply . (konst (&&) &&& id . fst) &&& id . snd)
 
 With Simplify:
 
 > prim not
 > id
-> prim add . (id &&& id)
+> apply . (prim add &&& id)
 > id &&& id
-> prim not . prim and . (prim not . fst &&& prim not . snd)
+> prim not . apply . (prim (&&) . prim not . fst &&& prim not . snd)
 > snd &&& fst
-> prim xor &&& prim and
+> apply . (prim xor . fst &&& snd) &&& apply . (prim (&&) . fst &&& snd)
 
 With Simplify and ShowFolded:
 
 > prim not
 > id
-> prim add . dup
+> apply . (prim add &&& id)
 > dup
-> prim not . prim and . (prim not *** prim not)
+> prim not . apply . (prim (&&) . prim not . fst &&& prim not . snd)
 > swapP
-> prim xor &&& prim and
+> apply . first (prim xor) &&& apply . first (prim (&&))
 
 -}
