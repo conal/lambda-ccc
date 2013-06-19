@@ -149,7 +149,7 @@ data Bind = forall a. Bind Name a
 type Env = [Bind]
 
 reifyE :: a -> E a
-reifyE = error "reifyE: Not implemented. I hoped the uses would all disappear."
+reifyE = error "reifyE: Not implemented. I hoped all uses would disappear."
 
 -- We evaluate *closed* expressions (no free variables)
 instance Evalable (E a) where
@@ -213,6 +213,6 @@ vars2 (na,nb) = (PairPat ap bp, (ae,be))
 "var/fst"  var "fst" = Const FstP
 "var/snd"  var "snd" = Const SndP
 -- "var/pair" forall a b. var "(,)" :^ a :^ b = a :# b
-"var/pair"  var "(,)" = Const PairP
+"var/pair" var "(,)" = Const PairP
 
   #-}
