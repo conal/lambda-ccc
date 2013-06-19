@@ -128,13 +128,17 @@ pairT tu tv f = translate $ \ c ->
          _         -> fail "not a pair node."
 
 -- | Translate an n-ary type-instantiation of a variable, where n >= 0.
-appVTysT :: Monad m =>
+appVTysT :: (ExtendPath c Crumb, Monad m) =>
             Translate c m Var a -> (a -> [Type] -> b) -> Translate c m CoreExpr b
 appVTysT tv h = translate $ \c ->
   \ case (collectTypeArgs -> (Var v, ts)) ->
-           liftM2 h (Kure.apply tv c v)      -- TODO: Crumbs
+           liftM2 h (Kure.apply tv (applyN (length ts) (@@ App_Fun) c) v)
                     (return ts)
          _ -> fail "not an application of a variable to types."
+  where
+    applyN :: Int -> (a -> a) -> a -> a
+    applyN n f a = foldr ($) a (replicate n f)
+
 
 rhsR :: RewriteH CoreExpr -> RewriteH Core
 rhsR r = prunetdR (promoteDefR (defAllR idR r) <+ promoteBindR (nonRecAllR idR r))
