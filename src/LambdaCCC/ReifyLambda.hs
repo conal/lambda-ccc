@@ -258,16 +258,16 @@ plugin = optimize (phase 0 . interactive externals)
 
 externals :: [External]
 externals =
-    [ external "reify-expr" (promoteExprR reifyExpr)
+    [ external "reify-expr" (promoteExprR reifyExpr :: RewriteH Core)
         [ "Reify a Core expression into a GADT construction" ]
-    , external "reify-rules" reifyRules
+    , external "reify-rules" (reifyRules :: RewriteH Core)
         [ "convert some non-local vars to consts" ]
-    , external "cleanup-reify" cleanupReifyR
+    , external "cleanup-reify" (cleanupReifyR :: RewriteH Core)
         [ "convert some non-local vars to consts" ]
-    , external "reify-def" reifyDef
+    , external "reify-def" (reifyDef :: RewriteH Core)
         [ "reify for definitions" ]
-    , external "reify-expr-cleanup" (promoteExprR reifyExpr >>> cleanupReifyR)
+    , external "reify-expr-cleanup" (promoteExprR reifyExpr >>> cleanupReifyR :: RewriteH Core)
         [ "reify-core and cleanup for expressions" ]
-    , external "reify-def-cleanup" (reifyDef >>> cleanupReifyR)
+    , external "reify-def-cleanup" (reifyDef >>> cleanupReifyR :: RewriteH Core)
         [ "reify-core and cleanup for definitions" ]
     ]

@@ -26,11 +26,11 @@ cmds :: [External]
 cmds =
     Reify.externals ++
     LC.externals ++
-    [ external "convert" (promoteExprR (convert UnitP))
+    [ external "convert" (promoteExprR (convert UnitP) :: RewriteH Core)
         [ "top level lambda->CCC transformation" ]
-    , external "convert-lam" (promoteExprR (convertLam UnitP))
+    , external "convert-lam" (promoteExprR (convertLam UnitP) :: RewriteH Core)
         [ "[| \\ x -> e |](k) ==> Curry [| e |]((k,x))" ]
-    , external "convert-app" (promoteExprR (convertApp UnitP))
+    , external "convert-app" (promoteExprR (convertApp UnitP) :: RewriteH Core)
         [ "[| u v |](k) ==> Apply :. [| (u,v) |](k)" ]
     ]
 
