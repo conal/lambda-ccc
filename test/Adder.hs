@@ -3,7 +3,7 @@
 
 {-# OPTIONS_GHC -Wall -fno-warn-unused-imports #-}
 
-module Adder where
+module Main where
 
 import Prelude hiding (and)
 
@@ -44,13 +44,12 @@ quux p = (p,True)
 p1 :: Bool -> (Bool,Bool)
 p1 a = (a,not a)
 
--- Polymorphic example
-
+-- Polymorphic
 swap :: (s,t) -> (t,s)
 swap p = (snd p, fst p)
 
--- Or
--- swap :: (Int,Bool) -> (Bool,Int)
+swapBS :: (Bool,String) -> (String,Bool)
+swapBS p = (snd p, fst p)
 
 -- The rest don't yet transform successfully. They become 'case' expressions,
 -- which we're not yet handling.
@@ -67,9 +66,10 @@ xor _            = False
 and (True,True) = True
 and _           = False
 
-fiddle :: Int
-fiddle = length "Fiddle"
+-- fiddle :: Int
+-- fiddle = length "Fiddle"
 
-{-# RULES
--- "fiddle" length "Fiddle" = length "Faddle"
-  #-}
+------
+
+main :: IO ()
+main = print (swapBS (False,"Hello"))
