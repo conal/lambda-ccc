@@ -1,4 +1,4 @@
--- hermit Adder.hs -opt=LambdaCCC.ReifyLambdaPh +Adder Adder.hss
+-- hermit Adder.hs -opt=LambdaCCC.ReifyLambdaPh +Main Adder.hss
 
 -- set-auto-corelint True
 -- set-pp-coercion Show
@@ -7,7 +7,6 @@
 -- set-pp ast
 -- set-pp ghc
 
--- crash!
-
 consider 'swapBS
 reify-def-cleanup
+resume
