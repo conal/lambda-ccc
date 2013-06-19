@@ -1,36 +1,11 @@
 -- hermit Adder.hs -opt=LambdaCCC.ReifyLambdaPh +Adder Adder.hss
 
-set-pp-coercion Show
+-- set-auto-corelint True
+-- set-pp-coercion Show
 -- set-pp-type Show
--- Pretty-printing alternatives
+-- -- Pretty-printing alternatives
 -- set-pp ast
 -- set-pp ghc
 
--- set-auto-corelint True
-
--- consider 'fst2
--- reify-def
-
--- {
-
--- {
--- consider 'halfAdd
--- lambda-to-ccc-simplify
--- -- Or: lambda-to-ccc ; ccc-simplify
--- }
-
--- consider 'baz
--- lambda-to-ccc
--- ccc-simplify
-
--- consider 'halfAdd
--- reify-def-cleanup
-
--- reify-core
--- try var-to-const
--- any-bu (unfold 'var <+ unfold 'lamv <+ cleanup-unfold)
-
--- rhs-of 'fiddle
-
--- }
--- resume
+consider 'baz
+reify-def-cleanup

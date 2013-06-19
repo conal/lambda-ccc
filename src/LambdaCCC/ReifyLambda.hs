@@ -170,21 +170,21 @@ reifyExpr =
                   . map (uncurry try)
             try label = (>>> observeR' label)
          rAppT, rApp, rLamT, rLam :: ReExpr
-         rAppT = do e <- idR            -- TODO: ty <- arr exprType
+         rAppT = do ty <- arr exprType
                     appVTysT mkVarName $ \ (name,_) _ ->
-                      apps varId [exprType e] [name]
-         rApp  = do App u _ <- idR
+                      apps varId [ty] [name]
+         rApp  = do App (exprType -> funTy) _ <- idR
                     appT  rew rew $ arr $ \ u' v' ->
-                      let (a,b) = splitFunTy (exprType u) in
+                      let (a,b) = splitFunTy funTy in
                         apps appId [b,a] [u', v'] -- note b,a
          rLamT = do Lam (isTyVar -> True) _ <- idR
                     lamT idR rew (arr Lam)
-         rLam  = do Lam _ e <- idR
+         rLam  = do Lam _ (exprType -> bodyTy) <- idR
                     lamT mkVarName rew $ arr $ \ (name,ty) e' ->
-                      apps lamvId [ty, exprType e] [name,e']
+                      apps lamvId [ty, bodyTy] [name,e']
          -- TODO: Literals
-     do e <- idR
-        let mkEval e' = apps evalId [exprType e] [e']
+     do ty <- arr exprType
+        let mkEval e' = apps evalId [ty] [e']
         mkEval <$> rew
 
 
