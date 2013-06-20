@@ -153,6 +153,10 @@ lambdaVars = M.keysSet .  M.filter (isLam . snd) . hermitBindings
    isLam LAM = True
    isLam _   = False
 
+-- TODO: Maybe return a predicate instead of a set. More abstract, and allows
+-- for efficient construction. Here, we'd probably want to use the underlying
+-- map to implement the returned predicate.
+
 -- | Extract just the lambda-bound variables in a HERMIT context
 lambdaVarsT :: (ReadBindings c, Applicative m) => Translate c m a (S.Set Var)
 lambdaVarsT = contextonlyT (pure . lambdaVars)
