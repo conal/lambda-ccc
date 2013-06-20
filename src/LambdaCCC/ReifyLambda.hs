@@ -123,9 +123,9 @@ pathIn :: (Eq crumb, ReadPath c crumb, MonadCatch m, Walker c b) =>
 pathIn mkP f = mkP >>= flip pathR f
 
 -- | Transformation while focused on a snoc path
-spathIn :: (Eq crumb, Functor m, ReadPath c crumb, MonadCatch m, Walker c b) =>
-           Translate c m b (SnocPath crumb) -> Unop (Rewrite c m b)
-spathIn mkP = pathIn (snocPathToPath <$> mkP)
+snocPathIn :: (Eq crumb, Functor m, ReadPath c crumb, MonadCatch m, Walker c b) =>
+              Translate c m b (SnocPath crumb) -> Unop (Rewrite c m b)
+snocPathIn mkP = pathIn (snocPathToPath <$> mkP)
 
 {--------------------------------------------------------------------
     HERMIT utilities
@@ -253,12 +253,12 @@ reifyDef :: RewriteH Core
 reifyDef = rhsR reifyExpr
 
 reifyNamed :: TH.Name -> RewriteH Core
-reifyNamed nm = spathIn (rhsOf nm)
+reifyNamed nm = snocPathIn (rhsOf nm)
                   (    promoteExprR reifyExpr
                   >>> reifyRules
                   >>> pathR [App_Arg] (promoteExprR (letIntro nm'))
                   >>> promoteExprR letFloatArg )
-            >>> spathIn (parentOf (bindingGroupOf nm))
+            >>> snocPathIn (parentOf (bindingGroupOf nm))
                   (promoteProgR letFloatLetTop)
  where
    nm' = TH.mkName (TH.showName nm ++ "_reified")
