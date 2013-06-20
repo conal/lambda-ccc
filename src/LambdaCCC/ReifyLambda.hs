@@ -123,7 +123,8 @@ pathIn :: (Eq crumb, ReadPath c crumb, MonadCatch m, Walker c b) =>
 pathIn mkP f = mkP >>= flip pathR f
 
 -- | Transformation while focused on a snoc path
-snocPathIn :: (Eq crumb, Functor m, ReadPath c crumb, MonadCatch m, Walker c b) =>
+snocPathIn :: ( Eq crumb, Functor m, ReadPath c crumb
+              , MonadCatch m, Walker c b ) =>
               Translate c m b (SnocPath crumb) -> Unop (Rewrite c m b)
 snocPathIn mkP = pathIn (snocPathToPath <$> mkP)
 
@@ -159,7 +160,8 @@ appVTysT tv h = translate $ \c ->
 
 
 defR :: RewriteH Id -> RewriteH CoreExpr -> RewriteH Core
-defR rewI rewE = prunetdR (promoteDefR (defAllR rewI rewE) <+ promoteBindR (nonRecAllR rewI rewE))
+defR rewI rewE = prunetdR (  promoteDefR (defAllR rewI rewE)
+                          <+ promoteBindR (nonRecAllR rewI rewE) )
 
 rhsR :: RewriteH CoreExpr -> RewriteH Core
 rhsR = defR idR
@@ -272,16 +274,22 @@ plugin = optimize (phase 0 . interactive externals)
 
 externals :: [External]
 externals =
-    [ external "reify-expr" (promoteExprR reifyExpr :: RewriteH Core)
-        [ "Reify a Core expression into a GADT construction" ]
-    , external "reify-rules" (reifyRules :: RewriteH Core)
-        [ "convert some non-local vars to consts" ]
-    , external "reify-def" (reifyDef :: RewriteH Core)
-        [ "reify for definitions" ]
-    , external "reify-expr-cleanup" (promoteExprR reifyExpr >>> reifyRules :: RewriteH Core)
-        [ "reify-core and cleanup for expressions" ]
-    , external "reify-def-cleanup" (reifyDef >>> reifyRules :: RewriteH Core)
-        [ "reify-core and cleanup for definitions" ]
-    , external "reify-named" (reifyNamed :: TH.Name -> RewriteH Core)
-        [ "reify via name" ]
+    [ external "reify-expr"
+        (promoteExprR reifyExpr :: RewriteH Core)
+        ["Reify a Core expression into a GADT construction"]
+    , external "reify-rules"
+        (reifyRules :: RewriteH Core)
+        ["convert some non-local vars to consts"]
+    , external "reify-def"
+        (reifyDef :: RewriteH Core)
+        ["reify for definitions"]
+    , external "reify-expr-cleanup"
+        (promoteExprR reifyExpr >>> reifyRules :: RewriteH Core)
+        ["reify-core and cleanup for expressions"]
+    , external "reify-def-cleanup"
+        (reifyDef >>> reifyRules :: RewriteH Core)
+        ["reify-core and cleanup for definitions"]
+    , external "reify-named"
+        (reifyNamed :: TH.Name -> RewriteH Core)
+        ["reify via name"]
     ]
