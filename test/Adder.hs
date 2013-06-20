@@ -32,7 +32,7 @@ bar :: Bool -> Bool -> Bool
 bar = xor
 
 foo :: (Bool,Bool) -> Bool
-foo (a,b) = a `xor` b
+foo p = fst p `xor` snd p
 
 baz :: (Bool,Bool) -> (Bool,Bool) -> Bool
 baz p q = (fst p `xor` snd p) `xor` (fst q `xor` snd q) 
