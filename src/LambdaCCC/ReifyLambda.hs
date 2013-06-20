@@ -256,12 +256,12 @@ reifyNamed :: TH.Name -> RewriteH Core
 reifyNamed nm = spathIn (rhsOf nm)
                   (    promoteExprR reifyExpr
                   >>> reifyRules
-                  >>> pathR [App_Arg] (promoteExprR (letIntro reifiedName))
+                  >>> pathR [App_Arg] (promoteExprR (letIntro nm'))
                   >>> promoteExprR letFloatArg )
             >>> spathIn (parentOf (bindingGroupOf nm))
                   (promoteProgR letFloatLetTop)
  where
-   reifiedName = TH.mkName (TH.showName nm ++ "_reified")
+   nm' = TH.mkName (TH.showName nm ++ "_reified")
 
 {--------------------------------------------------------------------
     Plugin
