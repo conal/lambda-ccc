@@ -247,6 +247,8 @@ reifyRules :: RewriteH Core
 reifyRules = tryR $ anybuR $ promoteExprR $ unfoldRules $ map ("reify/" ++)
                ["not","(&&)","(||)","xor","(+)","fst","snd","pair"]
 
+-- TODO: Is there a way not to redundantly specify this rule list?
+
 reifyDef :: RewriteH Core
 reifyDef = rhsR reifyExpr
 
