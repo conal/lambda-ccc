@@ -140,8 +140,11 @@ appVTysT tv h = translate $ \c ->
     applyN n f a = foldr ($) a (replicate n f)
 
 
+defR :: RewriteH Id -> RewriteH CoreExpr -> RewriteH Core
+defR rewI rewE = prunetdR (promoteDefR (defAllR rewI rewE) <+ promoteBindR (nonRecAllR rewI rewE))
+
 rhsR :: RewriteH CoreExpr -> RewriteH Core
-rhsR r = prunetdR (promoteDefR (defAllR idR r) <+ promoteBindR (nonRecAllR idR r))
+rhsR = defR idR
 
 unfoldNames :: [TH.Name] -> RewriteH CoreExpr
 unfoldNames nms = catchesM (unfoldNameR <$> nms) -- >>> cleanupUnfoldR
@@ -248,6 +251,19 @@ reifyDef = rhsR reifyExpr
 -- reifyDefPlus :: RewriteH Core
 -- reifyDefPlus = reifyDef >>> cleanupReifyR
 
+
+-- rhs-of 'swapBS
+-- reify-expr
+-- reify-rules
+-- { app-arg ; let-intro 'swapBSreified }
+-- let-float-arg
+-- up
+-- up
+-- let-float-top
+
+-- reifyNamed :: TH.Name -> RewriteH Core
+-- reifyNamed =
+--   do rhsOf 
 
 {--------------------------------------------------------------------
     Plugin
