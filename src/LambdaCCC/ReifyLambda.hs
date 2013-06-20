@@ -31,7 +31,8 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Text.Printf (printf)
 
-import qualified Language.Haskell.TH as TH
+import qualified Language.Haskell.TH as TH (Name,mkName)
+import qualified Language.Haskell.TH.Syntax as TH (showName)
 
 import GhcPlugins hiding (mkStringExpr)
 
@@ -45,10 +46,13 @@ import Language.HERMIT.Optimize
 import Language.HERMIT.Primitive.Common
 import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.Primitive.GHC (rule)
--- import Language.HERMIT.Primitive.Navigation (rhsOf)
+import Language.HERMIT.Primitive.Local (letIntro,letFloatArg,letFloatLetTop)
+import Language.HERMIT.Primitive.Navigation (rhsOf,parentOf,bindingGroupOf)
 import Language.HERMIT.Primitive.Unfold (unfoldNameR,cleanupUnfoldR)
+
 import qualified Language.HERMIT.Kure as Kure
 
+import LambdaCCC.Misc (Unop)
 import qualified LambdaCCC.Lambda as E
 import LambdaCCC.MkStringExpr (mkStringExpr)
 
@@ -108,6 +112,20 @@ collectTypeArgs expr = go expr []
   where
     go (App f (Type t)) ts = go f (t:ts)
     go e 	        ts = (e, ts)
+
+{--------------------------------------------------------------------
+    KURE utilities
+--------------------------------------------------------------------}
+
+-- | Transformation while focused on a path
+pathIn :: (Eq crumb, ReadPath c crumb, MonadCatch m, Walker c b) =>
+          Translate c m b (Path crumb) -> Unop (Rewrite c m b)
+pathIn mkP f = mkP >>= flip pathR f
+
+-- | Transformation while focused on a snoc path
+spathIn :: (Eq crumb, Functor m, ReadPath c crumb, MonadCatch m, Walker c b) =>
+           Translate c m b (SnocPath crumb) -> Unop (Rewrite c m b)
+spathIn mkP = pathIn (snocPathToPath <$> mkP)
 
 {--------------------------------------------------------------------
     HERMIT utilities
@@ -226,7 +244,7 @@ mkVarName :: MonadThings m => Translate c m Var (CoreExpr,Type)
 mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType
 
 reifyRules :: RewriteH Core
-reifyRules = anybuR $ promoteExprR $ unfoldRules $ map ("reify/" ++)
+reifyRules = tryR $ anybuR $ promoteExprR $ unfoldRules $ map ("reify/" ++)
                ["not","(&&)","(||)","xor","(+)","fst","snd","pair"]
 
 cleanupReifyR :: RewriteH Core
@@ -245,25 +263,16 @@ cleanupReifyR =
 reifyDef :: RewriteH Core
 reifyDef = rhsR reifyExpr
 
--- reifyExprPlus :: RewriteH Core
--- reifyExprPlus = promoteExprR reifyExpr >>> cleanupReifyR
-
--- reifyDefPlus :: RewriteH Core
--- reifyDefPlus = reifyDef >>> cleanupReifyR
-
-
--- rhs-of 'swapBS
--- reify-expr
--- reify-rules
--- { app-arg ; let-intro 'swapBSreified }
--- let-float-arg
--- up
--- up
--- let-float-top
-
--- reifyNamed :: TH.Name -> RewriteH Core
--- reifyNamed =
---   do rhsOf 
+reifyNamed :: TH.Name -> RewriteH Core
+reifyNamed nm = spathIn (rhsOf nm)
+                  (    promoteExprR reifyExpr
+                  >>> reifyRules
+                  >>> pathR [App_Arg] (promoteExprR (letIntro reifiedName))
+                  >>> promoteExprR letFloatArg )
+            >>> spathIn (parentOf (bindingGroupOf nm))
+                  (promoteProgR letFloatLetTop)
+ where
+   reifiedName = TH.mkName (TH.showName nm ++ "_reified")
 
 {--------------------------------------------------------------------
     Plugin
@@ -286,4 +295,6 @@ externals =
         [ "reify-core and cleanup for expressions" ]
     , external "reify-def-cleanup" (reifyDef >>> cleanupReifyR :: RewriteH Core)
         [ "reify-core and cleanup for definitions" ]
+    , external "reify-named" (reifyNamed :: TH.Name -> RewriteH Core)
+        [ "reify via name" ]
     ]
