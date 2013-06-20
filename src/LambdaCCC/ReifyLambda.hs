@@ -247,19 +247,6 @@ reifyRules :: RewriteH Core
 reifyRules = tryR $ anybuR $ promoteExprR $ unfoldRules $ map ("reify/" ++)
                ["not","(&&)","(||)","xor","(+)","fst","snd","pair"]
 
-cleanupReifyR :: RewriteH Core
-cleanupReifyR =
-      tryR reifyRules
-  >>> (tryR $ anybuR $ promoteExprR $ unfoldNames ['E.var,'E.lamv])
-  >>> (tryR $ anybuR $ promoteExprR $ cleanupUnfoldR)
-
--- I thought the following line would be equivalent to the previous two, but I
--- don't get cleanup after lamv unfolding.
-
---   >>> anybuR (promoteExprR (unfoldNames ['E.var,'E.lamv] >>> cleanupUnfoldR))
-
--- I think I could remove cleanupReifyR and rely on GHC, but I'm unsure.
-
 reifyDef :: RewriteH Core
 reifyDef = rhsR reifyExpr
 
@@ -287,13 +274,11 @@ externals =
         [ "Reify a Core expression into a GADT construction" ]
     , external "reify-rules" (reifyRules :: RewriteH Core)
         [ "convert some non-local vars to consts" ]
-    , external "cleanup-reify" (cleanupReifyR :: RewriteH Core)
-        [ "convert some non-local vars to consts" ]
     , external "reify-def" (reifyDef :: RewriteH Core)
         [ "reify for definitions" ]
-    , external "reify-expr-cleanup" (promoteExprR reifyExpr >>> cleanupReifyR :: RewriteH Core)
+    , external "reify-expr-cleanup" (promoteExprR reifyExpr >>> reifyRules :: RewriteH Core)
         [ "reify-core and cleanup for expressions" ]
-    , external "reify-def-cleanup" (reifyDef >>> cleanupReifyR :: RewriteH Core)
+    , external "reify-def-cleanup" (reifyDef >>> reifyRules :: RewriteH Core)
         [ "reify-core and cleanup for definitions" ]
     , external "reify-named" (reifyNamed :: TH.Name -> RewriteH Core)
         [ "reify via name" ]
