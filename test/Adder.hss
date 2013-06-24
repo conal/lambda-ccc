@@ -1,4 +1,4 @@
--- hermit Adder.hs -opt=LambdaCCC.ReifyLambdaPh +Main Adder.hss
+-- hermit Adder.hs -opt=LambdaCCC.ReifyLambda +Main Adder.hss && ./Adder
 
 set-auto-corelint True
 -- set-pp-coercion Show
