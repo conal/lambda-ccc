@@ -70,5 +70,5 @@ fiddle = length "Fiddle"
 main :: IO ()
 main = print t
  where
-   -- t = swapBS (False,"Hello")
-   t = halfAdd (True,False)
+   t = swapBS (False,"Hello")
+   -- t = halfAdd (True,False)
