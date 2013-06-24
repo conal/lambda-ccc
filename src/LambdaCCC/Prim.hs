@@ -31,8 +31,6 @@ data Prim :: * -> * where
   PairP         :: Prim (a -> b -> a :* b)
   -- More here
 
--- TODO: Removed FstP and SndP, as they're also present in LambdaCCC.CCC
-
 instance Show (Prim a) where
   showsPrec p (LitP a) = showsPrec p a
   showsPrec _ NotP     = showString "not"
