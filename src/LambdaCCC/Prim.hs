@@ -26,10 +26,12 @@ data Prim :: * -> * where
   NotP          :: Prim (Bool -> Bool)
   AndP,OrP,XorP :: Prim (Bool -> Bool -> Bool)
   AddP          :: Num  a => Prim (a -> a -> a)
-  FstP          :: Prim (a :* b -> a)
-  SndP          :: Prim (a :* b -> b)
+--   FstP          :: Prim (a :* b -> a)
+--   SndP          :: Prim (a :* b -> b)
   PairP         :: Prim (a -> b -> a :* b)
   -- More here
+
+-- TODO: Removed FstP and SndP, as they're also present in LambdaCCC.CCC
 
 instance Show (Prim a) where
   showsPrec p (LitP a) = showsPrec p a
@@ -38,8 +40,8 @@ instance Show (Prim a) where
   showsPrec _ OrP      = showString "(||)"
   showsPrec _ XorP     = showString "xor"
   showsPrec _ AddP     = showString "add"
-  showsPrec _ FstP     = showString "fst"
-  showsPrec _ SndP     = showString "snd"
+--   showsPrec _ FstP     = showString "fst"
+--   showsPrec _ SndP     = showString "snd"
   showsPrec _ PairP    = showString "(,)"
 
 instance Evalable (Prim a) where
@@ -50,8 +52,8 @@ instance Evalable (Prim a) where
   eval OrP      = (||)
   eval XorP     = (/=)
   eval AddP     = (+)
-  eval FstP     = fst
-  eval SndP     = snd
+--   eval FstP     = fst
+--   eval SndP     = snd
   eval PairP    = (,)
 
 infixr 3 `xor`
