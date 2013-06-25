@@ -18,7 +18,7 @@ Library
   Build-Depends:       base < 5,
                        ghc >= 7.6,
                        ghc-prim,
-                       hermit >= 0.1.8.0,
+                       hermit >= 0.2.0.0,
                        template-haskell,
                        containers,
                        ty

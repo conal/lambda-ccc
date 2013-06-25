@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell, TypeOperators, GADTs, KindSignatures #-}
 {-# LANGUAGE ViewPatterns, PatternGuards, LambdaCase #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, ConstraintKinds #-}
 {-# LANGUAGE MagicHash #-}
 {-# OPTIONS_GHC -Wall #-}
 
@@ -34,7 +34,10 @@ import Text.Printf (printf)
 import qualified Language.Haskell.TH as TH (Name,mkName)
 import qualified Language.Haskell.TH.Syntax as TH (showName)
 
+-- GHC API
 import GhcPlugins hiding (mkStringExpr)
+import TypeRep (Type(..))
+import PrelNames (unitTyConKey,boolTyConKey,intTyConKey)
 
 import Language.HERMIT.Context
   (ReadBindings,HermitBindingSite(LAM),hermitBindings)
@@ -52,7 +55,8 @@ import Language.HERMIT.Primitive.Unfold (unfoldNameR,cleanupUnfoldR)
 
 import qualified Language.HERMIT.Kure as Kure
 
-import LambdaCCC.Misc (Unop)
+import LambdaCCC.Misc (Unop,Binop)
+import qualified LambdaCCC.Ty     as T
 import qualified LambdaCCC.Lambda as E
 import LambdaCCC.MkStringExpr (mkStringExpr)
 
@@ -94,6 +98,9 @@ unTuple _ = Nothing
 unPair :: CoreExpr -> Maybe (CoreExpr,CoreExpr)
 unPair = listToPair <=< unTuple
 
+-- TODO: Maybe remove unPair and unPairTy, since it's just as easy to use
+-- unTuple and pattern-match against Just [a,b].
+
 {-
 -- Unsafe way to ppr in pure code.
 tr :: Outputable a => a -> a
@@ -112,6 +119,14 @@ collectTypeArgs expr = go expr []
   where
     go (App f (Type t)) ts = go f (t:ts)
     go e 	        ts = (e, ts)
+
+unTupleTy :: Type -> Maybe [Type]
+unTupleTy (TyConApp tc tys)
+  | isTupleTyCon tc && tyConArity tc == length tys = Just tys
+unTupleTy _ = Nothing
+
+-- unPairTy :: Type -> Maybe (Type,Type)
+-- unPairTy = listToPair <=< unTupleTy
 
 {--------------------------------------------------------------------
     KURE utilities
@@ -184,18 +199,70 @@ lambdaVars = M.keysSet .  M.filter (isLam . snd) . hermitBindings
 lambdaVarsT :: (ReadBindings c, Applicative m) => Translate c m a (S.Set Var)
 lambdaVarsT = contextonlyT (pure . lambdaVars)
 
-{--------------------------------------------------------------------
-    Reification
---------------------------------------------------------------------}
-
-type ReExpr = RewriteH CoreExpr
+type InCore t = Injection t Core
 
 observing :: Bool
 observing = False
 
-observeR' :: String -> ReExpr
+observeR' :: InCore t => String -> RewriteH t
 observeR' | observing = observeR
           | otherwise = const idR
+
+tries :: InCore t => [(String,RewriteH t)] -> RewriteH t
+tries = foldr (<+) (observeR' "Other" >>> fail "unhandled")
+      . map (uncurry try)
+
+try :: InCore t => String -> Unop (TranslateH a t)
+try label = (>>> observeR' label)
+
+{--------------------------------------------------------------------
+    Reification
+--------------------------------------------------------------------}
+
+type ReType = TranslateH Type CoreExpr
+
+-- | Translate a Core type t into a core expression that evaluates to a Ty t.
+reifyType :: ReType
+reifyType =
+  do funTId  <- findIdT '(T.:=>)
+     pairTId <- findIdT '(T.:*)
+     unitTId <- findIdT 'T.UnitT
+     intTID  <- findIdT 'T.IntT
+     boolTID <- findIdT 'T.BoolT
+     let simples :: M.Map Unique Id
+         simples = M.fromList [(unitTyConKey,unitTId),(boolTyConKey,boolTID),(intTyConKey,intTID)]
+         simpleTId :: TyCon -> Maybe Id
+         simpleTId  = flip M.lookup simples . getUnique
+         rew :: ReType
+         -- rew = tries [ ("TSimple",rTSimple),("TPair",rTPair), ("TFun",rTFun) ]
+         -- Oops: tries is RewriteH only, due to observeR. May change.
+         rew = rTSimple <+ rTPair <+ rTFun
+         rTSimple, rTPair, rTFun :: ReType
+         rTSimple = do TyConApp (simpleTId -> Just tid) [] <- idR
+                       return (apps tid [] [])
+         rTPair = do Just [_,_] <- unTupleTy <$> idR
+                     tyConAppT (pure ()) (const rew) $ \ () [a',b'] ->
+                       tyOp2 pairTId a' b'
+         rTFun = funTyT rew rew $ tyOp2 funTId
+         tyOp2 :: Id -> Binop CoreExpr
+         tyOp2 tid a' b' = apps tid [tyTy a',tyTy b'] [a',b']
+     rew
+
+-- tyConAppT :: (ExtendPath c Crumb, Monad m) => 
+--              Translate c m TyCon a1 -> (Int -> Translate c m KindOrType a2) 
+--           -> (a1 -> [a2] -> b) -> Translate c m Type b
+
+-- The type parameter a of an expression of type Ty a.
+tyTy :: CoreExpr -> Type
+tyTy = dropTyApp1 ''T.Ty . exprType
+
+-- For a given tycon, drop it from a unary type application. Error otherwise.
+-- WARNING: I'm not yet checking for a tycon match. TODO: check.
+dropTyApp1 :: TH.Name -> Type -> Type
+dropTyApp1 _ (TyConApp _ [t]) = t
+dropTyApp1 _ _ = error "dropTyApp1: not a unary TyConApp"
+
+type ReExpr = RewriteH CoreExpr
 
 reifyExpr :: ReExpr
 reifyExpr =
@@ -210,11 +277,6 @@ reifyExpr =
                      , ("App",rApp)
                      , ("LamT",rLamT), ("Lam",rLam)
                      ]
-          where
-            tries :: [(String,ReExpr)] -> ReExpr
-            tries = foldr (<+) (observeR' "Other" >>> fail "unhandled")
-                  . map (uncurry try)
-            try label = (>>> observeR' label)
          rVar, rApp, rLamT, rLam :: ReExpr
          rVar  = do bvars <- lambdaVarsT
                     varT $

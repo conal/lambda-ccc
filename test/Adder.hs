@@ -10,6 +10,7 @@ import Prelude
 -- Needed for resolving names.
 -- TODO: Bug? Is there an alternative?
 import LambdaCCC.Lambda (E(..),var,lamv,reifyE,evalE)
+import LambdaCCC.Ty (Ty(..))
 
 import LambdaCCC.Prim (xor)
 
