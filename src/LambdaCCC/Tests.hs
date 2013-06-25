@@ -19,7 +19,7 @@ module LambdaCCC.Tests where
 
 import LambdaCCC.Misc
 import LambdaCCC.Prim
-import LambdaCCC.Ty (Ty(..))
+import LambdaCCC.Ty (Ty(..),HasTy(..))
 import LambdaCCC.Lambda
 import LambdaCCC.ToCCC
 
@@ -32,19 +32,19 @@ import LambdaCCC.ToCCC
 -- for tests.
 
 infixr 1 #
-(#) :: E a -> E b -> E (a :* b)
+(#) :: (HasTy a, HasTy b) => E a -> E b -> E (a :* b)
 -- (Const Fst :^ p) # (Const Snd :^ p') | ... = ...
 -- a # b = a :# b
-a # b = Const PairP :^ a :^ b
+a # b = constT PairP :^ a :^ b
 
 notE :: Unop (E Bool)
-notE b = Const NotP :^ b
+notE b = constT NotP :^ b
 
 infixr 2 ||*, `xorE`
 infixr 3 &&*
 
-binop :: Prim (a -> b -> c) -> E a -> E b -> E c
-binop op a b = Const op :^ a :^ b
+binop :: (HasTy a, HasTy b, HasTy c) => Prim (a -> b -> c) -> E a -> E b -> E c
+binop op a b = constT op :^ a :^ b
 
 (&&*), (||*), xorE :: Binop (E Bool)
 (&&*) = binop AndP
@@ -52,7 +52,7 @@ binop op a b = Const op :^ a :^ b
 xorE  = binop XorP
 
 infixl 6 +@
-(+@) :: Num a => Binop (E a)
+(+@) :: (HasTy a, Num a) => Binop (E a)
 (+@) = binop AddP
 
 -- TODO: Use Num and Boolean classes
@@ -63,9 +63,9 @@ infixl 6 +@
 --------------------------------------------------------------------}
 
 va,vb,vc :: E Int
-va = var "a"
-vb = var "b"
-vc = var "c"
+va = varT "a"
+vb = varT "b"
+vc = varT "c"
 
 ty1 :: Ty (Int -> Int)
 ty1 = IntT :=> IntT
@@ -74,7 +74,7 @@ ty2 :: Ty ((Int -> Int) :* Bool)
 ty2 = (IntT :=> IntT) :* BoolT
 
 e1 :: E Bool
-e1 = Const (LitP False)
+e1 = constT (LitP False)
 
 e2 :: E Bool
 e2 = notE e1
@@ -84,7 +84,7 @@ type a :+> b = E (a -> b)
 
 -- \ x -> not
 e3 :: Bool :+> Bool
-e3 = Const NotP
+e3 = constT NotP
 
 -- \ x -> x
 e4 :: Int :+> Int

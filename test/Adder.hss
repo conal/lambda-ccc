@@ -7,12 +7,12 @@ set-auto-corelint True
 -- set-pp ast
 -- set-pp ghc
 
--- -- consider 'swapBS
+-- -- consider 'swapBI
 -- consider 'halfAdd
 -- -- reify-def
 -- -- reify-rules
 -- reify-def-cleanup
 -- -- resume
 
-reify-named 'swapBS
+reify-named 'swapBI
 -- resume

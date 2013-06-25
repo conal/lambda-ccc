@@ -128,6 +128,12 @@ unTupleTy _ = Nothing
 -- unPairTy :: Type -> Maybe (Type,Type)
 -- unPairTy = listToPair <=< unTupleTy
 
+-- For a given tycon, drop it from a unary type application. Error otherwise.
+-- WARNING: I'm not yet checking for a tycon match. TODO: check.
+dropTyApp1 :: TH.Name -> Type -> Type
+dropTyApp1 _ (TyConApp _ [t]) = t
+dropTyApp1 _ _ = error "dropTyApp1: not a unary TyConApp"
+
 {--------------------------------------------------------------------
     KURE utilities
 --------------------------------------------------------------------}
@@ -209,7 +215,7 @@ observeR' | observing = observeR
           | otherwise = const idR
 
 tries :: (InCoreTC a, InCoreTC t) => [(String,TranslateH a t)] -> TranslateH a t
-tries = foldr (<+) (observeR' "Other" >>> fail "unhandled")
+tries = foldr (<+) (observeR "Unhandled" >>> fail "unhandled")
       . map (uncurry try)
 
 try :: InCoreTC t => String -> Unop (TranslateH a t)
@@ -254,12 +260,6 @@ reifyType =
 tyTy :: CoreExpr -> Type
 tyTy = dropTyApp1 ''T.Ty . exprType
 
--- For a given tycon, drop it from a unary type application. Error otherwise.
--- WARNING: I'm not yet checking for a tycon match. TODO: check.
-dropTyApp1 :: TH.Name -> Type -> Type
-dropTyApp1 _ (TyConApp _ [t]) = t
-dropTyApp1 _ _ = error "dropTyApp1: not a unary TyConApp"
-
 type ReExpr = RewriteH CoreExpr
 
 reifyExpr :: ReExpr
@@ -281,26 +281,33 @@ reifyExpr =
                       do v <- idR
                          if S.member v bvars then
                            do (name,ty) <- mkVarName
-                              return $ apps varId [ty] [name]
+                              tye <- apply' reifyType ty
+                              return $ apps varId [ty] [name,tye]
                           else
                            fail "rVar: not a lambda-bound variable"
                             -- return $ apps reifyId [varType v] [Var v]
          -- Reify (non-lambda) variables and their polymorphic instantiations.
          rReify = do e@(collectTypeArgs -> (Var _, _)) <- idR
-                     return $ apps reifyId [exprType e] [e]
+                     let t = exprType e
+                     te <- apply' reifyType t
+                     return $ apps reifyId [t] [e,te]
          rApp  = do App (exprType -> funTy) _ <- idR
                     appT  rew rew $ arr $ \ u' v' ->
                       let (a,b) = splitFunTy funTy in
                         apps appId [b,a] [u', v'] -- note b,a
          rLamT = do Lam (isTyVar -> True) _ <- idR
                     lamT idR rew (arr Lam)
-         rLam  = do Lam _ (exprType -> bodyTy) <- idR
+         rLam  = do Lam (varType -> vty) (exprType -> bodyTy) <- idR
+                    vtye <- apply' reifyType vty
                     lamT mkVarName rew $ arr $ \ (name,ty) e' ->
-                      apps lamvId [ty, bodyTy] [name,e']
+                      apps lamvId [ty, bodyTy] [name,vtye,e']
          -- TODO: Literals
      do ty <- arr exprType
         let mkEval e' = apps evalId [ty] [e']
         mkEval <$> rew
+
+apply' :: Translate c m a b -> a -> Translate c m a' b
+apply' tr x = contextonlyT $ \ c -> Kure.apply tr c x
 
 mkVarName :: MonadThings m => Translate c m Var (CoreExpr,Type)
 mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType

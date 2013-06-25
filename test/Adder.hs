@@ -51,8 +51,8 @@ p1 a = (a,not a)
 swap :: (s,t) -> (t,s)
 swap p = (snd p, fst p)
 
-swapBS :: (Bool,String) -> (String,Bool)
-swapBS p = (snd p, fst p)
+swapBI :: (Bool,Int) -> (Int,Bool)
+swapBI p = (snd p, fst p)
 
 -- The rest don't yet transform successfully. They become 'case' expressions,
 -- which we're not yet handling.
@@ -71,5 +71,5 @@ fiddle = length "Fiddle"
 main :: IO ()
 main = print t
  where
-   t = swapBS (False,"Hello")
+   t = swapBI (False,37)
    -- t = halfAdd (True,False)

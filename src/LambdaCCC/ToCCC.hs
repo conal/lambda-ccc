@@ -21,10 +21,13 @@ module LambdaCCC.ToCCC (toCCC, toCCC') where
 import Data.Functor ((<$>))
 import Control.Monad (mplus)
 import Data.Maybe (fromMaybe)
-import Unsafe.Coerce (unsafeCoerce)
+
+import Data.IsTy
+import Data.Proof.EQ
 
 import LambdaCCC.Misc
 import LambdaCCC.CCC
+import LambdaCCC.Ty
 import LambdaCCC.Lambda
 import LambdaCCC.Prim (Prim(PairP))
 
@@ -36,7 +39,7 @@ import LambdaCCC.Prim (Prim(PairP))
 toCCC :: E a -> (Unit :-> a)
 toCCC = convert UnitPat
 
-toCCC' :: E (a :=> b) -> (a :-> b)
+toCCC' :: HasTy a => E (a :=> b) -> (a :-> b)
 toCCC' (Lam p e) = convert p e
 toCCC' e = toCCC' (Lam vp (e :^ ve))
  where
@@ -44,11 +47,11 @@ toCCC' e = toCCC' (Lam vp (e :^ ve))
 
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: Pat a -> E b -> (a :-> b)
-convert _ (Const o)  = Konst o
+convert _ (Const o _)  = Konst o
 convert k (Var v)    = fromMaybe (error $ "unbound variable: " ++ show v) $
                        convertVar v k
 -- convert k (u :# v)   = convert k u &&& convert k v
-convert k (Const PairP :^ u :^ v)  = convert k u &&& convert k v
+convert k (Const PairP _ :^ u :^ v)  = convert k u &&& convert k v
 convert k (u :^ v)   = Apply @. (convert k u &&& convert k v)
                   -- = Apply @. convert k (u # v)
 convert k (Lam p e)  = Curry (convert (PairPat k p) e)
@@ -58,8 +61,8 @@ convertVar :: forall b a. V b -> Pat a -> Maybe (a :-> b)
 convertVar b = conv
  where
    conv :: forall c. Pat c -> Maybe (c :-> b)
-   conv (VarPat c) | c == b    = Just (unsafeCoerce Id)
-                 | otherwise = Nothing
+   conv (VarPat c) | Just Refl <- c `tyEq` b = Just Id
+                   | otherwise = Nothing
    conv UnitPat = Nothing
    conv (PairPat p q) = ((@. Snd) <$> conv q) `mplus` ((@. Fst) <$> conv p)
 
