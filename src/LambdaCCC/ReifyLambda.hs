@@ -199,20 +199,20 @@ lambdaVars = M.keysSet .  M.filter (isLam . snd) . hermitBindings
 lambdaVarsT :: (ReadBindings c, Applicative m) => Translate c m a (S.Set Var)
 lambdaVarsT = contextonlyT (pure . lambdaVars)
 
-type InCore t = Injection t Core
+type InCoreTC t = Injection t CoreTC
 
 observing :: Bool
 observing = False
 
-observeR' :: InCore t => String -> RewriteH t
+observeR' :: InCoreTC t => String -> RewriteH t
 observeR' | observing = observeR
           | otherwise = const idR
 
-tries :: InCore t => [(String,RewriteH t)] -> RewriteH t
+tries :: (InCoreTC a, InCoreTC t) => [(String,TranslateH a t)] -> TranslateH a t
 tries = foldr (<+) (observeR' "Other" >>> fail "unhandled")
       . map (uncurry try)
 
-try :: InCore t => String -> Unop (TranslateH a t)
+try :: InCoreTC t => String -> Unop (TranslateH a t)
 try label = (>>> observeR' label)
 
 {--------------------------------------------------------------------
@@ -234,9 +234,7 @@ reifyType =
          simpleTId :: TyCon -> Maybe Id
          simpleTId  = flip M.lookup simples . getUnique
          rew :: ReType
-         -- rew = tries [ ("TSimple",rTSimple),("TPair",rTPair), ("TFun",rTFun) ]
-         -- Oops: tries is RewriteH only, due to observeR. May change.
-         rew = rTSimple <+ rTPair <+ rTFun
+         rew = tries [ ("TSimple",rTSimple),("TPair",rTPair), ("TFun",rTFun) ]
          rTSimple, rTPair, rTFun :: ReType
          rTSimple = do TyConApp (simpleTId -> Just tid) [] <- idR
                        return (apps tid [] [])
