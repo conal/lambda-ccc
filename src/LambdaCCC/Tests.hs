@@ -160,6 +160,7 @@ curry (not . uncurry (&&) . (not . fst . snd &&& not . snd . snd))
 curry (snd . snd &&& fst . snd)
 > toCCC e9
 curry (uncurry xor . (fst . snd &&& snd . snd) &&& uncurry (&&) . (fst . snd &&& snd . snd))
+
 -}
 
 {- Examples e3 through e9, without extra unit context, i.e., with toCCC':
@@ -193,4 +194,5 @@ With Simplify and ShowFolded:
 > not . uncurry (&&) . (not *** not)
 > swapP
 > uncurry xor &&& uncurry (&&)
+
 -}
