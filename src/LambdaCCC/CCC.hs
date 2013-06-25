@@ -103,8 +103,8 @@ g @. f  = g :. f
 -- Note: the Prim{} specialization is unnecessary for validity but I suspect
 -- useful for introducing just the uncurryings we want. TODO: verify.
 --
--- Note: the second Uncurry specializes the first one, but needed for syntactic
--- matching.
+-- Note: the second Uncurry specializes the first one, but is needed for
+-- syntactic matching.
 
 dup :: a :-> a :* a
 dup = Id &&& Id
