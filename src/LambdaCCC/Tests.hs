@@ -145,22 +145,21 @@ False
 > toCCC e1
 konst False
 > toCCC e2
-prim not . konst False
+not . konst False
 > toCCC e3
 konst not
 > toCCC e4
 curry snd
 > toCCC e5
-curry (apply . (prim add . snd &&& snd))
+curry (uncurry add . (snd &&& snd))
 > toCCC e6
 curry (snd &&& snd)
 > toCCC e7
-curry (prim not . apply . (prim (&&) . prim not . fst . snd &&& prim not . snd . snd))
+curry (not . uncurry (&&) . (not . fst . snd &&& not . snd . snd))
 > toCCC e8
 curry (snd . snd &&& fst . snd)
 > toCCC e9
-curry (apply . (prim xor . fst . snd &&& snd . snd) &&& apply . (prim (&&) . fst . snd &&& snd . snd))
-
+curry (uncurry xor . (fst . snd &&& snd . snd) &&& uncurry (&&) . (fst . snd &&& snd . snd))
 -}
 
 {- Examples e3 through e9, without extra unit context, i.e., with toCCC':
@@ -177,22 +176,21 @@ Without Simplify and without ShowFolded:
 
 With Simplify:
 
-> prim not
+> not
 > id
-> apply . (prim add &&& id)
+> apply . (add &&& id)
 > id &&& id
-> prim not . apply . (prim (&&) . prim not . fst &&& prim not . snd)
+> not . uncurry (&&) . (not . fst &&& not . snd)
 > snd &&& fst
-> apply . (prim xor . fst &&& snd) &&& apply . (prim (&&) . fst &&& snd)
+> uncurry xor &&& uncurry (&&)
 
 With Simplify and ShowFolded:
 
-> prim not
+> not
 > id
-> apply . (prim add &&& id)
+> uncurry add . dup
 > dup
-> prim not . apply . (prim (&&) . prim not . fst &&& prim not . snd)
+> not . uncurry (&&) . (not *** not)
 > swapP
-> apply . first (prim xor) &&& apply . first (prim (&&))
-
+> uncurry xor &&& uncurry (&&)
 -}

@@ -91,12 +91,20 @@ infixr 9 @.
 -- | Optimizing arrow composition
 (@.) :: (b :-> c) -> (a :-> b) -> (a :-> c)
 #ifdef Simplify
-Id      @. f                = f
-g       @. Id               = g
-Konst k @. _                = Konst k
-Apply   @. (Konst k :&&& f) = Prim k @. f
+Id      @. f                      = f
+g       @. Id                     = g
+Konst k @. _                      = Konst k
+Apply   @. (Konst k       :&&& f) = Prim k @. f
+Apply   @. (h@Prim{} :. f :&&& g) = Uncurry h @. (f  &&& g)
+Apply   @. (h@Prim{}      :&&& g) = Uncurry h @. (Id &&& g)
 #endif
 g @. f  = g :. f
+
+-- Note: the Prim{} specialization is unnecessary for validity but I suspect
+-- useful for introducing just the uncurryings we want. TODO: verify.
+--
+-- Note: the second Uncurry specializes the first one, but needed for syntactic
+-- matching.
 
 dup :: a :-> a :* a
 dup = Id &&& Id
@@ -154,7 +162,8 @@ instance Show (a :-> b) where
 #endif
   showsPrec _ Id          = showString "id"
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
-  showsPrec p (Prim x)    = showsApp1 "prim" p x    -- or: showsPrec p x
+  showsPrec p (Prim x)    = showsPrec p x
+                            -- or: showsApp1 "prim" p x
   showsPrec p (Konst b)   = showsApp1 "konst" p b
   showsPrec p (f :&&& g)  = showsOp2' "&&&" (3,AssocRight) p f g
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
@@ -164,4 +173,4 @@ instance Show (a :-> b) where
   showsPrec _ InR         = showString "inR"
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
-  showsPrec p (Uncurry h) = showsApp1  "Uncurry" p h
+  showsPrec p (Uncurry h) = showsApp1  "uncurry" p h
