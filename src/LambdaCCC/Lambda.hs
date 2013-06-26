@@ -23,6 +23,7 @@
 module LambdaCCC.Lambda
   ( Name
   , V, Pat(..), E(..)
+  , varTy, patTy, expTy
   , var, lamv
   , varT, constT
   , reifyE, evalE
@@ -50,6 +51,9 @@ type Name = String
 -- | Typed variable
 data V a = V Name (Ty a)
 
+varTy :: V a -> Ty a
+varTy (V _ ty) = ty
+
 instance Show (V a) where
   -- showsPrec p (V n ty) = showString n . showString " :: " . showsPrec p ty
   showsPrec _ (V n _) = showString n
@@ -63,6 +67,11 @@ data Pat :: * -> * where
   UnitPat :: Pat Unit
   VarPat  :: V a -> Pat a
   PairPat :: Pat a -> Pat b -> Pat (a :* b)
+
+patTy :: Pat a -> Ty a
+patTy UnitPat       = UnitT
+patTy (VarPat v)    = varTy v
+patTy (PairPat a b) = patTy a :* patTy b
 
 instance Show (Pat a) where
   showsPrec _ UnitPat       = showString "()"
@@ -81,6 +90,16 @@ data E :: * -> * where
   (:^)  :: forall b a . E (a :=> b) -> E a -> E b
   Lam   :: forall a b . Pat a -> E b -> E (a :=> b)
 
+expTy :: E a -> Ty a
+expTy (Var (V _ ty)) = ty
+expTy (Const _ ty)   = ty
+expTy (f :^ _)       = case expTy f of _ :=> b -> b
+expTy (Lam p e)      = patTy p :=> expTy e
+
+-- I've placed the quantifiers explicitly to reflect what I learned from GHCi
+-- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
+-- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
+
 -- TODO: Replace the Const Ty argument with a HasTy constraint for ease of use.
 -- I'm waiting until I know how to construct the required dictionaries in Core.
 -- 
@@ -91,10 +110,6 @@ varT nm = Var (V nm typ)
 
 constT :: HasTy a => Prim a -> E a
 constT p = Const p typ
-
--- I've placed the quantifiers explicitly to reflect what I learned from GHCi
--- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
--- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
 
 var :: forall a. Name -> Ty a -> E a
 var name ty = Var (V name ty)
