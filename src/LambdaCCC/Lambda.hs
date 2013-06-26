@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, PatternGuards #-}
-{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE MagicHash, ConstraintKinds #-}
 {-# LANGUAGE CPP #-}
 
 {-# OPTIONS_GHC -Wall #-}
@@ -202,7 +202,7 @@ vars = (VarPat &&& Var) . flip V typ
 
 -- vars n = (VarPat v, Var v) where v = V n typ
 
-vars2 :: (HasTy a, HasTy b) =>
+vars2 :: HasTy2 a b =>
          (Name,Name) -> (Pat (a,b), (E a,E b))
 vars2 (na,nb) = (PairPat ap bp, (ae,be))
  where
