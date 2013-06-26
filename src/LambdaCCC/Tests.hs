@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeOperators, ConstraintKinds #-}
 {-# OPTIONS_GHC -Wall #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- For tests
@@ -19,7 +19,7 @@ module LambdaCCC.Tests where
 
 import LambdaCCC.Misc
 import LambdaCCC.Prim
-import LambdaCCC.Ty (Ty(..),HasTy(..))
+import LambdaCCC.Ty
 import LambdaCCC.Lambda
 import LambdaCCC.ToCCC
 
@@ -32,7 +32,7 @@ import LambdaCCC.ToCCC
 -- for tests.
 
 infixr 1 #
-(#) :: (HasTy a, HasTy b) => E a -> E b -> E (a :* b)
+(#) :: HasTy2 a b => E a -> E b -> E (a :* b)
 -- (Const Fst :^ p) # (Const Snd :^ p') | ... = ...
 -- a # b = a :# b
 a # b = constT PairP :^ a :^ b
@@ -43,7 +43,7 @@ notE b = constT NotP :^ b
 infixr 2 ||*, `xorE`
 infixr 3 &&*
 
-binop :: (HasTy a, HasTy b, HasTy c) => Prim (a -> b -> c) -> E a -> E b -> E c
+binop :: HasTy3 a b c => Prim (a -> b -> c) -> E a -> E b -> E c
 binop op a b = constT op :^ a :^ b
 
 (&&*), (||*), xorE :: Binop (E Bool)
