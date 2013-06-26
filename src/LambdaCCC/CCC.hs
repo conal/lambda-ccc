@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures, CPP #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -18,7 +19,7 @@
 
 module LambdaCCC.CCC
   ( module LambdaCCC.Misc
-  , (:->)(..), (@.)
+  , (:->)(..), cccTys, (@.)
   , (&&&), (***), (+++), (|||)
   , dup, jam, swapP, swapC
   , first, second, left, right
@@ -28,6 +29,7 @@ import qualified Control.Arrow as A
 
 import LambdaCCC.Misc (Evalable(..),(:*),(:+),(:=>))
 import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
+import LambdaCCC.Ty
 import LambdaCCC.Prim (Prim(..))
 
 infix  0 :->
@@ -49,24 +51,42 @@ infixr 2 :|||
 -- the categorical counterparts (terminal object, categorical products, and
 -- coproducts).
 data (:->) :: * -> * -> * where
-  Id       :: a :-> a
-  (:.)     :: (b :-> c) -> (a :-> b) -> (a :-> c)
+  Id       :: HasTy a => a :-> a
+  (:.)     :: HasTy3 a b c => (b :-> c) -> (a :-> b) -> (a :-> c)
   -- Primitives. I'm unsure of this one. It's closer to UKonst than I like.
-  Prim     :: Prim (a :=> b) -> (a :-> b)
+  Prim     :: HasTy2 a b => Prim (a -> b) -> (a :-> b) -- TODO: Prim (a :=> b)?
   -- Constant
-  Konst    :: Prim b -> (a :-> b)
+  Konst    :: HasTy2 a b => Prim b -> (a :-> b)
   -- Products
-  Fst      :: a :* b :-> a
-  Snd      :: a :* b :-> b
-  (:&&&)   :: (a :-> c) -> (a :-> d) -> (a :-> c :* d)
+  Fst      :: HasTy2 a b => a :* b :-> a
+  Snd      :: HasTy2 a b => a :* b :-> b
+  (:&&&)   :: HasTy3 a c d => (a :-> c) -> (a :-> d) -> (a :-> c :* d)
   -- Coproducts
-  InL      :: a :-> a :+ b
-  InR      :: b :-> a :+ b
-  (:|||)   :: (a :-> c) -> (b :-> c) -> (a :+ b :-> c)
+  InL      :: HasTy2 a b => a :-> a :+ b
+  InR      :: HasTy2 a b => b :-> a :+ b
+  (:|||)   :: HasTy3 a b c => (a :-> c) -> (b :-> c) -> (a :+ b :-> c)
   -- Exponentials
-  Apply    :: ((a :=> b) :* a) :-> b
-  Curry    :: (a :* b :-> c) -> (a :-> (b :=> c))
-  Uncurry  :: (a :-> (b :=> c)) -> (a :* b :-> c)
+  Apply    :: HasTy2 a b   => ((a :=> b) :* a) :-> b
+  Curry    :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
+  Uncurry  :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
+
+typ2 :: HasTy2 a b => (Ty a, Ty b)
+typ2 = (typ,typ)
+
+cccTys :: (a :-> b) -> (Ty a, Ty b)
+cccTys Id      {} = typ2
+cccTys (:.)    {} = typ2
+cccTys Prim    {} = typ2
+cccTys Konst   {} = typ2
+cccTys Fst     {} = typ2
+cccTys Snd     {} = typ2
+cccTys (:&&&)  {} = typ2
+cccTys InL     {} = typ2
+cccTys InR     {} = typ2
+cccTys (:|||)  {} = typ2
+cccTys Apply   {} = typ2
+cccTys Curry   {} = typ2
+cccTys Uncurry {} = typ2
 
 -- Maybe parametrize this GADT by a constraint. Sadly, I'd lose the pretty infix
 -- syntax ("a :-> b").
@@ -89,7 +109,7 @@ instance Evalable (a :-> b) where
 
 infixr 9 @.
 -- | Optimizing arrow composition
-(@.) :: (b :-> c) -> (a :-> b) -> (a :-> c)
+(@.) :: HasTy3 a b c => (b :-> c) -> (a :-> b) -> (a :-> c)
 #ifdef Simplify
 Id      @. f                      = f
 g       @. Id                     = g
@@ -106,45 +126,45 @@ g @. f  = g :. f
 -- Note: the second Uncurry specializes the first one, but is needed for
 -- syntactic matching.
 
-dup :: a :-> a :* a
+dup :: HasTy a => a :-> a :* a
 dup = Id &&& Id
 
-jam :: a :+ a :-> a
+jam :: HasTy a => a :+ a :-> a
 jam = Id ||| Id
 
 -- | Product swap
-swapP :: a :* b :-> b :* a
+swapP :: HasTy2 a b => a :* b :-> b :* a
 swapP = Snd &&& Fst
 
 -- | Coproduct swap
-swapC :: a :+ b :-> b :+ a
+swapC :: HasTy2 a b => a :+ b :-> b :+ a
 swapC = InR ||| InL
 
-(&&&) :: (a :-> c) -> (a :-> d) -> (a :-> c :* d)
+(&&&) :: HasTy3 a c d => (a :-> c) -> (a :-> d) -> (a :-> c :* d)
 #ifdef Simplify
 Fst &&& Snd = Id
 #endif
 f &&& g = f :&&& g
 
-(***) :: (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
+(***) :: HasTy4 a b c d => (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
 f *** g = f @. Fst &&& g @. Snd
 
-first :: (a :-> c) -> (a :* b :-> c :* b)
+first :: HasTy3 a b c => (a :-> c) -> (a :* b :-> c :* b)
 first f = f *** Id
 
-second :: (b :-> d) -> (a :* b :-> a :* d)
+second :: HasTy3 a b d => (b :-> d) -> (a :* b :-> a :* d)
 second g = Id *** g
 
-(|||) :: (a :-> c) -> (b :-> c) -> (a :+ b :-> c)
+(|||) :: HasTy3 a b c => (a :-> c) -> (b :-> c) -> (a :+ b :-> c)
 (|||) = (:|||)
 
-(+++) :: (a :-> c) -> (b :-> d) -> (a :+ b :-> c :+ d)
+(+++) :: HasTy4 a b c d => (a :-> c) -> (b :-> d) -> (a :+ b :-> c :+ d)
 f +++ g = InL @. f ||| InR @. g
 
-left :: (a :-> c) -> (a :+ b :-> c :+ b)
+left :: HasTy3 a b c => (a :-> c) -> (a :+ b :-> c :+ b)
 left f = f +++ Id
 
-right :: (b :-> d) -> (a :+ b :-> a :+ d)
+right :: HasTy3 a b d => (b :-> d) -> (a :+ b :-> a :+ d)
 right g = Id +++ g
 
 instance Show (a :-> b) where
