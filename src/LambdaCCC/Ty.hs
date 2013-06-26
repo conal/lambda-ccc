@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeOperators, GADTs, KindSignatures, TypeSynonymInstances #-}
-{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE PatternGuards, ConstraintKinds #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -21,6 +21,7 @@ module LambdaCCC.Ty
   ( Ty(..),HasTy(..)
   , HasTy2,HasTy3,HasTy4
   , HasTyJt(..), tyHasTy, tyHasTy2
+  , splitFunTy, domTy, ranTy
   ) where
 
 import Control.Applicative (liftA2)
@@ -31,7 +32,9 @@ import Data.Proof.EQ
 import LambdaCCC.Misc
 import LambdaCCC.ShowUtils
 
--- TODO: Try out the singletons library
+infixr 1 :=>
+infixl 6 :+
+infixl 7 :*
 
 -- | Typed type representation
 data Ty :: * -> * where
@@ -59,6 +62,12 @@ instance IsTy Ty where
   (a :=> b) `tyEq` (a' :=> b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
   _         `tyEq` _           = Nothing
 
+{--------------------------------------------------------------------
+    Type synthesis
+--------------------------------------------------------------------}
+
+-- TODO: Try out the singletons library
+
 -- | Synthesize a type
 class HasTy a where typ :: Ty a
 
@@ -72,6 +81,10 @@ instance HasTy Bool where typ = BoolT
 instance HasTy2 a b => HasTy (a :*  b) where typ = typ :*  typ
 instance HasTy2 a b => HasTy (a :+  b) where typ = typ :+  typ
 instance HasTy2 a b => HasTy (a :=> b) where typ = typ :=> typ
+
+{--------------------------------------------------------------------
+    Proofs
+--------------------------------------------------------------------}
 
 -- | Judgment (proof) that 'HasTy'
 data HasTyJt :: * -> * where
@@ -88,3 +101,16 @@ tyHasTy (a :=> b) | (HasTy,HasTy) <- tyHasTy2 a b = HasTy
 
 tyHasTy2 :: Ty a -> Ty b -> (HasTyJt a,HasTyJt b)
 tyHasTy2 a b = (tyHasTy a,tyHasTy b)
+
+{--------------------------------------------------------------------
+    Utilities
+--------------------------------------------------------------------}
+
+splitFunTy :: Ty (a -> b) -> (Ty a, Ty b)
+splitFunTy (a :=> b) = (a,b)
+
+domTy :: Ty (a -> b) -> Ty a
+domTy = fst . splitFunTy
+
+ranTy :: Ty (a -> b) -> Ty b
+ranTy = snd . splitFunTy
