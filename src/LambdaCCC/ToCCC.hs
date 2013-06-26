@@ -37,12 +37,18 @@ import LambdaCCC.Prim (Prim(PairP))
 --------------------------------------------------------------------}
 
 -- | Rewrite a lambda expression via CCC combinators
-toCCC :: HasTy a => E a -> (Unit :-> a)
-toCCC = convert UnitPat
+toCCC :: E a -> (Unit :-> a)
+toCCC a | HasTy <- tyHasTy (expTy a)
+        = convert UnitPat a
 
-toCCC' :: HasTy2 a b => E (a :=> b) -> (a :-> b)
-toCCC' (Lam p e) = convert p e
-toCCC' e = toCCC' (Lam vp (e :^ ve))
+toCCC' :: E (a :=> b) -> (a :-> b)
+toCCC' e | (HasTy,HasTy) <- tyHasTy2 a b = toCCC'' e
+ where
+   (a,b) = splitFunTy (expTy e)
+
+toCCC'' :: HasTy2 a b => E (a :=> b) -> (a :-> b)
+toCCC'' (Lam p e) = convert p e
+toCCC'' e = toCCC'' (Lam vp (e :^ ve))
  where
    (vp,ve) = vars "ETA"
 
