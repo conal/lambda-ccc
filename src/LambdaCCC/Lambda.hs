@@ -51,9 +51,6 @@ type Name = String
 -- | Typed variable
 data V a = V Name (Ty a)
 
-varTy :: V a -> Ty a
-varTy (V _ ty) = ty
-
 instance Show (V a) where
   -- showsPrec p (V n ty) = showString n . showString " :: " . showsPrec p ty
   showsPrec _ (V n _) = showString n
@@ -62,21 +59,24 @@ instance IsTy V where
   V na tya `tyEq` V nb tyb | nb == na  = tya `tyEq` tyb
                            | otherwise = Nothing
 
+varTy :: V a -> Ty a
+varTy (V _ ty) = ty
+
 -- | Lambda patterns
 data Pat :: * -> * where
   UnitPat :: Pat Unit
   VarPat  :: V a -> Pat a
   PairPat :: Pat a -> Pat b -> Pat (a :* b)
 
-patTy :: Pat a -> Ty a
-patTy UnitPat       = UnitT
-patTy (VarPat v)    = varTy v
-patTy (PairPat a b) = patTy a :* patTy b
-
 instance Show (Pat a) where
   showsPrec _ UnitPat       = showString "()"
   showsPrec p (VarPat v)    = showsPrec p v
   showsPrec p (PairPat a b) = showsPair p a b
+
+patTy :: Pat a -> Ty a
+patTy UnitPat       = UnitT
+patTy (VarPat v)    = varTy v
+patTy (PairPat a b) = patTy a :* patTy b
 
 infixl 9 :^
 
@@ -91,10 +91,10 @@ data E :: * -> * where
   Lam   :: forall a b . Pat a -> E b -> E (a :=> b)
 
 expTy :: E a -> Ty a
-expTy (Var (V _ ty)) = ty
-expTy (Const _ ty)   = ty
-expTy (f :^ _)       = case expTy f of _ :=> b -> b
-expTy (Lam p e)      = patTy p :=> expTy e
+expTy (Var v)      = varTy v
+expTy (Const _ ty) = ty
+expTy (f :^ _)     = case expTy f of _ :=> b -> b
+expTy (Lam p e)    = patTy p :=> expTy e
 
 -- I've placed the quantifiers explicitly to reflect what I learned from GHCi
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
