@@ -19,13 +19,13 @@
 -- Reify a Core expression into GADT
 ----------------------------------------------------------------------
 
-module LambdaCCC.ReifyLambda where
-
--- TODO: explicit exports
+module LambdaCCC.ReifyLambda
+  ( plugin
+  ) where
 
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..))
-import Control.Monad ((<=<),liftM2)
+-- import Control.Monad ((<=<),liftM2)
 import Control.Arrow (arr,(>>>),(&&&))
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -51,7 +51,7 @@ import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.Primitive.GHC (rule)
 import Language.HERMIT.Primitive.Local (letIntro,letFloatArg,letFloatLetTop)
 import Language.HERMIT.Primitive.Navigation (rhsOf,parentOf,bindingGroupOf)
-import Language.HERMIT.Primitive.Unfold (unfoldNameR,cleanupUnfoldR)
+import Language.HERMIT.Primitive.Unfold (cleanupUnfoldR) -- unfoldNameR,
 
 import qualified Language.HERMIT.Kure as Kure
 
@@ -77,6 +77,7 @@ apps f ts es
 tyArity :: Id -> Int
 tyArity = length . fst . splitForAllTys . varType
 
+{-
 listToPair :: [a] -> Maybe (a,a)
 listToPair [a,b] = Just (a,b)
 listToPair _     = Nothing
@@ -89,14 +90,9 @@ unTuple expr@(App {})
   = Just valArgs
 unTuple _ = Nothing
 
--- tuple :: [CoreExpr] -> CoreExpr
--- tuple es = ... ?
---
--- pair :: Binop CoreExpr
--- pair a b = tuple [a,b]
-
 unPair :: CoreExpr -> Maybe (CoreExpr,CoreExpr)
 unPair = listToPair <=< unTuple
+-}
 
 -- TODO: Maybe remove unPair and unPairTy, since it's just as easy to use
 -- unTuple and pattern-match against Just [a,b].
@@ -156,6 +152,7 @@ snocPathIn mkP = pathIn (snocPathToPath <$> mkP)
 unfoldRules :: [String] -> RewriteH CoreExpr
 unfoldRules nms = catchesM (rule <$> nms) >>> cleanupUnfoldR
 
+{-
 -- | Translate a pair expression.
 pairT :: (Monad m, ExtendPath c Crumb) =>
          Translate c m CoreExpr a -> Translate c m CoreExpr b
@@ -178,6 +175,7 @@ appVTysT tv h = translate $ \c ->
   where
     applyN :: Int -> (a -> a) -> a -> a
     applyN n f a = foldr ($) a (replicate n f)
+-}
 
 
 defR :: RewriteH Id -> RewriteH CoreExpr -> RewriteH Core
@@ -187,8 +185,8 @@ defR rewI rewE = prunetdR (  promoteDefR (defAllR rewI rewE)
 rhsR :: RewriteH CoreExpr -> RewriteH Core
 rhsR = defR idR
 
-unfoldNames :: [TH.Name] -> RewriteH CoreExpr
-unfoldNames nms = catchesM (unfoldNameR <$> nms) -- >>> cleanupUnfoldR
+-- unfoldNames :: [TH.Name] -> RewriteH CoreExpr
+-- unfoldNames nms = catchesM (unfoldNameR <$> nms) -- >>> cleanupUnfoldR
 
 -- Just the lambda-bound variables in a HERMIT context
 lambdaVars :: ReadBindings c => c -> S.Set Var

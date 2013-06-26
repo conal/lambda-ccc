@@ -16,9 +16,11 @@
 -- Helpers for implementing Show
 ----------------------------------------------------------------------
 
-module LambdaCCC.ShowUtils where
-
--- TODO: explicit exports
+module LambdaCCC.ShowUtils
+  ( showsApp1, showsApp, showSpaced
+  , Prec, Assoc(..), Fixity
+  , showsOp2, showsOp2', showsPair
+  ) where
 
 import Data.List (intersperse)
 

@@ -70,6 +70,10 @@ data (:->) :: * -> * -> * where
   Curry    :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
   Uncurry  :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
 
+-- TODO: The type constraints prevent (:->) from being a category etc without
+-- some change to those classes, e.g., with instance-specific constraints via
+-- ConstraintKinds.
+
 typ2 :: HasTy2 a b => (Ty a, Ty b)
 typ2 = (typ,typ)
 
