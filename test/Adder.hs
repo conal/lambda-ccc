@@ -7,6 +7,9 @@ module Main where
 
 import Prelude
 
+import LambdaCCC.CCC ((:->))
+import LambdaCCC.ToCCC
+
 -- Needed for resolving names.
 -- TODO: Bug? Is there an alternative?
 import LambdaCCC.Lambda (E(..),var,lamv,reifyE,reifyE',evalE)
@@ -68,8 +71,23 @@ fiddle = length "Fiddle"
 
 ------
 
+rswE :: E ((Bool, Int) -> (Int, Bool))
+rswE = reifyE swapBI
+
+rswC :: (Bool, Int) :-> (Int, Bool)
+rswC = toCCC' rswE
+
 main :: IO ()
-main = print (reifyE swapBI)
+
+-- main = print rswC  -- fine
+
+main = print (toCCC' rswE)  -- fine
+
+-- Doesn't eliminate reifyE & eval:
+-- 
+-- main = print (toCCC' (reifyE swapBI))
+
+-- main = print (reifyE swapBI)
 
 -- main = print (swapBI (False,37))
 
