@@ -266,7 +266,7 @@ reifyExpr =
      appId   <- findIdT '(E.:^)
      lamvId  <- findIdT 'E.lamv
      evalId  <- findIdT 'E.evalE
-     reifyId <- findIdT 'E.reifyE
+     reifyId <- findIdT 'E.reifyE'
      let rew :: ReExpr
          rew = tries [ ("Var",rVar)
                      , ("Reify", rReify)
