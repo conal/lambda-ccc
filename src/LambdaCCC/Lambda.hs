@@ -150,6 +150,7 @@ reifyE a = reifyE' a typ
 
 reifyE' :: a -> Ty a -> E a
 reifyE' = error "reifyE': Not implemented. I hoped all uses would disappear."
+{-# NOINLINE reifyE' #-}
 
 {-# RULES
 
