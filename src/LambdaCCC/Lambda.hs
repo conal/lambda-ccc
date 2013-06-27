@@ -149,15 +149,22 @@ reifyE :: HasTy a => a -> E a
 reifyE a = reifyE' a typ
 
 reifyE' :: a -> Ty a -> E a
-reifyE' = error "reifyE': Not implemented. I hoped all uses would disappear."
+reifyE' _ UnitT = error "reifyE' uNiT!"
+reifyE' _ _ = error "reifyE': Not implemented. I hoped all uses would disappear."
+-- reifyE' = error "reifyE': Not implemented. I hoped all uses would disappear."
 {-# NOINLINE reifyE' #-}
+
+-- The artificially strange definition of reifyE' prevents it from getting
+-- inlined and so allows the reify'/eval rule to fire. The NOINLINE pragma is
+-- somehow insufficient, and the reify/eval rule won't fire. I don't know how to
+-- get rules with dictionaries to work.
 
 {-# RULES
 
 "reify'/eval" forall t e. reifyE' (evalE e) t = e
 "eval/reify'" forall t x. evalE (reifyE' x t) = x
 
-"reify/eval" forall e. reifyE (evalE e) = e
+-- "reify/eval"  forall   e. reifyE (evalE e) = e
 
   #-}
 
