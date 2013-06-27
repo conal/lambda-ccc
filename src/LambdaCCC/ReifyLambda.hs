@@ -238,18 +238,24 @@ reifyType =
      intTID  <- findIdT 'T.IntT
      boolTID <- findIdT 'T.BoolT
      let simples :: M.Map Unique Id
-         simples = M.fromList [(unitTyConKey,unitTId),(boolTyConKey,boolTID),(intTyConKey,intTID)]
+         simples = M.fromList [ (unitTyConKey,unitTId),(boolTyConKey,boolTID)
+                              , (intTyConKey,intTID) ]
          simpleTId :: TyCon -> Maybe Id
          simpleTId  = flip M.lookup simples . getUnique
          rew :: ReType
-         rew = tries [ ("TSimple",rTSimple),("TPair",rTPair), ("TFun",rTFun) ]
-         rTSimple, rTPair, rTFun :: ReType
+         rew = tries [ ("TSimple",rTSimple),("TPair",rTPair)
+                     , ("TFun",rTFun), ("TSynonym",rTSyn) ]
+         rTSimple, rTPair, rTFun, rTSyn :: ReType
          rTSimple = do TyConApp (simpleTId -> Just tid) [] <- idR
                        return (apps tid [] [])
          rTPair = do Just [_,_] <- unTupleTy <$> idR
                      tyConAppT (pure ()) (const rew) $ \ () [a',b'] ->
                        tyOp2 pairTId a' b'
          rTFun = funTyT rew rew $ tyOp2 funTId
+         rTSyn = expandSyn >>> rew
+         expandSyn :: RewriteH Type
+         expandSyn = do Just t <- tcView <$> idR
+                        return t
          tyOp2 :: Id -> Binop CoreExpr
          tyOp2 tid a' b' = apps tid [tyTy a',tyTy b'] [a',b']
      rew
@@ -283,7 +289,7 @@ reifyExpr =
                       do v <- idR
                          if S.member v bvars then
                            do (name,ty) <- mkVarName
-                              tye <- apply' reifyType ty
+                              tye <- apply' reifyType ty -- (expandTypeSynonyms ty)
                               return $ apps varId [ty] [name,tye]
                           else
                            fail "rVar: not a lambda-bound variable"
