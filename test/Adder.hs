@@ -69,7 +69,7 @@ fiddle = length "Fiddle"
 ------
 
 main :: IO ()
-main = print (reifyE (swapBI (False,37)))
+main = print (reifyE swapBI)
 
 -- main = print (swapBI (False,37))
 
