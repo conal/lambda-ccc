@@ -26,7 +26,7 @@ module LambdaCCC.Lambda
   , varTy, patTy, expTy
   , var, lamv
   , varT, constT
-  , reifyE, evalE
+  , reifyE, reifyE', evalE
   , vars, vars2
   ) where
 
@@ -86,7 +86,6 @@ infixl 9 :^
 data E :: * -> * where
   Var   :: forall a   . V a -> E a
   Const :: forall a   . Prim a -> Ty a -> E a
---  (:#)  :: forall a b . E a -> E b -> E (a :* b)
   (:^)  :: forall b a . E (a :=> b) -> E a -> E b
   Lam   :: forall a b . Pat a -> E b -> E (a :=> b)
 
@@ -146,13 +145,18 @@ data Bind = forall a. Bind (V a) a
 -- | Variable environment
 type Env = [Bind]
 
-reifyE :: a -> Ty a -> E a
-reifyE = error "reifyE: Not implemented. I hoped all uses would disappear."
+reifyE :: HasTy a => a -> E a
+reifyE a = reifyE' a typ
+
+reifyE' :: a -> Ty a -> E a
+reifyE' = error "reifyE': Not implemented. I hoped all uses would disappear."
 
 {-# RULES
 
-"reify/eval" forall t e. reifyE (evalE e) t = e
-"eval/reify" forall t x. evalE (reifyE x t) = x
+"reify'/eval" forall t e. reifyE' (evalE e) t = e
+"eval/reify'" forall t x. evalE (reifyE' x t) = x
+
+"reify/eval" forall e. reifyE (evalE e) = e
 
   #-}
 
@@ -215,13 +219,13 @@ vars2 (na,nb) = (PairPat ap bp, (ae,be))
 
 {-# RULES
  
-"reify/not"  reifyE not  = Const NotP
-"reify/(&&)" reifyE (&&) = Const AndP
-"reify/(||)" reifyE (||) = Const OrP
-"reify/xor"  reifyE xor  = Const XorP
-"reify/(+)"  reifyE (+)  = Const AddP
-"reify/fst"  reifyE fst  = Const FstP
-"reify/snd"  reifyE snd  = Const SndP
-"reify/pair" reifyE (,)  = Const PairP
+"reify/not"  reifyE' not  = Const NotP
+"reify/(&&)" reifyE' (&&) = Const AndP
+"reify/(||)" reifyE' (||) = Const OrP
+"reify/xor"  reifyE' xor  = Const XorP
+"reify/(+)"  reifyE' (+)  = Const AddP
+"reify/fst"  reifyE' fst  = Const FstP
+"reify/snd"  reifyE' snd  = Const SndP
+"reify/pair" reifyE' (,)  = Const PairP
  
   #-}
