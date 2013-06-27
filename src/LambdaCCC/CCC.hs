@@ -62,8 +62,8 @@ data (:->) :: * -> * -> * where
   Snd      :: HasTy2 a b => a :* b :-> b
   (:&&&)   :: HasTy3 a c d => (a :-> c) -> (a :-> d) -> (a :-> c :* d)
   -- Coproducts
-  InL      :: HasTy2 a b => a :-> a :+ b
-  InR      :: HasTy2 a b => b :-> a :+ b
+  Lft      :: HasTy2 a b => a :-> a :+ b
+  Rht      :: HasTy2 a b => b :-> a :+ b
   (:|||)   :: HasTy3 a b c => (a :-> c) -> (b :-> c) -> (a :+ b :-> c)
   -- Exponentials
   Apply    :: HasTy2 a b   => ((a :=> b) :* a) :-> b
@@ -85,8 +85,8 @@ cccTys Konst   {} = typ2
 cccTys Fst     {} = typ2
 cccTys Snd     {} = typ2
 cccTys (:&&&)  {} = typ2
-cccTys InL     {} = typ2
-cccTys InR     {} = typ2
+cccTys Lft     {} = typ2
+cccTys Rht     {} = typ2
 cccTys (:|||)  {} = typ2
 cccTys Apply   {} = typ2
 cccTys Curry   {} = typ2
@@ -104,8 +104,8 @@ instance Evalable (a :-> b) where
   eval Fst         = fst
   eval Snd         = snd
   eval (f :&&& g)  = eval f A.&&& eval g
-  eval InL         = Left
-  eval InR         = Right
+  eval Lft         = Left
+  eval Rht         = Right
   eval (f :||| g)  = eval f A.||| eval g
   eval Apply       = uncurry ($)
   eval (Curry   h) = curry   (eval h)
@@ -142,7 +142,7 @@ swapP = Snd &&& Fst
 
 -- | Coproduct swap
 swapC :: HasTy2 a b => a :+ b :-> b :+ a
-swapC = InR ||| InL
+swapC = Rht ||| Lft
 
 (&&&) :: HasTy3 a c d => (a :-> c) -> (a :-> d) -> (a :-> c :* d)
 #ifdef Simplify
@@ -163,7 +163,7 @@ second g = Id *** g
 (|||) = (:|||)
 
 (+++) :: HasTy4 a b c d => (a :-> c) -> (b :-> d) -> (a :+ b :-> c :+ d)
-f +++ g = InL @. f ||| InR @. g
+f +++ g = Lft @. f ||| Rht @. g
 
 left :: HasTy3 a b c => (a :-> c) -> (a :+ b :-> c :+ b)
 left f = f +++ Id
@@ -174,15 +174,15 @@ right g = Id +++ g
 instance Show (a :-> b) where
 #ifdef ShowFolded
   showsPrec p (f :. Fst :&&& g :. Snd) = showsOp2'  "***" (3,AssocRight) p f g
-  showsPrec p (InL :. f :||| InR :. g) = showsOp2'  "+++" (2,AssocRight) p f g
+  showsPrec p (Lft :. f :||| Rht :. g) = showsOp2'  "+++" (2,AssocRight) p f g
   showsPrec _ (Id :&&& Id)             = showString "dup"
   showsPrec _ (Id :||| Id)             = showString "jam"
   showsPrec _ (Snd :&&& Fst)           = showString "swapP"
-  showsPrec _ (InR :&&& InL)           = showString "swapC"
+  showsPrec _ (Rht :&&& Lft)           = showString "swapC"
   showsPrec p (f :. Fst :&&& Snd)      = showsApp1  "first"  p f
   showsPrec p (Fst :&&& g :. Snd)      = showsApp1  "second" p g
-  showsPrec p (InL :. f :||| InR)      = showsApp1  "left"   p f
-  showsPrec p (InL :||| InR :. g)      = showsApp1  "right"  p g
+  showsPrec p (Lft :. f :||| Rht)      = showsApp1  "left"   p f
+  showsPrec p (Lft :||| Rht :. g)      = showsApp1  "right"  p g
 #endif
   showsPrec _ Id          = showString "id"
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
@@ -193,8 +193,8 @@ instance Show (a :-> b) where
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
   showsPrec _ Fst         = showString "fst"
   showsPrec _ Snd         = showString "snd"
-  showsPrec _ InL         = showString "inL"
-  showsPrec _ InR         = showString "inR"
+  showsPrec _ Lft         = showString "lft"
+  showsPrec _ Rht         = showString "rht"
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "uncurry" p h
