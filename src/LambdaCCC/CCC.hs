@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures, CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-} -- EXPERIMENT
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -57,9 +58,12 @@ data (:->) :: * -> * -> * where
   Prim     :: HasTy2 a b => Prim (a -> b) -> (a :-> b) -- TODO: Prim (a :=> b)?
   -- Constant
   Konst    :: HasTy2 a b => Prim b -> (a :-> b)
-  -- Products
-  Fst      :: HasTy2 a b => a :* b :-> a
-  Snd      :: HasTy2 a b => a :* b :-> b
+  -- Products.
+  -- Note that I'm using a different approach to the constraints here.
+  -- It lets the prim optimizations work. See whether it suffices, and perhaps
+  -- change others.
+  Fst      :: HasTy2 (a :* b) a => a :* b :-> a
+  Snd      :: HasTy2 (a :* b) b => a :* b :-> b
   (:&&&)   :: HasTy3 a c d => (a :-> c) -> (a :-> d) -> (a :-> c :* d)
   -- Coproducts
   Lft      :: HasTy2 a b => a :-> a :+ b
@@ -111,6 +115,20 @@ instance Evalable (a :-> b) where
   eval (Curry   h) = curry   (eval h)
   eval (Uncurry f) = uncurry (eval f)
 
+{--------------------------------------------------------------------
+    Smart constructors
+--------------------------------------------------------------------}
+
+prim :: HasTy2 a b => Prim (a -> b) -> (a :-> b)
+prim FstP = Fst
+prim SndP = Snd
+prim p    = Prim p
+
+-- The FstP and SndP cases don't type-check with my old constraints on those
+-- constructors.
+-- Consider FstP :: Prim (u :* v -> u), so that a = u :* v and b = u.
+-- I know HasTy (u :* v), but I need HasTy u and HasTy v for Fst.
+
 infixr 9 @.
 -- | Optimizing arrow composition
 (@.) :: HasTy3 a b c => (b :-> c) -> (a :-> b) -> (a :-> c)
@@ -118,7 +136,7 @@ infixr 9 @.
 Id      @. f                      = f
 g       @. Id                     = g
 Konst k @. _                      = Konst k
-Apply   @. (Konst k       :&&& f) = Prim k @. f
+Apply   @. (Konst k       :&&& f) = prim k @. f
 Apply   @. (h@Prim{} :. f :&&& g) = Uncurry h @. (f  &&& g)
 Apply   @. (h@Prim{}      :&&& g) = Uncurry h @. (Id &&& g)
 #endif
