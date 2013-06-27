@@ -9,7 +9,7 @@ import Prelude
 
 -- Needed for resolving names.
 -- TODO: Bug? Is there an alternative?
-import LambdaCCC.Lambda (E(..),var,lamv,reifyE,evalE)
+import LambdaCCC.Lambda (E(..),var,lamv,reifyE,reifyE',evalE)
 import LambdaCCC.Ty (Ty(..))
 
 import LambdaCCC.Prim (xor)
@@ -69,7 +69,40 @@ fiddle = length "Fiddle"
 ------
 
 main :: IO ()
-main = print t
- where
-   t = swapBI (False,37)
-   -- t = halfAdd (True,False)
+main = print (reifyE (swapBI (False,37)))
+
+-- main = print (swapBI (False,37))
+
+{-
+
+re :: E Bool -> E Bool
+re e = reifyE (evalE e)
+
+{-# RULES  "voot" forall e. reifyE (evalE e) = e  #-}
+
+-- hermit<1> consider 're
+-- re = λ e → reifyE ▲ $fHasTyBool (evalE ▲ e)
+-- hermit<2> any-bu (unfold-rule "voot")
+-- Rewrite failed: user error (anybuR failed)
+
+ro :: Float -> Float
+ro x = asin (sin x)
+
+{-# RULES  "asin/sin" forall x. asin (sin x) = x #-}
+
+-- hermit<1> consider 'ro
+-- ro = λ x → asin ▲ $fFloatingFloat (sin ▲ $fFloatingFloat x)
+-- hermit<2> any-bu (unfold-rule "asin/sin")
+-- Rewrite failed: user error (anybuR failed)
+
+bo :: Bool -> Bool
+bo b = not (not b)
+
+{-# RULES  "not/not" forall x. not (not x) = x #-}
+
+-- hermit<1> consider 'bo
+-- bo = λ b → not (not b)
+-- hermit<2> any-bu (unfold-rule "not/not")
+-- bo = λ b → b
+
+-}

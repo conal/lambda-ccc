@@ -1,6 +1,6 @@
 -- hermit Adder.hs -opt=LambdaCCC.ReifyLambda +Main Adder.hss && ./Adder
 
-set-auto-corelint True
+-- set-auto-corelint True
 -- set-pp-coercion Show
 -- set-pp-type Show
 -- -- Pretty-printing alternatives
@@ -15,4 +15,8 @@ set-auto-corelint True
 -- -- resume
 
 reify-named 'swapBI
+-- any-bu (inline 'swapBI)
+-- any-bu (unfold-rule "reify/eval") -- fails :/
+
 -- resume
+
