@@ -4,7 +4,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# OPTIONS_GHC -Wall #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -330,7 +330,7 @@ reifyEval = reifyArg >>> evalArg
  where
    reifyArg = do (_reifyE, [Type _, _dict, arg]) <- callNameT 'E.reifyE
                  return arg
-   evalArg  = do (_evalE , [Type _, body]        <- callNameT 'E.evalE
+   evalArg  = do (_evalE , [Type _, body])       <- callNameT 'E.evalE
                  return body
 
 reifyNamed :: TH.Name -> RewriteH Core
