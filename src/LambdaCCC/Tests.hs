@@ -140,30 +140,7 @@ False
 
 -}
 
-{- Conversions (with Simplify and ShowFolded, though ShowFolded isn't helping):
-
-> toCCC e1
-konst False
-> toCCC e2
-not . konst False
-> toCCC e3
-konst not
-> toCCC e4
-curry snd
-> toCCC e5
-curry (uncurry add . (snd &&& snd))
-> toCCC e6
-curry (snd &&& snd)
-> toCCC e7
-curry (not . uncurry (&&) . (not . fst . snd &&& not . snd . snd))
-> toCCC e8
-curry (snd . snd &&& fst . snd)
-> toCCC e9
-curry (uncurry xor . (fst . snd &&& snd . snd) &&& uncurry (&&) . (fst . snd &&& snd . snd))
-
--}
-
-{- Examples e3 through e9, without extra unit context, i.e., with toCCC':
+{- toCCC apd to examples e3 through e9:
 
 Without Simplify and without ShowFolded:
 

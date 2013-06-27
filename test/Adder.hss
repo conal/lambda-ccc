@@ -7,16 +7,6 @@
 -- set-pp ast
 -- set-pp ghc
 
--- -- consider 'swapBI
--- consider 'halfAdd
--- -- reify-def
--- -- reify-rules
--- reify-def-cleanup
--- -- resume
-
 reify-named 'swapBI
-any-bu (inline 'swapBI)
--- any-bu (unfold-rule "reify/eval") -- fails :/
-
--- resume
-
+-- consider 'main  -- For display
+resume

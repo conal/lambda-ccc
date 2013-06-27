@@ -4,7 +4,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# OPTIONS_GHC -Wall #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -44,6 +44,7 @@ import Language.HERMIT.Context
 import Language.HERMIT.Core (Crumb(..))
 import Language.HERMIT.External
 import Language.HERMIT.GHC (uqName,var2String)
+import Language.HERMIT.Primitive.Inline (inlineName)
 import Language.HERMIT.Kure hiding (apply)
 import Language.HERMIT.Optimize
 import Language.HERMIT.Primitive.Common
@@ -144,6 +145,9 @@ snocPathIn :: ( Eq crumb, Functor m, ReadPath c crumb
               , MonadCatch m, Walker c b ) =>
               Translate c m b (SnocPath crumb) -> Unop (Rewrite c m b)
 snocPathIn mkP = pathIn (snocPathToPath <$> mkP)
+
+apply' :: Translate c m a b -> a -> Translate c m a' b
+apply' tr x = contextonlyT $ \ c -> Kure.apply tr c x
 
 {--------------------------------------------------------------------
     HERMIT utilities
@@ -304,20 +308,31 @@ reifyExpr =
         let mkEval e' = apps evalId [ty] [e']
         mkEval <$> rew
 
-apply' :: Translate c m a b -> a -> Translate c m a' b
-apply' tr x = contextonlyT $ \ c -> Kure.apply tr c x
-
 mkVarName :: MonadThings m => Translate c m Var (CoreExpr,Type)
 mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType
 
+anybuER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) =>
+           Rewrite c m CoreExpr -> Rewrite c m g
+anybuER r = anybuR (promoteExprR r)
+
 reifyRules :: RewriteH Core
-reifyRules = tryR $ anybuR $ promoteExprR $ unfoldRules $ map ("reify/" ++)
+reifyRules = tryR $ anybuER $ unfoldRules $ map ("reify/" ++)
                ["not","(&&)","(||)","xor","(+)","fst","snd","pair"]
 
 -- TODO: Is there a way not to redundantly specify this rule list?
 
 reifyDef :: RewriteH Core
 reifyDef = rhsR reifyExpr
+
+reifyEval :: ReExpr
+reifyEval = reifyArg >>> evalArg
+ where
+   reifyArg = do (_reifyE', [Type _, arg, _ty]) <- callNameT 'E.reifyE'
+                 return arg
+   evalArg  = do (_evalE, [Type _, body])       <- callNameT 'E.evalE
+                 return body
+
+-- rswE = reifyE' ▲ (evalE ▲ swapBI_reified) ($fHasTy(->) ▲ ▲ tup ▹ ■)
 
 reifyNamed :: TH.Name -> RewriteH Core
 reifyNamed nm = snocPathIn (rhsOf nm)
@@ -327,8 +342,21 @@ reifyNamed nm = snocPathIn (rhsOf nm)
                   >>> promoteExprR letFloatArg )
             >>> snocPathIn (parentOf (bindingGroupOf nm))
                   (promoteProgR letFloatLetTop)
+            >>> anybuER (inlineName nm)
+            >>> anybuER (inlineName 'E.reifyE)
+            >>> anybuER cleanupUnfoldR
+            >>> anybuER (promoteExprR reifyEval)
  where
    nm' = TH.mkName (TH.showName nm ++ "_reified")
+
+
+-- reify-named 'swapBI
+-- any-bu (inline 'swapBI)
+-- any-bu (inline 'reifyE)
+-- any-bu cleanup-unfold
+-- -- any-bu (unfold-rule "reify/eval") -- fails :/
+-- any-bu reify-eval
+
 
 {--------------------------------------------------------------------
     Plugin
@@ -357,4 +385,7 @@ externals =
     , external "reify-named"
         (reifyNamed :: TH.Name -> RewriteH Core)
         ["reify via name"]
+    , external "reify-eval"
+        (promoteExprR reifyEval :: RewriteH Core)
+        ["simplify reifyE' composed with evalE"]
     ]

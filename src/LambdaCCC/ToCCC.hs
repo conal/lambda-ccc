@@ -17,7 +17,7 @@
 -- Convert lambda expressions to CCC combinators
 ----------------------------------------------------------------------
 
-module LambdaCCC.ToCCC (toCCC, toCCC') where
+module LambdaCCC.ToCCC (toCCC) where
 
 import Data.Functor ((<$>))
 import Control.Monad (mplus)
@@ -36,19 +36,19 @@ import LambdaCCC.Prim (Prim(PairP))
     Conversion
 --------------------------------------------------------------------}
 
--- | Rewrite a lambda expression via CCC combinators
-toCCC :: E a -> (Unit :-> a)
-toCCC a | HasTy <- tyHasTy (expTy a)
-        = convert UnitPat a
+-- -- | Rewrite a lambda expression via CCC combinators
+-- toCCC' :: E a -> (Unit :-> a)
+-- toCCC' a | HasTy <- tyHasTy (expTy a)
+--          = convert UnitPat a
 
-toCCC' :: E (a :=> b) -> (a :-> b)
-toCCC' e | (HasTy,HasTy) <- tyHasTy2 a b = toCCC'' e
+toCCC :: E (a :=> b) -> (a :-> b)
+toCCC e | (HasTy,HasTy) <- tyHasTy2 a b = to' e
  where
    (a,b) = splitFunTy (expTy e)
 
-toCCC'' :: HasTy2 a b => E (a :=> b) -> (a :-> b)
-toCCC'' (Lam p e) = convert p e
-toCCC'' e = toCCC'' (Lam vp (e :^ ve))
+to' :: HasTy2 a b => E (a :=> b) -> (a :-> b)
+to' (Lam p e) = convert p e
+to' e = to' (Lam vp (e :^ ve))
  where
    (vp,ve) = vars "ETA"
 
