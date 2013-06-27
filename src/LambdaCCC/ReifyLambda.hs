@@ -324,15 +324,14 @@ reifyRules = tryR $ anybuER $ unfoldRules $ map ("reify/" ++)
 reifyDef :: RewriteH Core
 reifyDef = rhsR reifyExpr
 
+-- reifyE ▲ $d (evalE ▲ foo) --> foo
 reifyEval :: ReExpr
 reifyEval = reifyArg >>> evalArg
  where
-   reifyArg = do (_reifyE', [Type _, arg, _ty]) <- callNameT 'E.reifyE'
+   reifyArg = do (_reifyE, [Type _, _dict, arg]) <- callNameT 'E.reifyE
                  return arg
-   evalArg  = do (_evalE, [Type _, body])       <- callNameT 'E.evalE
+   evalArg  = do (_evalE , [Type _, body]        <- callNameT 'E.evalE
                  return body
-
--- rswE = reifyE' ▲ (evalE ▲ swapBI_reified) ($fHasTy(->) ▲ ▲ tup ▹ ■)
 
 reifyNamed :: TH.Name -> RewriteH Core
 reifyNamed nm = snocPathIn (rhsOf nm)
@@ -343,20 +342,10 @@ reifyNamed nm = snocPathIn (rhsOf nm)
             >>> snocPathIn (parentOf (bindingGroupOf nm))
                   (promoteProgR letFloatLetTop)
             >>> anybuER (inlineName nm)
-            >>> anybuER (inlineName 'E.reifyE)
             >>> anybuER cleanupUnfoldR
             >>> anybuER (promoteExprR reifyEval)
  where
    nm' = TH.mkName (TH.showName nm ++ "_reified")
-
-
--- reify-named 'swapBI
--- any-bu (inline 'swapBI)
--- any-bu (inline 'reifyE)
--- any-bu cleanup-unfold
--- -- any-bu (unfold-rule "reify/eval") -- fails :/
--- any-bu reify-eval
-
 
 {--------------------------------------------------------------------
     Plugin
