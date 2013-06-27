@@ -149,7 +149,9 @@ reifyE :: HasTy a => a -> E a
 reifyE a = reifyE' a typ
 
 reifyE' :: a -> Ty a -> E a
-reifyE' = error "reifyE': Not implemented. I hoped all uses would disappear."
+reifyE' _ UnitT = error "reifyE' uNiT!"
+reifyE' _ _ = error "reifyE': Not implemented. I hoped all uses would disappear."
+-- reifyE' = error "reifyE': Not implemented. I hoped all uses would disappear."
 {-# NOINLINE reifyE' #-}
 
 -- The artificially strange definition of reifyE' prevents it from getting

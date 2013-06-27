@@ -8,5 +8,5 @@
 -- set-pp ghc
 
 reify-named 'swapBI
--- consider 'main  -- For display
-resume
+consider 'main  -- For display
+-- resume

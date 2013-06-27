@@ -4,7 +4,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# OPTIONS_GHC -Wall #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -324,14 +324,15 @@ reifyRules = tryR $ anybuER $ unfoldRules $ map ("reify/" ++)
 reifyDef :: RewriteH Core
 reifyDef = rhsR reifyExpr
 
--- reifyE ▲ $d (evalE ▲ foo) --> foo
 reifyEval :: ReExpr
 reifyEval = reifyArg >>> evalArg
  where
-   reifyArg = do (_reifyE, [Type _, _dict, arg]) <- callNameT 'E.reifyE
+   reifyArg = do (_reifyE', [Type _, arg, _ty]) <- callNameT 'E.reifyE'
                  return arg
-   evalArg  = do (_evalE , [Type _, body])       <- callNameT 'E.evalE
+   evalArg  = do (_evalE, [Type _, body])       <- callNameT 'E.evalE
                  return body
+
+-- rswE = reifyE' ▲ (evalE ▲ swapBI_reified) ($fHasTy(->) ▲ ▲ tup ▹ ■)
 
 reifyNamed :: TH.Name -> RewriteH Core
 reifyNamed nm = snocPathIn (rhsOf nm)
@@ -342,10 +343,16 @@ reifyNamed nm = snocPathIn (rhsOf nm)
             >>> snocPathIn (parentOf (bindingGroupOf nm))
                   (promoteProgR letFloatLetTop)
             >>> anybuER (inlineName nm)
+            >>> anybuER (inlineName 'E.reifyE)
             >>> anybuER cleanupUnfoldR
             >>> anybuER (promoteExprR reifyEval)
  where
    nm' = TH.mkName (TH.showName nm ++ "_reified")
+
+-- Note: I inline reifyE to its reifyE' definition and then simplify
+-- reifyE'/evalE, rather than simplifying reifyE/evalE. With this choice, I can
+-- also reifyE'/evalE combinations that come from reifyE in source code and ones
+-- that reifyExpr inserts.
 
 {--------------------------------------------------------------------
     Plugin
