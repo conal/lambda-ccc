@@ -1,7 +1,19 @@
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE MagicHash #-} -- for unpackCString# import
-
 {-# OPTIONS_GHC -Wall -fno-warn-unused-imports #-}
+
+----------------------------------------------------------------------
+-- |
+-- Module      :  Tests
+-- Copyright   :  (c) 2013 Tabula, Inc.
+-- License     :  BSD3
+-- 
+-- Maintainer  :  conal@tabula.com
+-- Stability   :  experimental
+-- 
+-- Test conversion of Haskell source code into circuits. To run:
+-- 
+--   hermit Tests.hs -opt=LambdaCCC.ReifyLambda +Main Tests.hss -- -v0 && ./Tests
+----------------------------------------------------------------------
 
 module Main where
 
