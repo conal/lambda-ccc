@@ -32,6 +32,8 @@ data Prim :: * -> * where
   FalseP, TrueP :: Prim Bool
   -- More here
 
+-- Oh! use LitP in place of FalseP and TrueP.
+
 instance Show (Prim a) where
   showsPrec p (LitP a) = showsPrec p a
   showsPrec _ NotP     = showString "not"

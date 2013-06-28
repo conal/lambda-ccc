@@ -90,6 +90,10 @@ instance HasTy2 a b => HasTy (a :=> b) where typ = typ :=> typ
 data HasTyJt :: * -> * where
   HasTy :: HasTy a => HasTyJt a
 
+-- TODO: Consider a generic replacement for types like this one. Try the generic
+-- Dict type from Edward K's "constraints" package. Replace HasTyJt a with
+-- Dict (HasTy a).
+
 -- | Proof of @'HasTy' a@ from @'Ty' a@
 tyHasTy :: Ty a -> HasTyJt a
 tyHasTy UnitT = HasTy
