@@ -29,10 +29,7 @@ data Prim :: * -> * where
   FstP          :: Prim (a :* b -> a)
   SndP          :: Prim (a :* b -> b)
   PairP         :: Prim (a -> b -> a :* b)
-  FalseP, TrueP :: Prim Bool
   -- More here
-
--- Oh! use LitP in place of FalseP and TrueP.
 
 instance Show (Prim a) where
   showsPrec p (LitP a) = showsPrec p a
@@ -44,8 +41,6 @@ instance Show (Prim a) where
   showsPrec _ FstP     = showString "fst"
   showsPrec _ SndP     = showString "snd"
   showsPrec _ PairP    = showString "(,)"
-  showsPrec _ FalseP   = showString "False"
-  showsPrec _ TrueP    = showString "True"
 
 instance Evalable (Prim a) where
   type ValT (Prim a) = a
@@ -58,8 +53,6 @@ instance Evalable (Prim a) where
   eval FstP     = fst
   eval SndP     = snd
   eval PairP    = (,)
-  eval FalseP   = False
-  eval TrueP    = True
 
 infixr 3 `xor`
 

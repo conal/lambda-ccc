@@ -234,7 +234,12 @@ vars2 (na,nb) = (PairPat ap bp, (ae,be))
 "reify/fst"   forall s. reifyE' s fst   = Const FstP
 "reify/snd"   forall s. reifyE' s snd   = Const SndP
 "reify/pair"  forall s. reifyE' s (,)   = Const PairP
-"reify/false" forall s. reifyE' s False = Const FalseP
-"reify/true"  forall s. reifyE' s True  = Const TrueP
+ 
+"reify/false" forall s. reifyE' s False = Const (LitP False)
+"reify/true"  forall s. reifyE' s True  = Const (LitP True)
  
   #-}
+
+-- TODO: Generalize the false & true rules. I think I'll need to do via an
+-- explicit Core transformation. I'll have to be able to find out whether the
+-- type is Showable. I suppose I could handle a few known type constructors.

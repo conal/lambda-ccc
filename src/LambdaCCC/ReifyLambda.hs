@@ -324,9 +324,12 @@ anybuER r = anybuR (promoteExprR r)
 
 reifyRules :: RewriteH Core
 reifyRules = tryR $ anybuER $ unfoldRules $ map ("reify/" ++)
-               ["not","(&&)","(||)","xor","(+)","fst","snd","pair"]
+               ["not","(&&)","(||)","xor","(+)","fst","snd","pair","false","true"]
+
+-- or: words $ "not (&&) (||) xor ..."
 
 -- TODO: Is there a way not to redundantly specify this rule list?
+-- Yes -- trust GHC to apply the rules later.
 
 reifyDef :: RewriteH Core
 reifyDef = rhsR reifyExpr
