@@ -70,5 +70,12 @@ fiddle = length "Fiddle"
 
 ------
 
+
+c6 :: () -> Bool
+c6 _u = False
+
 main :: IO ()
-main = print (toCCC (reifyE swapBI))
+main = print (toCCC (reifyE "swapBI" swapBI))
+
+-- TODO: maybe a TH macro for reifyE "foo" foo, "[r|foo]".
+-- Maybe additional macros for specialized contexts like toCCC [r|foo].

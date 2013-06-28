@@ -1,4 +1,4 @@
--- hermit Adder.hs -opt=LambdaCCC.ReifyLambda +Main Adder.hss && ./Adder
+-- hermit Adder.hs -opt=LambdaCCC.ReifyLambda +Main Adder.hss -- -v0 && ./Adder
 
 -- set-auto-corelint True
 -- set-pp-coercion Show
@@ -8,5 +8,5 @@
 -- set-pp ghc
 
 reify-named 'swapBI
-consider 'main  -- For display
--- resume
+-- consider 'swapBI_reified  -- For display
+resume

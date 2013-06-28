@@ -32,6 +32,7 @@ module LambdaCCC.Lambda
 
 import Control.Arrow ((&&&))
 import Data.Maybe (fromMaybe,catMaybes,listToMaybe)
+import Text.Printf (printf)
 import Debug.Trace (trace)
 
 import Data.IsTy
@@ -145,13 +146,11 @@ data Bind = forall a. Bind (V a) a
 -- | Variable environment
 type Env = [Bind]
 
-reifyE :: HasTy a => a -> E a
-reifyE a = reifyE' a typ
+reifyE :: HasTy a => String -> a -> E a
+reifyE msg a = reifyE' msg a typ
 
-reifyE' :: a -> Ty a -> E a
-reifyE' _ UnitT = error "reifyE' uNiT!"
-reifyE' _ _ = error "reifyE': Not implemented. I hoped all uses would disappear."
--- reifyE' = error "reifyE': Not implemented. I hoped all uses would disappear."
+reifyE' :: String -> a -> Ty a -> E a
+reifyE' msg _ _ = error (printf "Oops -- reifyE' %s was not eliminated" msg)
 {-# NOINLINE reifyE' #-}
 
 -- The artificially strange definition of reifyE' prevents it from getting
@@ -161,10 +160,10 @@ reifyE' _ _ = error "reifyE': Not implemented. I hoped all uses would disappear.
 
 {-# RULES
 
-"reify'/eval" forall t e. reifyE' (evalE e) t = e
-"eval/reify'" forall t x. evalE (reifyE' x t) = x
+"reify'/eval" forall e msg t. reifyE' (evalE e) msg t = e
+"eval/reify'" forall x msg t. evalE (reifyE' x msg t) = x
 
--- "reify/eval"  forall   e. reifyE (evalE e) = e
+-- "reify/eval"  forall   msg e. reifyE (evalE e) msg = e
 
   #-}
 
@@ -227,13 +226,15 @@ vars2 (na,nb) = (PairPat ap bp, (ae,be))
 
 {-# RULES
  
-"reify/not"  reifyE' not  = Const NotP
-"reify/(&&)" reifyE' (&&) = Const AndP
-"reify/(||)" reifyE' (||) = Const OrP
-"reify/xor"  reifyE' xor  = Const XorP
-"reify/(+)"  reifyE' (+)  = Const AddP
-"reify/fst"  reifyE' fst  = Const FstP
-"reify/snd"  reifyE' snd  = Const SndP
-"reify/pair" reifyE' (,)  = Const PairP
+"reify/not"   forall s. reifyE' s not   = Const NotP
+"reify/(&&)"  forall s. reifyE' s (&&)  = Const AndP
+"reify/(||)"  forall s. reifyE' s (||)  = Const OrP
+"reify/xor"   forall s. reifyE' s xor   = Const XorP
+"reify/(+)"   forall s. reifyE' s (+)   = Const AddP
+"reify/fst"   forall s. reifyE' s fst   = Const FstP
+"reify/snd"   forall s. reifyE' s snd   = Const SndP
+"reify/pair"  forall s. reifyE' s (,)   = Const PairP
+"reify/false" forall s. reifyE' s False = Const FalseP
+"reify/true"  forall s. reifyE' s True  = Const TrueP
  
   #-}

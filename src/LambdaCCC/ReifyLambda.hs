@@ -295,10 +295,11 @@ reifyExpr =
                            fail "rVar: not a lambda-bound variable"
                             -- return $ apps reifyId [varType v] [Var v]
          -- Reify (non-lambda) variables and their polymorphic instantiations.
-         rReify = do e@(collectTypeArgs -> (Var _, _)) <- idR
+         rReify = do e@(collectTypeArgs -> (Var v, _)) <- idR
                      let t = exprType e
+                     (str,_) <- apply' mkVarName v
                      te <- apply' reifyType t
-                     return $ apps reifyId [t] [e,te]
+                     return $ apps reifyId [t] [str,e,te]
          rApp  = do App (exprType -> funTy) _ <- idR
                     appT  rew rew $ arr $ \ u' v' ->
                       let (a,b) = splitFunTy funTy in
@@ -333,7 +334,7 @@ reifyDef = rhsR reifyExpr
 reifyEval :: ReExpr
 reifyEval = reifyArg >>> evalArg
  where
-   reifyArg = do (_reifyE', [Type _, arg, _ty]) <- callNameT 'E.reifyE'
+   reifyArg = do (_reifyE', [Type _, _str, arg, _ty]) <- callNameT 'E.reifyE'
                  return arg
    evalArg  = do (_evalE, [Type _, body])       <- callNameT 'E.evalE
                  return body
