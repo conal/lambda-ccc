@@ -55,8 +55,8 @@ to' e = to' (Lam vp (e :^ ve))
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: HasTy2 a b => Pat a -> E b -> (a :-> b)
 convert _ (Const o _) = Konst o
-convert k (Var v)    = fromMaybe (error $ "unbound variable: " ++ show v) $
-                       convertVar v k
+convert k (Var v) = fromMaybe (error $ "unbound variable: " ++ show v) $
+                    convertVar v k
 -- convert k (u :# v)   = convert k u &&& convert k v
 convert k (Const PairP (tu :=> tv :=> _) :^ u :^ v)
   | (HasTy,HasTy) <- tyHasTy2 tu tv
