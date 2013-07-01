@@ -55,6 +55,9 @@ baz p q = (fst p `xor` snd p) `xor` (fst q `xor` snd q)
 halfAdd :: (Bool,Bool) -> (Bool,Bool)
 halfAdd p = (fst p && snd p, fst p `xor` snd p)
 
+halfAdd' :: (Bool,Bool) -> (Bool,Bool)
+halfAdd' (a,b) = (a `xor` b, a && b)
+
 quux :: Bool -> (Bool,Bool)
 quux p = (p,True)
 
@@ -68,16 +71,14 @@ swap p = (snd p, fst p)
 swapBI :: (Bool,Int) -> (Int,Bool)
 swapBI p = (snd p, fst p)
 
-
 swapBI' :: (Bool,Int) -> (Int,Bool)
 swapBI' (a,b) = (b,a)
 
+f3 :: ((Bool,Bool),(Bool,Bool)) -> (Bool,Bool)
+f3 ((a,b),(c,d)) = (a && c, b || d)
 
--- The rest don't yet transform successfully. They become 'case' expressions,
--- which we're not yet handling.
-
-halfAdd' :: (Bool,Bool) -> (Bool,Bool)
-halfAdd' (a,b) = (a `xor` b, a && b)
+g :: ((Bool,Bool),Bool) -> Bool
+g ((_,b),_) = b
 
 fiddle :: Int
 fiddle = length "Fiddle"
@@ -86,7 +87,10 @@ fiddle = length "Fiddle"
 -- "expectJust initTcInteractive" GHC panic.
 
 main :: IO ()
-main = print (toCCC (reifyE "swapBI'" swapBI'))
+main = do print e
+          print (toCCC e)
+ where
+   e = reifyE "g" g
 
 -- TODO: maybe a TH macro for reifyE "foo" foo, "[r|foo]".
 -- Maybe additional macros for specialized contexts like toCCC [r|foo].

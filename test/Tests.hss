@@ -7,6 +7,6 @@
 -- set-pp ast
 -- set-pp ghc
 
-reify-named 'swapBI'
-consider 'swapBI'_reified  -- For display
+reify-named 'g
+consider 'g_reified  -- For display
 -- resume
