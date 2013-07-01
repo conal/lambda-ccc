@@ -261,6 +261,8 @@ reifyType =
          tyOp2 tid a' b' = apps tid [tyTy a',tyTy b'] [a',b']
      rew
 
+-- TODO: Look up the ids only once in reifyExpr, not every time 'reifyType' is called.
+
 -- tyConAppT :: (ExtendPath c Crumb, Monad m) => 
 --              Translate c m TyCon a1 -> (Int -> Translate c m KindOrType a2) 
 --           -> (a1 -> [a2] -> b) -> Translate c m Type b

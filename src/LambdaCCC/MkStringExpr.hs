@@ -26,7 +26,7 @@ import Data.Char (ord)
 import GhcPlugins hiding (mkStringExpr)
 import PrelNames (unpackCStringName,unpackCStringUtf8Name)
 
--- | Create a 'CoreExpr' which will evaluate to the given @String@
+-- | Create a 'CoreExpr' that evaluates to the given string
 mkStringExpr :: MonadThings m => String -> m CoreExpr
 mkStringExpr str = liftM mk (lookupId unpackName)
  where
