@@ -192,21 +192,17 @@ rhsR = defR idR
 -- unfoldNames :: [TH.Name] -> RewriteH CoreExpr
 -- unfoldNames nms = catchesM (unfoldNameR <$> nms) -- >>> cleanupUnfoldR
 
--- Just the local variables (lambda- or case-bound) in a HERMIT context
-localVars :: ReadBindings c => c -> S.Set Var
-localVars = M.keysSet .  M.filter (isLam . snd) . hermitBindings
- where
-   isLam LAM     = True
-   isLam CASEALT = True
-   isLam _       = False
+-- The set of variables in a HERMIT context
+isLocal :: ReadBindings c => c -> (Var -> Bool)
+isLocal = flip M.member . hermitBindings
 
 -- TODO: Maybe return a predicate instead of a set. More abstract, and allows
 -- for efficient construction. Here, we'd probably want to use the underlying
 -- map to implement the returned predicate.
 
 -- | Extract just the lambda-bound variables in a HERMIT context
-localVarsT :: (ReadBindings c, Applicative m) => Translate c m a (S.Set Var)
-localVarsT = contextonlyT (pure . localVars)
+isLocalT :: (ReadBindings c, Applicative m) => Translate c m a (Var -> Bool)
+isLocalT = contextonlyT (pure . isLocal)
 
 type InCoreTC t = Injection t CoreTC
 
@@ -288,13 +284,13 @@ reifyExpr =
                      , ("Reify",rReify)
                      , ("App"  ,rApp)
                      , ("LamT" ,rLamT), ("Lam",rLam)
+                     , ("Let"  ,rLet)
                      , ("Case" ,rCase)
                      ]
-         rVar, rApp, rLamT, rLam :: ReExpr
-         rVar  = do bvars <- localVarsT
+         rVar  = do local <- isLocalT
                     varT $
                       do v <- idR
-                         if S.member v bvars then
+                         if local v then
                            do (name,ty) <- mkVarName
                               tye <- apply' reifyType ty
                               return $ apps varId [ty] [name,tye]
@@ -317,6 +313,10 @@ reifyExpr =
                     vtye <- apply' reifyType vty
                     lamT mkVarName rew $ arr $ \ (name,ty) e' ->
                       apps lamvId [ty, bodyTy] [name,vtye,e']
+         rLet  = do -- only NonRec for now
+                    Let (NonRec _ (exprType -> rhsT)) (exprType -> bodyT) <- idR
+                    letT reifyBind rew $ \ (patE,rhs') body' ->
+                      apps letId [rhsT,bodyT] [patE,rhs',body']
          rCase = do Case (exprType -> scrutT) _ _ [_] <- idR
                     _ <- observeR' "Reifying case"
                     caseT rew idR idR (const reifyAlt) $
@@ -336,6 +336,10 @@ reifyExpr =
          varPatT = do (nameE,ty) <- mkVarName
                       tye    <- apply' reifyType ty
                       return $ apps varPatId [ty] [nameE,tye]
+         -- Reify a Core binding into a reified pattern and expression.
+         -- Only handle NonRec bindings for now.
+         reifyBind :: TranslateH CoreBind (CoreExpr,CoreExpr)
+         reifyBind = nonRecT varPatT rew (,)
          -- TODO: Literals
      do _ <- observeR' "Reifying expression "
         ty <- arr exprType
@@ -343,6 +347,12 @@ reifyExpr =
         mkEval <$> rew
 
 {-
+letT :: (ExtendPath c Crumb, AddBindings c, Monad m)
+     => Translate c m CoreBind a1
+     -> Translate c m CoreExpr a2
+     -> (a1 -> a2 -> b) 
+     -> Translate c m CoreExpr b
+
 caseT :: (ExtendPath c Crumb, AddBindings c, Monad m)
       => Translate c m CoreExpr e
       -> Translate c m Id w
