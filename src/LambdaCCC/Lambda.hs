@@ -24,7 +24,7 @@ module LambdaCCC.Lambda
   ( Name
   , V, Pat(..), E(..)
   , varTy, patTy, expTy
-  , var, lamv
+  , var, varPat, lamv, lett
   , varT, constT
   , reifyE, reifyE', evalE
   , vars, vars2
@@ -114,8 +114,18 @@ constT p = Const p typ
 var :: forall a. Name -> Ty a -> E a
 var name ty = Var (V name ty)
 
+varPat :: forall a. Name -> Ty a -> Pat a
+varPat name ty = VarPat (V name ty)
+
+-- varVarPat :: forall a b. Name -> Name -> Ty a -> Ty b -> Pat (a :* b)
+-- varVarPat na nb tya tyb = PairPat (varPat na tya) (varPat nb tyb)
+
 lamv :: forall a b. Name -> Ty a -> E b -> E (a -> b)
 lamv name ty body = Lam (VarPat (V name ty)) body
+
+-- | Let expression (beta redex)
+lett :: forall a b. Pat a -> E a -> E b -> E b
+lett pat e body = Lam pat body :^ e
 
 instance Show (E a) where
 #ifdef ShowFolded

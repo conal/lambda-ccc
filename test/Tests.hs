@@ -19,12 +19,12 @@ module Main where
 
 import Prelude
 
+import LambdaCCC.Lambda (reifyE)
 import LambdaCCC.ToCCC (toCCC)
 
--- Needed for resolving names.
--- TODO: Bug? Is there an alternative?
-import LambdaCCC.Lambda (E(..),var,lamv,reifyE,reifyE',evalE)
-import LambdaCCC.Ty (Ty(..))
+-- Needed for resolving names. Bug? Is there an alternative?
+import qualified LambdaCCC.Lambda
+import qualified LambdaCCC.Ty
 
 import LambdaCCC.Prim (xor)
 
@@ -68,6 +68,11 @@ swap p = (snd p, fst p)
 swapBI :: (Bool,Int) -> (Int,Bool)
 swapBI p = (snd p, fst p)
 
+
+swapBI' :: (Bool,Int) -> (Int,Bool)
+swapBI' (a,b) = (b,a)
+
+
 -- The rest don't yet transform successfully. They become 'case' expressions,
 -- which we're not yet handling.
 
@@ -80,14 +85,8 @@ fiddle = length "Fiddle"
 -- WEIRD: sometimes when I comment out this fiddle definition, I get the dread
 -- "expectJust initTcInteractive" GHC panic.
 
-------
-
-
-c6 :: () -> Bool
-c6 _u = False
-
 main :: IO ()
-main = print (toCCC (reifyE "swapBI" swapBI))
+main = print (toCCC (reifyE "swapBI'" swapBI'))
 
 -- TODO: maybe a TH macro for reifyE "foo" foo, "[r|foo]".
 -- Maybe additional macros for specialized contexts like toCCC [r|foo].

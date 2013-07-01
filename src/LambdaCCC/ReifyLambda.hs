@@ -40,7 +40,7 @@ import TypeRep (Type(..))
 import PrelNames (unitTyConKey,boolTyConKey,intTyConKey)
 
 import Language.HERMIT.Context
-  (ReadBindings,HermitBindingSite(LAM),hermitBindings)
+  (ReadBindings,HermitBindingSite(..),hermitBindings)
 import Language.HERMIT.Core (Crumb(..))
 import Language.HERMIT.External
 import Language.HERMIT.GHC (uqName,var2String)
@@ -192,20 +192,21 @@ rhsR = defR idR
 -- unfoldNames :: [TH.Name] -> RewriteH CoreExpr
 -- unfoldNames nms = catchesM (unfoldNameR <$> nms) -- >>> cleanupUnfoldR
 
--- Just the lambda-bound variables in a HERMIT context
-lambdaVars :: ReadBindings c => c -> S.Set Var
-lambdaVars = M.keysSet .  M.filter (isLam . snd) . hermitBindings
+-- Just the local variables (lambda- or case-bound) in a HERMIT context
+localVars :: ReadBindings c => c -> S.Set Var
+localVars = M.keysSet .  M.filter (isLam . snd) . hermitBindings
  where
-   isLam LAM = True
-   isLam _   = False
+   isLam LAM     = True
+   isLam CASEALT = True
+   isLam _       = False
 
 -- TODO: Maybe return a predicate instead of a set. More abstract, and allows
 -- for efficient construction. Here, we'd probably want to use the underlying
 -- map to implement the returned predicate.
 
 -- | Extract just the lambda-bound variables in a HERMIT context
-lambdaVarsT :: (ReadBindings c, Applicative m) => Translate c m a (S.Set Var)
-lambdaVarsT = contextonlyT (pure . lambdaVars)
+localVarsT :: (ReadBindings c, Applicative m) => Translate c m a (S.Set Var)
+localVarsT = contextonlyT (pure . localVars)
 
 type InCoreTC t = Injection t CoreTC
 
@@ -218,10 +219,10 @@ observeR' | observing = observeR
 
 tries :: (InCoreTC a, InCoreTC t) => [(String,TranslateH a t)] -> TranslateH a t
 tries = foldr (<+) (observeR "Unhandled" >>> fail "unhandled")
-      . map (uncurry try)
+      . map (uncurry labeled)
 
-try :: InCoreTC t => String -> Unop (TranslateH a t)
-try label = (>>> observeR' label)
+labeled :: InCoreTC t => String -> Unop (TranslateH a t)
+labeled label = (>>> observeR' label)
 
 {--------------------------------------------------------------------
     Reification
@@ -272,24 +273,28 @@ type ReExpr = RewriteH CoreExpr
 
 reifyExpr :: ReExpr
 reifyExpr =
-  do varId   <- findIdT 'E.var
-     appId   <- findIdT '(E.:^)
-     lamvId  <- findIdT 'E.lamv
-     evalId  <- findIdT 'E.evalE
-     reifyId <- findIdT 'E.reifyE'
+  do varId     <- findIdT 'E.var
+     appId     <- findIdT '(E.:^)
+     lamvId    <- findIdT 'E.lamv
+     evalId    <- findIdT 'E.evalE
+     reifyId   <- findIdT 'E.reifyE'
+     letId     <- findIdT 'E.lett
+     varPatId  <- findIdT 'E.varPat
+     pairPatId <- findIdT 'E.PairPat
      let rew :: ReExpr
-         rew = tries [ ("Var",rVar)
-                     , ("Reify", rReify)
-                     , ("App",rApp)
-                     , ("LamT",rLamT), ("Lam",rLam)
+         rew = tries [ ("Var"  ,rVar)
+                     , ("Reify",rReify)
+                     , ("App"  ,rApp)
+                     , ("LamT" ,rLamT), ("Lam",rLam)
+                     , ("Case" ,rCase)
                      ]
          rVar, rApp, rLamT, rLam :: ReExpr
-         rVar  = do bvars <- lambdaVarsT
+         rVar  = do bvars <- localVarsT
                     varT $
                       do v <- idR
                          if S.member v bvars then
                            do (name,ty) <- mkVarName
-                              tye <- apply' reifyType ty -- (expandTypeSynonyms ty)
+                              tye <- apply' reifyType ty
                               return $ apps varId [ty] [name,tye]
                           else
                            fail "rVar: not a lambda-bound variable"
@@ -310,10 +315,47 @@ reifyExpr =
                     vtye <- apply' reifyType vty
                     lamT mkVarName rew $ arr $ \ (name,ty) e' ->
                       apps lamvId [ty, bodyTy] [name,vtye,e']
+         rCase = do Case (exprType -> scrutT) _ _ [_] <- idR
+                    _ <- observeR' "Reifying case"
+                    caseT rew idR idR (const reifyAlt) $
+                      \ scrutE' _ bodyT [(patE,rhs)] ->
+                          apps letId [scrutT,bodyT] [patE,scrutE',rhs]
+         -- Reify a case alternative, yielding a reified pattern, its type, and
+         -- a reified alternative body (RHS).
+         reifyAlt :: TranslateH CoreAlt (CoreExpr,CoreExpr)
+         reifyAlt =
+           do -- Only pair patterns for now
+              _ <- observeR' "Reifying case alternative"
+              (DataAlt (isTupleTyCon.dataConTyCon -> True), vars, _) <- idR
+              vPats <- mapM (apply' (labeled "varPatT" varPatT)) vars
+              altT idR (const idR) rew $ \ _ _ rhs' ->
+                (apps pairPatId (varType <$> vars) vPats, rhs')
+         varPatT :: TranslateH Var CoreExpr
+         varPatT = do (nameE,ty) <- mkVarName
+                      tye    <- apply' reifyType ty
+                      return $ apps varPatId [ty] [nameE,tye]
          -- TODO: Literals
-     do ty <- arr exprType
+     do _ <- observeR' "Reifying expression "
+        ty <- arr exprType
         let mkEval e' = apps evalId [ty] [e']
         mkEval <$> rew
+
+{-
+caseT :: (ExtendPath c Crumb, AddBindings c, Monad m)
+      => Translate c m CoreExpr e
+      -> Translate c m Id w
+      -> Translate c m Type ty
+      -> (Int -> Translate c m CoreAlt alt)
+      -> (e -> w -> ty -> [alt] -> b)
+      -> Translate c m CoreExpr b
+
+altT :: (ExtendPath c Crumb, AddBindings c, Monad m)
+     => Translate c m AltCon a1
+     -> (Int -> Translate c m Var a2)
+     -> Translate c m CoreExpr a3
+     -> (a1 -> [a2] -> a3 -> b)
+     -> Translate c m CoreAlt b
+-}
 
 mkVarName :: MonadThings m => Translate c m Var (CoreExpr,Type)
 mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType
