@@ -17,7 +17,7 @@
 -- Maintainer  :  conal@tabula.com
 -- Stability   :  experimental
 -- 
--- Lambda expressions -- phantom variable type edition
+-- Lambda expressions -- statically typed
 ----------------------------------------------------------------------
 
 module LambdaCCC.Lambda
