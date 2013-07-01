@@ -134,6 +134,10 @@ instance Show (E a) where
   showsPrec p (Const PairP _ :^ u :^ v) = showsPair p u v
   showsPrec p (Const prim _ :^ u :^ v) | Just (OpInfo op fixity) <- opInfo prim =
     showsOp2' op fixity p u v
+  showsPrec p (Lam q body :^ rhs) =  -- beta redex as "let"
+    showParen (p > 0) $
+    showString "let " . showsPrec 0 q . showString " = " . showsPrec 0 rhs
+    . showString " in " . showsPrec 0 body
 #endif
   showsPrec _ (Var (V n _))  = showString n
   showsPrec p (Const c _) = showsPrec p c
