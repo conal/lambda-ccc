@@ -21,10 +21,12 @@
 
 module LambdaCCC.CCC
   ( module LambdaCCC.Misc
-  , (:->)(..), cccTys, (@.), applyE, curryE, uncurryE
+  , (:->)(Konst,Id,Snd,Fst,Lft,Rht)
+  , (@.), applyE, curryE, uncurryE
   , (&&&), (***), (+++), (|||)
   , dup, jam, swapP, swapC
   , first, second, left, right
+  , cccTys
   ) where
 
 import qualified Control.Arrow as A

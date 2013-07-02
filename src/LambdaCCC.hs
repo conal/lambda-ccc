@@ -52,7 +52,7 @@ convertLam :: Pat -> RewriteH CoreExpr
 convertLam k = do
     Lam p _ <- idR
     observeR "convertLam"
-    c <- findET 'Curry
+    c <- findET 'curryE
     lamT mempty (convert (PairP k $ VarP p)) $ \ () e -> mkCoreApps c [{-some types need to go here!-}e]
 
 -- convert k (u :^ v)   = Apply @. (convert k u &&& convert k v)
@@ -61,8 +61,8 @@ convertApp :: Pat -> RewriteH CoreExpr
 convertApp k = do
     App u v <- idR
     observeR "convertApp"
-    a   <- findET 'Apply
-    c   <- findET '(:.)
+    a   <- findET 'applyE
+    c   <- findET '(@.)
     amp <- findET '(&&&)
     appT (convert k) (convert k) $ \ u v ->
         let res = mkCoreApps amp [{-types go here-}u,v]
