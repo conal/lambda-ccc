@@ -24,7 +24,7 @@ module LambdaCCC.Lambda
   ( Name
   , V, Pat(..), E(..)
   , varTy, patTy, expTy
-  , var, varPat, app, lamv, lett
+  , var, var#, varPat, varPat#, app, lamv, lamv#, lett
   , varT, constT
   , reifyE, reifyE', evalE
   , vars, vars2
@@ -34,6 +34,9 @@ import Control.Arrow ((&&&))
 import Data.Maybe (fromMaybe,catMaybes,listToMaybe)
 import Text.Printf (printf)
 import Debug.Trace (trace)
+
+import GHC.Pack (unpackCString#)
+import GHC.Prim (Addr#)
 
 import Data.IsTy
 import Data.Proof.EQ
@@ -134,8 +137,14 @@ constT p = Const p typ
 var :: forall a. Name -> Ty a -> E a
 var name ty = Var (V name ty)
 
+var# :: forall a. Addr# -> Ty a -> E a
+var# addr = var (unpackCString# addr)
+
 varPat :: forall a. Name -> Ty a -> Pat a
 varPat name ty = VarPat (V name ty)
+
+varPat# :: forall a. Addr# -> Ty a -> Pat a
+varPat# addr = varPat (unpackCString# addr)
 
 app :: forall b a . E (a :=> b) -> Ty a -> E a -> E b
 app f tya a | HasTy <- tyHasTy tya = f :^ a
@@ -146,9 +155,12 @@ app f tya a | HasTy <- tyHasTy tya = f :^ a
 lamv :: forall a b. Name -> Ty a -> E b -> E (a -> b)
 lamv name ty body = Lam (VarPat (V name ty)) body
 
+lamv# :: forall a b. Addr# -> Ty a -> E b -> E (a -> b)
+lamv# addr = lamv (unpackCString# addr)
+
 -- | Let expression (beta redex)
-lett :: forall a b. Pat a -> Ty a -> E a -> E b -> E b
-lett pat tya e body | HasTy <- tyHasTy tya = Lam pat body :^ e
+lett :: forall a b. Pat a -> E a -> E b -> E b
+lett pat e body | HasTy <- tyHasTy (patTy pat) = Lam pat body :^ e
 
 instance Show (E a) where
 #ifdef ShowFolded
