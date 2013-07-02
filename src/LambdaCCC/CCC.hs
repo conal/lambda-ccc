@@ -201,10 +201,10 @@ f &&& g = f :&&& g
 #ifdef Simplify
 -- | Decompose into @g . f@, where @f@ is as small as possible, but not 'Id'.
 decompR :: HasTy2 a c => Unop (a :-> c)
-decompR Id                           = Id
-decompR (h :. (decompR -> (g :. f))) = (h @. g) @. f
-decompR comp@(_ :. _)                = comp
-decompR f                            = Id :. f
+decompR Id                         = Id
+decompR (h :. (decompR -> g :. f)) = (h @. g) @. f
+decompR comp@(_ :. _)              = comp
+decompR f                          = Id :. f
 #endif
 
 (***) :: HasTy4 a b c d => (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
