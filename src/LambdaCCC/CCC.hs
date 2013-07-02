@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures, CPP #-}
-{-# LANGUAGE PatternGuards, ConstraintKinds #-}
+{-# LANGUAGE PatternGuards, ViewPatterns, ConstraintKinds #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-} -- EXPERIMENT
 {-# OPTIONS_GHC -Wall #-}
@@ -32,7 +32,7 @@ import qualified Control.Arrow as A
 import Data.IsTy
 import Data.Proof.EQ
 
-import LambdaCCC.Misc (Evalable(..),(:*),(:+),(:=>))
+import LambdaCCC.Misc (Unop,Evalable(..),(:*),(:+),(:=>))
 import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 import LambdaCCC.Ty
 import LambdaCCC.Prim (Prim(..))
@@ -192,12 +192,19 @@ swapC = Rht ||| Lft
 #ifdef Simplify
 Fst &&& Snd = Id
 -- f . r &&& g . r == (f &&& g) . r
-fr &&& gr | Just (Composed f r ) <- decomposeR fr
-          , Just (Composed g r') <- decomposeR gr
-          , Just (Refl,Refl)     <- r `tyEq2` r'
-          = (f &&& g) @. r
+(decompR -> f :. r) &&& (decompR -> g :. r')
+  | Just (Refl,Refl) <- r `tyEq2` r' = (f &&& g) @. r
 #endif
 f &&& g = f :&&& g
+
+#ifdef Simplify
+-- | Decompose into @g . f@, where @f@ is as small as possible, but not 'Id'.
+decompR :: HasTy2 a c => Unop (a :-> c)
+decompR Id                           = Id
+decompR (h :. (decompR -> (g :. f))) = (h @. g) @. f
+decompR comp@(_ :. _)                = comp
+decompR f                            = Id :. f
+#endif
 
 (***) :: HasTy4 a b c d => (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
 f *** g = f @. Fst &&& g @. Snd
@@ -261,20 +268,3 @@ instance Show (a :-> b) where
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "uncurry" p h
-
-{--------------------------------------------------------------------
-    Factoring
---------------------------------------------------------------------}
-
-data Composed a c = forall b. HasTy b => Composed (b :-> c) (a :-> b)
-
--- | Decompose into @g . f@, where @f@ is as small as possible, but not 'Id'.
-decomposeR :: HasTy c => (a :-> c) -> Maybe (Composed a c)
-decomposeR Id = Nothing
-decomposeR (g :. f) | Just (Composed v u) <- decomposeR f
-                    = Just (Composed (g @. v) u)
-                    | otherwise = Just (Composed g f)
-decomposeR f = Just (Composed Id f)
-
--- decomposeR = error "decomposeR: not yet implemented"
-
