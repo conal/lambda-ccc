@@ -83,21 +83,20 @@ instance IsTy2 (:->) where
   tyEq2 = tyEq2'
 
 instance HasTy2 a b => Eq (a :-> b) where
-  Id         == Id                     = True
-  (g :. f)   == (g' :. f')
-    | Just (Refl,Refl) <- f `tyEq2` f' = g == g'
-  Prim p     == Prim p'                = p == p'
-  Konst p    == Konst p'               = p == p'
-  Fst        == Fst                    = True
-  Snd        == Snd                    = True
-  (f :&&& g) == (f' :&&& g')           = f == f' && g == g'
-  Lft        == Lft                    = True
-  Rht        == Rht                    = True
-  (f :||| g) == (f' :||| g')           = f == f' && g == g'
-  Apply      == Apply                  = True
-  Curry h    == Curry h'               = h == h'
-  Uncurry k  == Uncurry k'             = k == k'
-  _          == _                      = False
+  Id         == Id                                     = True
+  (g :. f)   == (g' :. f') | Just Refl <- f `tyEq2` f' = g == g'
+  Prim p     == Prim p'                                = p == p'
+  Konst p    == Konst p'                               = p == p'
+  Fst        == Fst                                    = True
+  Snd        == Snd                                    = True
+  (f :&&& g) == (f' :&&& g')                           = f == f' && g == g'
+  Lft        == Lft                                    = True
+  Rht        == Rht                                    = True
+  (f :||| g) == (f' :||| g')                           = f == f' && g == g'
+  Apply      == Apply                                  = True
+  Curry h    == Curry h'                               = h == h'
+  Uncurry k  == Uncurry k'                             = k == k'
+  _          == _                                      = False
 
 -- TODO: The type constraints prevent (:->) from being a category etc without
 -- some change to those classes, e.g., with instance-specific constraints via
@@ -192,8 +191,8 @@ swapC = Rht ||| Lft
 #ifdef Simplify
 Fst &&& Snd = Id
 -- f . r &&& g . r == (f &&& g) . r
-(decompR -> f :. r) &&& (decompR -> g :. r')
-  | Just (Refl,Refl) <- r `tyEq2` r' = (f &&& g) @. r
+(decompR -> f :. r) &&& (decompR -> g :. r') | Just Refl <- r `tyEq2` r' =
+  (f &&& g) @. r
 #endif
 f &&& g = f :&&& g
 

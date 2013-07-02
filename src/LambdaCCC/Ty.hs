@@ -73,11 +73,11 @@ fa `tyEq'` fb
 
 -- | Variant of 'tyEq' from the 'ty' package. This one assumes 'HasTy'.
 tyEq2' :: forall a b c d f. (HasTy a, HasTy b, HasTy c, HasTy d, Eq (f a b)) =>
-          f a b -> f c d -> Maybe (a :=: c, b :=: d)
+          f a b -> f c d -> Maybe ((a,b) :=: (c,d))
 fab `tyEq2'` fcd
   | Just Refl <- (typ :: Ty a) `tyEq` (typ :: Ty c)
   , Just Refl <- (typ :: Ty b) `tyEq` (typ :: Ty d)
-  , fab == fcd = Just (Refl,Refl)
+  , fab == fcd = Just Refl
   | otherwise  = Nothing
 
 {--------------------------------------------------------------------
