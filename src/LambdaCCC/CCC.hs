@@ -193,7 +193,7 @@ swapC = Rht ||| Lft
 #ifdef Simplify
 Fst &&& Snd = Id
 -- f . r &&& g . r == (f &&& g) . r
-(decompR -> f :. r) &&& (decompR -> g :. r') | Just Refl <- r `tyEq2` r' =
+(decompR -> f :. r) &&& (decompR -> g :. (tyEq2 r -> Just Refl)) =
   (f &&& g) @. r
 #endif
 f &&& g = f :&&& g
