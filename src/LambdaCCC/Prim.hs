@@ -18,11 +18,14 @@
 
 module LambdaCCC.Prim (Prim(..),xor) where
 
+import Data.IsTy
+
+import LambdaCCC.Ty
 import LambdaCCC.Misc
 
 -- | Primitives
 data Prim :: * -> * where
-  LitP          :: Show a => a -> Prim a
+  LitP          :: (Eq a, Show a) => a -> Prim a
   NotP          :: Prim (Bool -> Bool)
   AndP,OrP,XorP :: Prim (Bool -> Bool -> Bool)
   AddP          :: Num  a => Prim (a -> a -> a)
@@ -30,6 +33,22 @@ data Prim :: * -> * where
   SndP          :: Prim (a :* b -> b)
   PairP         :: Prim (a -> b -> a :* b)
   -- More here
+
+instance Eq (Prim a) where
+  LitP a == LitP b = a == b
+  NotP   == NotP   = True
+  AndP   == AndP   = True
+  OrP    == OrP    = True
+  XorP   == XorP   = True
+  AddP   == AddP   = True
+  FstP   == FstP   = True
+  SndP   == SndP   = True
+  PairP  == PairP  = True
+  _      == _      = False
+
+instance IsTy Prim where
+  type IsTyConstraint Prim z = HasTy z
+  tyEq = tyEq'
 
 instance Show (Prim a) where
   showsPrec p (LitP a) = showsPrec p a

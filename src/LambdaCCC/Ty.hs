@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeOperators, GADTs, KindSignatures, TypeSynonymInstances #-}
 {-# LANGUAGE PatternGuards, ConstraintKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -18,7 +19,7 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.Ty
-  ( Ty(..),HasTy(..)
+  ( Ty(..),HasTy(..), tyEq'
   , HasTy2,HasTy3,HasTy4
   , HasTyJt(..), tyHasTy, tyHasTy2
   , splitFunTy, domTy, ranTy
@@ -61,6 +62,13 @@ instance IsTy Ty where
   (a :+  b) `tyEq` (a' :+  b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
   (a :=> b) `tyEq` (a' :=> b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
   _         `tyEq` _           = Nothing
+
+-- | Variant of 'tyEq' from the 'ty' package. This one assumes 'HasTy'.
+tyEq' :: forall a b f. (HasTy a, HasTy b, Eq (f a)) =>
+         f a -> f b -> Maybe (a :=: b)
+a `tyEq'` b
+  | Just Refl <- (typ :: Ty a) `tyEq` (typ :: Ty b), a == b = Just Refl
+  | otherwise                                               = Nothing
 
 {--------------------------------------------------------------------
     Type synthesis

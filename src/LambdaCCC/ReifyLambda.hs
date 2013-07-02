@@ -272,13 +272,14 @@ type ReExpr = RewriteH CoreExpr
 reifyExpr :: ReExpr
 reifyExpr =
   do varId     <- findIdT 'E.var
-     appId     <- findIdT '(E.:^)
+     appId     <- findIdT 'E.app
      lamvId    <- findIdT 'E.lamv
      evalId    <- findIdT 'E.evalE
      reifyId   <- findIdT 'E.reifyE'
      letId     <- findIdT 'E.lett
      varPatId  <- findIdT 'E.varPat
      pairPatId <- findIdT 'E.PairPat
+     pairTyId  <- findIdT '(T.:*)
      let rew :: ReExpr
          rew = tries [ ("Var"  ,rVar)
                      , ("Reify",rReify)
@@ -303,10 +304,11 @@ reifyExpr =
                      (str,_) <- apply' mkVarName v
                      te <- apply' reifyType t
                      return $ apps reifyId [t] [str,e,te]
-         rApp  = do App (exprType -> funTy) _ <- idR
+         rApp  = do App (exprType -> funTy) (exprType -> argTy) <- idR
+                    argTyE <- apply' reifyType argTy
                     appT  rew rew $ arr $ \ u' v' ->
                       let (a,b) = splitFunTy funTy in
-                        apps appId [b,a] [u', v'] -- note b,a
+                        apps appId [b,a] [u',argTyE, v'] -- note b,a
          rLamT = do Lam (isTyVar -> True) _ <- idR
                     lamT idR rew (arr Lam)
          rLam  = do Lam (varType -> vty) (exprType -> bodyTy) <- idR
@@ -314,27 +316,32 @@ reifyExpr =
                     lamT mkVarName rew $ arr $ \ (name,ty) e' ->
                       apps lamvId [ty, bodyTy] [name,vtye,e']
          rLet  = do -- only NonRec for now
-                    Let (NonRec _ (exprType -> rhsT)) (exprType -> bodyT) <- idR
+                    Let (NonRec (varType -> patTy) _) (exprType -> bodyTy) <- idR
+                    patTyE <- apply' reifyType patTy
                     letT reifyBind rew $ \ (patE,rhs') body' ->
-                      apps letId [rhsT,bodyT] [patE,rhs',body']
+                      apps letId [patTy,bodyTy] [patE,patTyE,rhs',body']
          rCase = do Case (exprType -> scrutT) _ _ [_] <- idR
                     _ <- observeR' "Reifying case"
                     caseT rew idR idR (const reifyAlt) $
-                      \ scrutE' _ bodyT [(patE,rhs)] ->
-                          apps letId [scrutT,bodyT] [patE,scrutE',rhs]
-         -- Reify a case alternative, yielding a reified pattern, its type, and
-         -- a reified alternative body (RHS).
-         reifyAlt :: TranslateH CoreAlt (CoreExpr,CoreExpr)
+                      \ scrutE' _ bodyT [(patE,patTyE,rhs)] ->
+                          apps letId [scrutT,bodyT] [patE,patTyE,scrutE',rhs]
+         -- Reify a case alternative, yielding a reified pattern, its reified
+         -- type, and a reified alternative body (RHS).
+         reifyAlt :: TranslateH CoreAlt (CoreExpr,CoreExpr,CoreExpr)
          reifyAlt =
            do -- Only pair patterns for now
               _ <- observeR' "Reifying case alternative"
-              (DataAlt (isTupleTyCon.dataConTyCon -> True), vars, _) <- idR
+              (DataAlt (isTupleTyCon.dataConTyCon -> True), vars@[_,_], _) <- idR
               vPats <- mapM (apply' (labeled "varPatT" varPatT)) vars
+              let varTys = varType <$> vars
+              varTyEs <- mapM (apply' reifyType) varTys
               altT idR (const idR) rew $ \ _ _ rhs' ->
-                (apps pairPatId (varType <$> vars) vPats, rhs')
+                ( apps pairPatId (varType <$> vars) vPats
+                , apps pairTyId varTys varTyEs
+                , rhs' )
          varPatT :: TranslateH Var CoreExpr
          varPatT = do (nameE,ty) <- mkVarName
-                      tye    <- apply' reifyType ty
+                      tye <- apply' reifyType ty
                       return $ apps varPatId [ty] [nameE,tye]
          -- Reify a Core binding into a reified pattern and expression.
          -- Only handle NonRec bindings for now.

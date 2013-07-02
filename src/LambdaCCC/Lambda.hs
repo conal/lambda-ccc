@@ -24,7 +24,7 @@ module LambdaCCC.Lambda
   ( Name
   , V, Pat(..), E(..)
   , varTy, patTy, expTy
-  , var, varPat, lamv, lett
+  , var, varPat, app, lamv, lett
   , varT, constT
   , reifyE, reifyE', evalE
   , vars, vars2
@@ -60,6 +60,9 @@ instance IsTy V where
   V na tya `tyEq` V nb tyb | nb == na  = tya `tyEq` tyb
                            | otherwise = Nothing
 
+instance Eq (V a) where
+  V na _ == V nb _ = nb == na
+
 varTy :: V a -> Ty a
 varTy (V _ ty) = ty
 
@@ -68,6 +71,12 @@ data Pat :: * -> * where
   UnitPat :: Pat Unit
   VarPat  :: V a -> Pat a
   PairPat :: Pat a -> Pat b -> Pat (a :* b)
+
+instance Eq (Pat a) where
+  UnitPat == UnitPat = True
+  VarPat v == VarPat v' = v == v'
+  PairPat a b == PairPat a' b' = a == a' && b == b'
+  _ == _ = False
 
 instance Show (Pat a) where
   showsPrec _ UnitPat       = showString "()"
@@ -87,7 +96,7 @@ infixl 9 :^
 data E :: * -> * where
   Var   :: forall a   . V a -> E a
   Const :: forall a   . Prim a -> Ty a -> E a
-  (:^)  :: forall b a . E (a :=> b) -> E a -> E b
+  (:^)  :: forall b a . HasTy a => E (a :=> b) -> E a -> E b
   Lam   :: forall a b . Pat a -> E b -> E (a :=> b)
 
 expTy :: E a -> Ty a
@@ -99,6 +108,17 @@ expTy (Lam p e)    = patTy p :=> expTy e
 -- I've placed the quantifiers explicitly to reflect what I learned from GHCi
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
 -- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
+
+instance IsTy E where
+  type IsTyConstraint E z = HasTy z
+  tyEq = tyEq'
+
+instance Eq (E a) where
+  Var v     == Var v'                                = v == v'
+  Const x _ == Const x' _                            = x == x'
+  (f :^ a)  == (f' :^ a') | Just Refl <- a `tyEq` a' = f == f'
+  Lam p e   == Lam p' e'                             = p == p' && e == e'
+  _         == _                                     = False
 
 -- TODO: Replace the Const Ty argument with a HasTy constraint for ease of use.
 -- I'm waiting until I know how to construct the required dictionaries in Core.
@@ -117,6 +137,9 @@ var name ty = Var (V name ty)
 varPat :: forall a. Name -> Ty a -> Pat a
 varPat name ty = VarPat (V name ty)
 
+app :: forall b a . E (a :=> b) -> Ty a -> E a -> E b
+app f tya a | HasTy <- tyHasTy tya = f :^ a
+
 -- varVarPat :: forall a b. Name -> Name -> Ty a -> Ty b -> Pat (a :* b)
 -- varVarPat na nb tya tyb = PairPat (varPat na tya) (varPat nb tyb)
 
@@ -124,8 +147,8 @@ lamv :: forall a b. Name -> Ty a -> E b -> E (a -> b)
 lamv name ty body = Lam (VarPat (V name ty)) body
 
 -- | Let expression (beta redex)
-lett :: forall a b. Pat a -> E a -> E b -> E b
-lett pat e body = Lam pat body :^ e
+lett :: forall a b. Pat a -> Ty a -> E a -> E b -> E b
+lett pat tya e body | HasTy <- tyHasTy tya = Lam pat body :^ e
 
 instance Show (E a) where
 #ifdef ShowFolded

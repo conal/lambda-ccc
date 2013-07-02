@@ -80,6 +80,11 @@ f3 ((a,b),(c,d)) = (a && c, b || d)
 g :: ((Bool,Bool),Bool) -> Bool
 g ((_,b),_) = b
 
+f4 :: Bool -> (Bool,Bool)
+f4 x = (y,y)
+ where
+   y = not x
+
 fiddle :: Int
 fiddle = length "Fiddle"
 
@@ -90,7 +95,7 @@ main :: IO ()
 main = do print e
           print (toCCC e)
  where
-   e = reifyE "g" g
+   e = reifyE "swapBI'" swapBI'
 
 -- TODO: maybe a TH macro for reifyE "foo" foo, "[r|foo]".
 -- Maybe additional macros for specialized contexts like toCCC [r|foo].
