@@ -19,7 +19,7 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.Ty
-  ( Ty(..),HasTy(..), tyEq'
+  ( Ty(..),HasTy(..), tyEq', tyEq2'
   , HasTy2,HasTy3,HasTy4
   , HasTyJt(..), tyHasTy, tyHasTy2
   , splitFunTy, domTy, ranTy
@@ -66,9 +66,19 @@ instance IsTy Ty where
 -- | Variant of 'tyEq' from the 'ty' package. This one assumes 'HasTy'.
 tyEq' :: forall a b f. (HasTy a, HasTy b, Eq (f a)) =>
          f a -> f b -> Maybe (a :=: b)
-a `tyEq'` b
-  | Just Refl <- (typ :: Ty a) `tyEq` (typ :: Ty b), a == b = Just Refl
-  | otherwise                                               = Nothing
+fa `tyEq'` fb
+  | Just Refl <- (typ :: Ty a) `tyEq` (typ :: Ty b)
+  , fa == fb  = Just Refl
+  | otherwise = Nothing
+
+-- | Variant of 'tyEq' from the 'ty' package. This one assumes 'HasTy'.
+tyEq2' :: forall a b c d f. (HasTy a, HasTy b, HasTy c, HasTy d, Eq (f a b)) =>
+          f a b -> f c d -> Maybe (a :=: c, b :=: d)
+fab `tyEq2'` fcd
+  | Just Refl <- (typ :: Ty a) `tyEq` (typ :: Ty c)
+  , Just Refl <- (typ :: Ty b) `tyEq` (typ :: Ty d)
+  , fab == fcd = Just (Refl,Refl)
+  | otherwise  = Nothing
 
 {--------------------------------------------------------------------
     Type synthesis

@@ -1,10 +1,11 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures, CPP #-}
-{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE PatternGuards, ConstraintKinds #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-} -- EXPERIMENT
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -20,13 +21,16 @@
 
 module LambdaCCC.CCC
   ( module LambdaCCC.Misc
-  , (:->)(..), cccTys, (@.)
+  , (:->)(..), cccTys, (@.), applyE, curryE, uncurryE
   , (&&&), (***), (+++), (|||)
   , dup, jam, swapP, swapC
   , first, second, left, right
   ) where
 
 import qualified Control.Arrow as A
+
+import Data.IsTy
+import Data.Proof.EQ
 
 import LambdaCCC.Misc (Evalable(..),(:*),(:+),(:=>))
 import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
@@ -73,6 +77,27 @@ data (:->) :: * -> * -> * where
   Apply    :: HasTy2 a b   => ((a :=> b) :* a) :-> b
   Curry    :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
   Uncurry  :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
+
+instance IsTy2 (:->) where
+  type IsTy2Constraint (:->) u v = HasTy2 u v
+  tyEq2 = tyEq2'
+
+instance HasTy2 a b => Eq (a :-> b) where
+  Id         == Id                     = True
+  (g :. f)   == (g' :. f')
+    | Just (Refl,Refl) <- f `tyEq2` f' = g == g'
+  Prim p     == Prim p'                = p == p'
+  Konst p    == Konst p'               = p == p'
+  Fst        == Fst                    = True
+  Snd        == Snd                    = True
+  (f :&&& g) == (f' :&&& g')           = f == f' && g == g'
+  Lft        == Lft                    = True
+  Rht        == Rht                    = True
+  (f :||| g) == (f' :||| g')           = f == f' && g == g'
+  Apply      == Apply                  = True
+  Curry h    == Curry h'               = h == h'
+  Uncurry k  == Uncurry k'             = k == k'
+  _          == _                      = False
 
 -- TODO: The type constraints prevent (:->) from being a category etc without
 -- some change to those classes, e.g., with instance-specific constraints via
@@ -133,12 +158,13 @@ infixr 9 @.
 -- | Optimizing arrow composition
 (@.) :: HasTy3 a b c => (b :-> c) -> (a :-> b) -> (a :-> c)
 #ifdef Simplify
-Id      @. f                      = f
-g       @. Id                     = g
-Konst k @. _                      = Konst k
-Apply   @. (Konst k       :&&& f) = prim k @. f
-Apply   @. (h@Prim{} :. f :&&& g) = Uncurry h @. (f  &&& g)
-Apply   @. (h@Prim{}      :&&& g) = Uncurry h @. (Id &&& g)
+Id      @. f                         = f
+g       @. Id                        = g
+Konst k @. _                         = Konst k
+Apply   @. (Konst k          :&&& f) = prim k @. f
+Apply   @. (h@Prim{} :. f    :&&& g) = Uncurry h @. (f  &&& g)
+Apply   @. (h@Prim{}         :&&& g) = Uncurry h @. (Id &&& g)
+Apply   @. (Curry (g :. Snd) :&&& f) = g @. f
 #endif
 g @. f  = g :. f
 
@@ -165,6 +191,11 @@ swapC = Rht ||| Lft
 (&&&) :: HasTy3 a c d => (a :-> c) -> (a :-> d) -> (a :-> c :* d)
 #ifdef Simplify
 Fst &&& Snd = Id
+-- f . r &&& g . r == (f &&& g) . r
+fr &&& gr | Just (Composed f r ) <- decomposeR fr
+          , Just (Composed g r') <- decomposeR gr
+          , Just (Refl,Refl)     <- r `tyEq2` r'
+          = (f &&& g) @. r
 #endif
 f &&& g = f :&&& g
 
@@ -188,6 +219,20 @@ left f = f +++ Id
 
 right :: HasTy3 a b d => (b :-> d) -> (a :+ b :-> a :+ d)
 right g = Id +++ g
+
+applyE :: HasTy2 a b   => ((a :=> b) :* a) :-> b
+applyE = Apply
+
+curryE :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
+curryE (Prim p :. Snd) = Konst p        -- FIX: not general enough
+curryE h = Curry h
+
+uncurryE :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
+uncurryE = Uncurry
+
+{--------------------------------------------------------------------
+    Show
+--------------------------------------------------------------------}
 
 instance Show (a :-> b) where
 #ifdef ShowFolded
@@ -216,3 +261,20 @@ instance Show (a :-> b) where
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "uncurry" p h
+
+{--------------------------------------------------------------------
+    Factoring
+--------------------------------------------------------------------}
+
+data Composed a c = forall b. HasTy b => Composed (b :-> c) (a :-> b)
+
+-- | Decompose into @g . f@, where @f@ is as small as possible, but not 'Id'.
+decomposeR :: HasTy c => (a :-> c) -> Maybe (Composed a c)
+decomposeR Id = Nothing
+decomposeR (g :. f) | Just (Composed v u) <- decomposeR f
+                    = Just (Composed (g @. v) u)
+                    | otherwise = Just (Composed g f)
+decomposeR f = Just (Composed Id f)
+
+-- decomposeR = error "decomposeR: not yet implemented"
+
