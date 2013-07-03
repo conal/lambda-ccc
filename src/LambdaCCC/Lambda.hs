@@ -33,6 +33,7 @@ module LambdaCCC.Lambda
   ) where
 
 import Control.Applicative (pure,liftA2)
+import Control.Monad (guard)
 import Control.Arrow ((&&&))
 import Data.Maybe (isJust,fromMaybe,catMaybes,listToMaybe)
 import Text.Printf (printf)
@@ -66,8 +67,7 @@ instance Show (V a) where
   showsPrec _ (V n _) = showString n
 
 instance IsTy V where
-  V na tya `tyEq` V nb tyb | nb == na  = tya `tyEq` tyb
-                           | otherwise = Nothing
+  V na tya `tyEq` V nb tyb = guard (na == nb) >> tya `tyEq` tyb
 
 instance Eq (V a) where
   V na _ == V nb _ = nb == na
