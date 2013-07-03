@@ -47,6 +47,7 @@ import Language.HERMIT.GHC (uqName,var2String)
 import Language.HERMIT.Primitive.Inline (inlineName)
 import Language.HERMIT.Kure hiding (apply)
 import Language.HERMIT.Optimize
+import Language.HERMIT.Primitive.AlphaConversion (unshadow)
 import Language.HERMIT.Primitive.Common
 import Language.HERMIT.Primitive.Debug (observeR)
 import Language.HERMIT.Primitive.GHC (rule)
@@ -414,7 +415,8 @@ reifyEval = reifyArg >>> evalArg
 
 reifyNamed :: TH.Name -> RewriteH Core
 reifyNamed nm = snocPathIn (rhsOf nm)
-                  (   promoteExprR reifyExpr
+                  (   unshadow  -- since reifyExpr extracts variable names
+                  >>> promoteExprR reifyExpr
                   >>> reifyRules
                   >>> pathR [App_Arg] (promoteExprR (letIntro nm'))
                   >>> promoteExprR letFloatArg
