@@ -8,6 +8,6 @@
 -- set-pp ghc
 
 reify-named 'f8
-consider 'f8_reified  -- For display
+-- consider 'f8_reified  -- For display
 -- consider 'main  -- For display
--- resume
+resume
