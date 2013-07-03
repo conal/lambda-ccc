@@ -38,7 +38,7 @@ import LambdaCCC.Prim (Prim(PairP))
 
 -- -- | Rewrite a lambda expression via CCC combinators
 -- toCCC' :: E a -> (Unit :-> a)
--- toCCC' a | HasTy <- tyHasTy (expTy a)
+-- toCCC' a | HasTy <- expHasTy a
 --          = convert UnitPat a
 
 toCCC :: E (a :=> b) -> (a :-> b)
