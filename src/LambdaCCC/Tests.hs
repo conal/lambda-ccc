@@ -31,12 +31,6 @@ import LambdaCCC.ToCCC
 -- translating automatically rather than hand-coding. I'm using this vocabulary
 -- for tests.
 
-infixr 1 #
-(#) :: HasTy2 a b => E a -> E b -> E (a :* b)
--- (Const Fst :^ p) # (Const Snd :^ p') | ... = ...
--- a # b = a :# b
-a # b = constT PairP :^ a :^ b
-
 notE :: Unop (E Bool)
 notE b = constT NotP :^ b
 
