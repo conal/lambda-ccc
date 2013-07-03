@@ -77,13 +77,22 @@ swapBI' (a,b) = (b,a)
 f3 :: ((Bool,Bool),(Bool,Bool)) -> (Bool,Bool)
 f3 ((a,b),(c,d)) = (a && c, b || d)
 
-g :: ((Bool,Bool),Bool) -> Bool
-g ((_,b),_) = b
-
 f4 :: Bool -> (Bool,Bool)
 f4 x = (y,y)
  where
    y = not x
+
+f5 :: ((Bool,Bool),Bool) -> Bool
+f5 ((_,b),_) = b
+
+f6 :: ((Bool,Bool),Bool) -> (Bool,(Bool,Bool))
+f6 ((a,b),c) = (a,(b,c))
+
+f7 :: ((Bool,Bool),Bool) -> (Bool,Bool)
+f7 ((a,_),c) = (a,c)
+
+f8 :: ((Bool,Bool),(Bool,Bool)) -> ((Bool,Bool),(Bool,Bool))
+f8 ((a,b),(c,d)) = ((c,a),(d,b))
 
 fiddle :: Int
 fiddle = length "Fiddle"
@@ -95,7 +104,7 @@ main :: IO ()
 main = do print e
           print (toCCC e)
  where
-   e = reifyE "swapBI'" swapBI'
+   e = reifyE "f8" f8
 
 -- TODO: maybe a TH macro for reifyE "foo" foo, "[r|foo]".
 -- Maybe additional macros for specialized contexts like toCCC [r|foo].

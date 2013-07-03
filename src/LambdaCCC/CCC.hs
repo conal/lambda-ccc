@@ -21,7 +21,7 @@
 
 module LambdaCCC.CCC
   ( module LambdaCCC.Misc
-  , (:->)(Konst,Id,Snd,Fst,Lft,Rht)
+  , (:->)(..)
   , (@.), applyE, curryE, uncurryE
   , (&&&), (***), (+++), (|||)
   , dup, jam, swapP, swapC
@@ -165,7 +165,10 @@ Konst k @. _                         = Konst k
 Apply   @. (Konst k          :&&& f) = prim k @. f
 Apply   @. (h@Prim{} :. f    :&&& g) = Uncurry h @. (f  &&& g)
 Apply   @. (h@Prim{}         :&&& g) = Uncurry h @. (Id &&& g)
-Apply   @. (Curry (g :. Snd) :&&& f) = g @. f
+-- apply . (curry (g . snd) &&& f) == g . f
+Apply   @. (Curry (decompR -> g :. Snd) :&&& f) = g @. f
+-- apply . (curry h . f &&& g) == h . (f &&& g)
+Apply   @. ((decompL -> (Curry h :. f)) :&&& g) = h @. (f &&& g)
 #endif
 g @. f  = g :. f
 
@@ -198,15 +201,6 @@ Fst &&& Snd = Id
 #endif
 f &&& g = f :&&& g
 
-#ifdef Simplify
--- | Decompose into @g . f@, where @f@ is as small as possible, but not 'Id'.
-decompR :: HasTy2 a c => Unop (a :-> c)
-decompR Id                         = Id
-decompR (h :. (decompR -> g :. f)) = (h @. g) @. f
-decompR comp@(_ :. _)              = comp
-decompR f                          = Id :. f
-#endif
-
 (***) :: HasTy4 a b c d => (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
 f *** g = f @. Fst &&& g @. Snd
 
@@ -237,6 +231,28 @@ curryE h = Curry h
 
 uncurryE :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
 uncurryE = Uncurry
+
+{--------------------------------------------------------------------
+    Factoring (decomposition)
+--------------------------------------------------------------------}
+
+#ifdef Simplify
+
+-- | Decompose into @g . f@, where @g@ is as small as possible, but not 'Id'.
+decompL :: HasTy2 a c => Unop (a :-> c)
+decompL Id                         = Id
+decompL ((decompL -> h :. g) :. f) = h @. (g @. f)
+decompL comp@(_ :. _)              = comp
+decompL f                          = f :. Id
+
+-- | Decompose into @g . f@, where @f@ is as small as possible, but not 'Id'.
+decompR :: HasTy2 a c => Unop (a :-> c)
+decompR Id                         = Id
+decompR (h :. (decompR -> g :. f)) = (h @. g) @. f
+decompR comp@(_ :. _)              = comp
+decompR f                          = Id :. f
+
+#endif
 
 {--------------------------------------------------------------------
     Show

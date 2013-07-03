@@ -7,7 +7,7 @@
 -- set-pp ast
 -- set-pp ghc
 
-reify-named 'swapBI'
-consider 'swapBI'_reified  -- For display
+reify-named 'f8
+consider 'f8_reified  -- For display
 -- consider 'main  -- For display
 -- resume
