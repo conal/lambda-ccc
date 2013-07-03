@@ -47,8 +47,8 @@ infixr 9 :.
 infixr 3 :&&&
 infixr 2 :|||
 
--- Whether to simply (fold) during show
-#define ShowFolded
+-- Whether to introduce defined operations like (***) during show
+#define Sugared
 
 -- Whether to simplify during construction
 #define Simplify
@@ -259,7 +259,7 @@ decompR f                          = Id :. f
 --------------------------------------------------------------------}
 
 instance Show (a :-> b) where
-#ifdef ShowFolded
+#ifdef Sugared
   showsPrec p (f :. Fst :&&& g :. Snd) = showsOp2'  "***" (3,AssocRight) p f g
   showsPrec p (Lft :. f :||| Rht :. g) = showsOp2'  "+++" (2,AssocRight) p f g
   showsPrec _ (Id :&&& Id)             = showString "dup"
