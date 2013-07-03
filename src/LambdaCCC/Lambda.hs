@@ -6,7 +6,7 @@
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -31,7 +31,7 @@ module LambdaCCC.Lambda
   ) where
 
 import Control.Arrow ((&&&))
-import Data.Maybe (fromMaybe,catMaybes,listToMaybe)
+import Data.Maybe (isJust,fromMaybe,catMaybes,listToMaybe)
 import Text.Printf (printf)
 import Debug.Trace (trace)
 
@@ -91,6 +91,12 @@ patTy UnitPat       = UnitT
 patTy (VarPat v)    = varTy v
 patTy (PairPat a b) = patTy a :* patTy b
 
+-- | Does a variable occur in a pattern?
+occursP :: V a -> Pat b -> Bool
+occursP _ UnitPat       = False
+occursP v (VarPat v')   = isJust (v `tyEq` v')
+occursP v (PairPat a b) = occursP v a || occursP v b
+
 infixl 9 :^
 
 -- infix 1 :#
@@ -102,11 +108,19 @@ data E :: * -> * where
   (:^)  :: forall b a . HasTy a => E (a :=> b) -> E a -> E b
   Lam   :: forall a b . Pat a -> E b -> E (a :=> b)
 
+-- | The type of an expression
 expTy :: E a -> Ty a
 expTy (Var v)      = varTy v
 expTy (Const _ ty) = ty
 expTy (f :^ _)     = case expTy f of _ :=> b -> b
 expTy (Lam p e)    = patTy p :=> expTy e
+
+-- | A variable occurs freely in an expression
+occursE :: V a -> E b -> Bool
+occursE v (Var v')  = isJust (v `tyEq` v')
+occursE v (f :^ e)  = occursE v f || occursE v e
+occursE v (Lam p e) = not (occursP v p) && occursE v e
+occursE _ _         = False
 
 -- I've placed the quantifiers explicitly to reflect what I learned from GHCi
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
