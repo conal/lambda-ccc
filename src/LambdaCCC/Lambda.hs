@@ -24,7 +24,7 @@ module LambdaCCC.Lambda
   ( Name
   , V, Pat(..), E(..)
   , varTy, patTy, expTy
-  , var, var#, varPat, varPat#, app, lamv, lamv#, lett
+  , var#, varPat#, app, lamv, lamv#, lett
   , varT, constT
   , reifyE, reifyE', evalE
   , vars, vars2
@@ -48,6 +48,9 @@ import LambdaCCC.Ty
 
 -- Whether to fold simple definitions during show
 #define ShowFolded
+
+-- Whether to simplify during construction
+#define Simplify
 
 -- | Variable names
 type Name = String
@@ -148,17 +151,11 @@ varT nm = Var (V nm typ)
 constT :: HasTy a => Prim a -> E a
 constT p = Const p typ
 
-var :: forall a. Name -> Ty a -> E a
-var name ty = Var (V name ty)
-
 var# :: forall a. Addr# -> Ty a -> E a
-var# addr = var (unpackCString# addr)
-
-varPat :: forall a. Name -> Ty a -> Pat a
-varPat name ty = VarPat (V name ty)
+var# addr ty = Var (V (unpackCString# addr) ty)
 
 varPat# :: forall a. Addr# -> Ty a -> Pat a
-varPat# addr = varPat (unpackCString# addr)
+varPat# addr ty = VarPat (V (unpackCString# addr) ty)
 
 app :: forall b a . E (a :=> b) -> Ty a -> E a -> E b
 app f tya a | HasTy <- tyHasTy tya = f :^ a
@@ -166,11 +163,17 @@ app f tya a | HasTy <- tyHasTy tya = f :^ a
 -- varVarPat :: forall a b. Name -> Name -> Ty a -> Ty b -> Pat (a :* b)
 -- varVarPat na nb tya tyb = PairPat (varPat na tya) (varPat nb tyb)
 
-lamv :: forall a b. Name -> Ty a -> E b -> E (a -> b)
-lamv name ty body = Lam (VarPat (V name ty)) body
+lamv :: forall a b. V a -> E b -> E (a -> b)
+#ifdef Simplify
+-- Eta-reduce
+lamv v (f :^ Var v') | Just Refl <- v `tyEq` v', not (v `occursE` f) = f
+#endif
+lamv v body = Lam (VarPat v) body
+
+-- TODO: Generalize eta-reduction to pattern lambdas.
 
 lamv# :: forall a b. Addr# -> Ty a -> E b -> E (a -> b)
-lamv# addr = lamv (unpackCString# addr)
+lamv# addr ty body = lamv (V (unpackCString# addr) ty) body
 
 -- | Let expression (beta redex)
 lett :: forall a b. Pat a -> E a -> E b -> E b
