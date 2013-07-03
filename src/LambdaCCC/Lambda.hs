@@ -24,12 +24,15 @@ module LambdaCCC.Lambda
   ( Name
   , V, Pat(..), E(..)
   , varTy, patTy, expTy
-  , var#, varPat#, app, lamv, lamv#, lett
+  , varHasTy, patHasTy, expHasTy
+  , var#, varPat#, (@^), lam, lamv#, lett
   , varT, constT
+  , (#)
   , reifyE, reifyE', evalE
   , vars, vars2
   ) where
 
+import Control.Applicative (pure,liftA2)
 import Control.Arrow ((&&&))
 import Data.Maybe (isJust,fromMaybe,catMaybes,listToMaybe)
 import Text.Printf (printf)
@@ -46,8 +49,8 @@ import LambdaCCC.ShowUtils
 import LambdaCCC.Prim
 import LambdaCCC.Ty
 
--- Whether to fold simple definitions during show
-#define ShowFolded
+-- Whether to sugar during show, including 'let'
+#define Sugared
 
 -- Whether to simplify during construction
 #define Simplify
@@ -72,6 +75,9 @@ instance Eq (V a) where
 varTy :: V a -> Ty a
 varTy (V _ ty) = ty
 
+varHasTy :: V a -> HasTyJt a
+varHasTy = tyHasTy . varTy
+
 -- | Lambda patterns
 data Pat :: * -> * where
   UnitPat :: Pat Unit
@@ -94,11 +100,20 @@ patTy UnitPat       = UnitT
 patTy (VarPat v)    = varTy v
 patTy (PairPat a b) = patTy a :* patTy b
 
+patHasTy :: Pat a -> HasTyJt a
+patHasTy = tyHasTy . patTy
+
 -- | Does a variable occur in a pattern?
-occursP :: V a -> Pat b -> Bool
-occursP _ UnitPat       = False
-occursP v (VarPat v')   = isJust (v `tyEq` v')
-occursP v (PairPat a b) = occursP v a || occursP v b
+occursVP :: V a -> Pat b -> Bool
+occursVP _ UnitPat       = False
+occursVP v (VarPat v')   = isJust (v `tyEq` v')
+occursVP v (PairPat a b) = occursVP v a || occursVP v b
+
+-- | Does any variable from the first pattern occur in the second?
+occursPP :: Pat a -> Pat b -> Bool
+occursPP UnitPat _ = False
+occursPP (VarPat v) q = occursVP v q
+occursPP (PairPat a b) q = occursPP a q || occursPP b q
 
 infixl 9 :^
 
@@ -108,7 +123,7 @@ infixl 9 :^
 data E :: * -> * where
   Var   :: forall a   . V a -> E a
   Const :: forall a   . Prim a -> Ty a -> E a
-  (:^)  :: forall b a . HasTy a => E (a :=> b) -> E a -> E b
+  (:^)  :: forall b a . E (a :=> b) -> E a -> E b
   Lam   :: forall a b . Pat a -> E b -> E (a :=> b)
 
 -- | The type of an expression
@@ -118,12 +133,24 @@ expTy (Const _ ty) = ty
 expTy (f :^ _)     = case expTy f of _ :=> b -> b
 expTy (Lam p e)    = patTy p :=> expTy e
 
+expHasTy :: E a -> HasTyJt a
+expHasTy = tyHasTy . expTy
+
 -- | A variable occurs freely in an expression
-occursE :: V a -> E b -> Bool
-occursE v (Var v')  = isJust (v `tyEq` v')
-occursE v (f :^ e)  = occursE v f || occursE v e
-occursE v (Lam p e) = not (occursP v p) && occursE v e
-occursE _ _         = False
+occursVE :: V a -> E b -> Bool
+occursVE v (Var v')  = isJust (v `tyEq` v')
+occursVE v (f :^ e)  = occursVE v f || occursVE v e
+occursVE v (Lam p e) = not (occursVP v p) && occursVE v e
+occursVE _ _         = False
+
+-- | Some variable in a pattern occurs freely in an expression
+occursPE :: Pat a -> E b -> Bool
+occursPE UnitPat       = pure False
+occursPE (VarPat v)    = occursVE v
+occursPE (PairPat p q) = liftA2 (||) (occursPE p) (occursPE q)
+
+sameTyE :: E a -> E b -> Maybe (a :=: b)
+sameTyE ea eb = expTy ea `tyEq` expTy eb
 
 -- I've placed the quantifiers explicitly to reflect what I learned from GHCi
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
@@ -134,11 +161,11 @@ instance IsTy E where
   tyEq = tyEq'
 
 instance Eq (E a) where
-  Var v     == Var v'                                = v == v'
-  Const x _ == Const x' _                            = x == x'
-  (f :^ a)  == (f' :^ a') | Just Refl <- a `tyEq` a' = f == f'
-  Lam p e   == Lam p' e'                             = p == p' && e == e'
-  _         == _                                     = False
+  Var v     == Var v'                                   = v == v'
+  Const x _ == Const x' _                               = x == x'
+  (f :^ a)  == (f' :^ a') | Just Refl <- a `sameTyE` a' = f == f'
+  Lam p e   == Lam p' e'                                = p == p' && e == e'
+  _         == _                                        = False
 
 -- TODO: Replace the Const Ty argument with a HasTy constraint for ease of use.
 -- I'm waiting until I know how to construct the required dictionaries in Core.
@@ -157,30 +184,55 @@ var# addr ty = Var (V (unpackCString# addr) ty)
 varPat# :: forall a. Addr# -> Ty a -> Pat a
 varPat# addr ty = VarPat (V (unpackCString# addr) ty)
 
-app :: forall b a . E (a :=> b) -> Ty a -> E a -> E b
-app f tya a | HasTy <- tyHasTy tya = f :^ a
+infixl 9 @^
+
+-- | Smart application
+(@^) :: forall b a . E (a :=> b) -> E a -> E b
+#ifdef Simplify
+-- let p = U in let q = V in W == let (p,q) = (U,V) in W  -- if p not in V
+-- (\ p -> (\ q -> W) V) U == (\ (p,q) -> W) (U,V)  -- if p not in V
+Lam p (Lam q w :^ v) @^ u | not (p `occursPE` v) =
+  lam (p `PairPat` q) w @^ (u # v)
+#endif
+f @^ a = f :^ a
 
 -- varVarPat :: forall a b. Name -> Name -> Ty a -> Ty b -> Pat (a :* b)
 -- varVarPat na nb tya tyb = PairPat (varPat na tya) (varPat nb tyb)
 
-lamv :: forall a b. V a -> E b -> E (a -> b)
-#ifdef Simplify
--- Eta-reduce
-lamv v (f :^ Var v') | Just Refl <- v `tyEq` v', not (v `occursE` f) = f
-#endif
-lamv v body = Lam (VarPat v) body
+patToE :: Pat a -> E a
+patToE UnitPat       = Const (LitP ()) UnitT
+patToE (VarPat v)    = Var v
+patToE (PairPat p q) | HasTy <- patHasTy p, HasTy <- patHasTy q
+                     = patToE p # patToE q
 
--- TODO: Generalize eta-reduction to pattern lambdas.
+-- TODO: Maybe Add HasTy constraints to PairPat, and remove the guard here.
+
+lam :: Pat a -> E b -> E (a -> b)
+#ifdef Simplify
+-- Eta-reduction
+lam p (f :^ u) | HasTy     <- patHasTy p
+               , Just Refl <- patToE p `sameTyE` u
+               , not (p `occursPE` f) = f
+#endif
+lam p body = Lam p body
 
 lamv# :: forall a b. Addr# -> Ty a -> E b -> E (a -> b)
-lamv# addr ty body = lamv (V (unpackCString# addr) ty) body
+lamv# addr ty body = lam (VarPat (V (unpackCString# addr) ty)) body
 
 -- | Let expression (beta redex)
 lett :: forall a b. Pat a -> E a -> E b -> E b
-lett pat e body | HasTy <- tyHasTy (patTy pat) = Lam pat body :^ e
+lett pat e body = lam pat body @^ e
+
+infixr 1 #
+(#) :: E a -> E b -> E (a :* b)
+-- (Const Fst :^ p) # (Const Snd :^ p') | ... = ...
+a # b | HasTy <- expHasTy a, HasTy <- expHasTy b
+      = constT PairP @^ a @^ b
+
+-- Do surjectivity in @^ rather than here.
 
 instance Show (E a) where
-#ifdef ShowFolded
+#ifdef Sugared
 --   showsPrec p (Const prim :^ (u :# v)) | Just (OpInfo op fixity) <- opInfo prim =
 --     showsOp2' op fixity p u v
   showsPrec p (Const PairP _ :^ u :^ v) = showsPair p u v
