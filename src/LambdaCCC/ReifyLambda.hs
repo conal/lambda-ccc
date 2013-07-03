@@ -282,7 +282,7 @@ type ReExpr = RewriteH CoreExpr
 reifyExpr :: ReExpr
 reifyExpr =
   do varId#    <- findIdT 'E.var#
-     appId     <- findIdT 'E.app
+     appId     <- findIdT '(E.@^)
      lamvId#   <- findIdT 'E.lamv#
      evalId    <- findIdT 'E.evalE
      reifyId   <- findIdT 'E.reifyE'
@@ -313,11 +313,10 @@ reifyExpr =
                      (str,_) <- apply' mkVarName v
                      te <- apply' reifyType t
                      return $ apps reifyId [t] [str,e,te]
-         rApp  = do App (exprType -> funTy) (exprType -> argTy) <- idR
-                    argTyE <- apply' reifyType argTy
+         rApp  = do App (exprType -> funTy) _ <- idR
                     appT  rew rew $ arr $ \ u' v' ->
                       let (a,b) = splitFunTy funTy in
-                        apps appId [b,a] [u',argTyE, v'] -- note b,a
+                        apps appId [b,a] [u', v'] -- note b,a
          rLamT = do Lam (isTyVar -> True) _ <- idR
                     lamT idR rew (arr Lam)
          rLam# = do Lam (varType -> vty) (exprType -> bodyTy) <- idR
