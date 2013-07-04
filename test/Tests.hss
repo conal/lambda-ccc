@@ -7,7 +7,6 @@
 -- set-pp ast
 -- set-pp ghc
 
-reify-named 'f8
--- consider 'f8_reified  -- For display
--- consider 'main  -- For display
+reify-named 'step3
+-- consider 'step3_reified  -- For display
 resume

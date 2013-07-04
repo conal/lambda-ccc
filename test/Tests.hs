@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeOperators, RebindableSyntax #-}
 {-# OPTIONS_GHC -Wall -fno-warn-unused-imports #-}
 
 ----------------------------------------------------------------------
@@ -19,14 +19,13 @@ module Main where
 
 import Prelude
 
-import LambdaCCC.Lambda (reifyE)
+import LambdaCCC.Misc (Unop,Binop)
+import LambdaCCC.Lambda (reifyE,xor,ifThenElse)
 import LambdaCCC.ToCCC (toCCC)
 
 -- Needed for resolving names. Bug? Is there an alternative?
 import qualified LambdaCCC.Lambda
 import qualified LambdaCCC.Ty
-
-import LambdaCCC.Prim (xor)
 
 constPair :: (Bool,Bool)
 constPair = (True,False)
@@ -94,6 +93,22 @@ f7 ((a,_),c) = (a,c)
 f8 :: ((Bool,Bool),(Bool,Bool)) -> ((Bool,Bool),(Bool,Bool))
 f8 ((a,b),(c,d)) = ((c,a),(d,b))
 
+-- CRC examples
+
+type B2 = (Bool,Bool)
+
+step2 :: (B2,B2) -> B2
+step2 ((d0,d1),(i0,i1)) = if i0 then (d0 `xor` i0, d1 `xor` i1) else (i0,i1)
+
+type B3 = (Bool,(Bool,Bool))
+
+step3 :: (B3,B3) -> B3
+step3 ((d0,(d1,d2)),(i0,(i1,i2))) =
+  if i0 then
+    (d0 `xor` i0, (d1 `xor` i1, d2 `xor` i2))
+  else
+    (i0,(i1,i2))
+
 fiddle :: Int
 fiddle = length "Fiddle"
 
@@ -104,7 +119,7 @@ main :: IO ()
 main = do print e
           print (toCCC e)
  where
-   e = reifyE "f8" f8
+   e = reifyE "step3" step3
 
 -- TODO: maybe a TH macro for reifyE "foo" foo, "[r|foo]".
 -- Maybe additional macros for specialized contexts like toCCC [r|foo].
