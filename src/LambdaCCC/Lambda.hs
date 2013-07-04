@@ -366,8 +366,8 @@ vars2 (na,nb) = (PairPat ap bp, (ae,be))
 "reify/pair"  forall s. reifyE' s (,)  = Const PairP
 "reify/if"    forall s. reifyE' s cond = Const CondP
  
-"reify/false" forall s. reifyE' s False     = Const (LitP False)
-"reify/true"  forall s. reifyE' s True      = Const (LitP True)
+"reify/false" forall s. reifyE' s False = Const (LitP False)
+"reify/true"  forall s. reifyE' s True  = Const (LitP True)
  
   #-}
 
