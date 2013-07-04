@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, PatternGuards #-}
-{-# LANGUAGE MagicHash, ConstraintKinds #-}
+{-# LANGUAGE MagicHash, ConstraintKinds, ViewPatterns #-}
 {-# LANGUAGE CPP #-}
 
 {-# OPTIONS_GHC -Wall #-}
@@ -17,11 +17,12 @@
 -- Maintainer  :  conal@tabula.com
 -- Stability   :  experimental
 -- 
--- Lambda expressions -- statically typed
+-- Statically typed lambda expressions
 ----------------------------------------------------------------------
 
 module LambdaCCC.Lambda
-  ( Name
+  ( xor, ifThenElse  -- From Prim
+  , Name
   , V, Pat(..), E(..)
   , varTy, patTy, expTy
   , varHasTy, patHasTy, expHasTy
@@ -84,11 +85,16 @@ data Pat :: * -> * where
   VarPat  :: V a -> Pat a
   PairPat :: Pat a -> Pat b -> Pat (a :* b)
 
+-- TODO: Rename PairPat to (:#), with
+-- infixr 1 :#
+
+-- TODO: Rename UnitPat and VarPat to PUnit and PVar
+
 instance Eq (Pat a) where
-  UnitPat == UnitPat = True
-  VarPat v == VarPat v' = v == v'
+  UnitPat     == UnitPat       = True
+  VarPat v    == VarPat v'     = v == v'
   PairPat a b == PairPat a' b' = a == a' && b == b'
-  _ == _ = False
+  _           == _             = False
 
 instance Show (Pat a) where
   showsPrec _ UnitPat       = showString "()"
@@ -114,6 +120,15 @@ occursPP :: Pat a -> Pat b -> Bool
 occursPP UnitPat _ = False
 occursPP (VarPat v) q = occursVP v q
 occursPP (PairPat a b) q = occursPP a q || occursPP b q
+
+-- | Substitute in a pattern
+substVP :: V a -> Pat a -> Unop (Pat b)
+substVP v p = substIn
+ where
+   substIn :: Unop (Pat b)
+   substIn (VarPat (tyEq v -> Just Refl)) = p
+   substIn (PairPat a b)                  = PairPat (substIn a) (substIn b)
+   substIn q                              = q
 
 infixl 9 :^
 
@@ -189,15 +204,9 @@ infixl 9 @^
 -- | Smart application
 (@^) :: forall b a . E (a :=> b) -> E a -> E b
 #ifdef Simplify
--- let p = U in let q = V in W == let (p,q) = (U,V) in W  -- if p not in V
--- (\ p -> (\ q -> W) V) U == (\ (p,q) -> W) (U,V)  -- if p not in V
-Lam p (Lam q w :^ v) @^ u | not (p `occursPE` v) =
-  lam (p `PairPat` q) w @^ (u # v)
+-- ...
 #endif
 f @^ a = f :^ a
-
--- varVarPat :: forall a b. Name -> Name -> Ty a -> Ty b -> Pat (a :* b)
--- varVarPat na nb tya tyb = PairPat (varPat na tya) (varPat nb tyb)
 
 patToE :: Pat a -> E a
 patToE UnitPat       = Const (LitP ()) UnitT
@@ -213,6 +222,9 @@ lam :: Pat a -> E b -> E (a -> b)
 lam p (f :^ u) | HasTy     <- patHasTy p
                , Just Refl <- patToE p `sameTyE` u
                , not (p `occursPE` f) = f
+-- Re-nest lambda patterns
+lam p (Lam q w :^ Var v) | occursVP v p && not (occursVE v w) =
+  lam (substVP v q p) w
 #endif
 lam p body = Lam p body
 
@@ -344,17 +356,18 @@ vars2 (na,nb) = (PairPat ap bp, (ae,be))
 
 {-# RULES
  
-"reify/not"   forall s. reifyE' s not   = Const NotP
-"reify/(&&)"  forall s. reifyE' s (&&)  = Const AndP
-"reify/(||)"  forall s. reifyE' s (||)  = Const OrP
-"reify/xor"   forall s. reifyE' s xor   = Const XorP
-"reify/(+)"   forall s. reifyE' s (+)   = Const AddP
-"reify/fst"   forall s. reifyE' s fst   = Const FstP
-"reify/snd"   forall s. reifyE' s snd   = Const SndP
-"reify/pair"  forall s. reifyE' s (,)   = Const PairP
+"reify/not"   forall s. reifyE' s not  = Const NotP
+"reify/(&&)"  forall s. reifyE' s (&&) = Const AndP
+"reify/(||)"  forall s. reifyE' s (||) = Const OrP
+"reify/xor"   forall s. reifyE' s xor  = Const XorP
+"reify/(+)"   forall s. reifyE' s (+)  = Const AddP
+"reify/fst"   forall s. reifyE' s fst  = Const FstP
+"reify/snd"   forall s. reifyE' s snd  = Const SndP
+"reify/pair"  forall s. reifyE' s (,)  = Const PairP
+"reify/if"    forall s. reifyE' s cond = Const CondP
  
-"reify/false" forall s. reifyE' s False = Const (LitP False)
-"reify/true"  forall s. reifyE' s True  = Const (LitP True)
+"reify/false" forall s. reifyE' s False     = Const (LitP False)
+"reify/true"  forall s. reifyE' s True      = Const (LitP True)
  
   #-}
 
