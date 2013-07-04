@@ -16,7 +16,7 @@
 -- Primitives
 ----------------------------------------------------------------------
 
-module LambdaCCC.Prim (Prim(..),xor) where
+module LambdaCCC.Prim (Prim(..),xor,ifThenElse,cond) where
 
 import Data.IsTy
 
@@ -32,6 +32,7 @@ data Prim :: * -> * where
   FstP          :: Prim (a :* b -> a)
   SndP          :: Prim (a :* b -> b)
   PairP         :: Prim (a -> b -> a :* b)
+  CondP         :: Prim (Bool :* (a :* a) -> a)
   -- More here
 
 instance Eq (Prim a) where
@@ -44,6 +45,7 @@ instance Eq (Prim a) where
   FstP   == FstP   = True
   SndP   == SndP   = True
   PairP  == PairP  = True
+  CondP  == CondP  = True
   _      == _      = False
 
 instance IsTy Prim where
@@ -60,6 +62,7 @@ instance Show (Prim a) where
   showsPrec _ FstP     = showString "fst"
   showsPrec _ SndP     = showString "snd"
   showsPrec _ PairP    = showString "(,)"
+  showsPrec _ CondP    = showString "cond"
 
 instance Evalable (Prim a) where
   type ValT (Prim a) = a
@@ -72,10 +75,18 @@ instance Evalable (Prim a) where
   eval FstP     = fst
   eval SndP     = snd
   eval PairP    = (,)
+  eval CondP    = cond
 
 infixr 3 `xor`
 
 xor :: Binop Bool
 xor = (/=)
+{-# NOINLINE xor #-}
 
--- TODO: Replace xor with (/=)
+ifThenElse :: Bool -> Binop a
+ifThenElse i t e = cond (i,(t,e))
+{-# INLINE ifThenElse #-}
+
+cond :: (Bool, (a,a)) -> a
+cond (True ,(a,_)) = a
+cond (False,(_,b)) = b
