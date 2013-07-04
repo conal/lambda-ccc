@@ -156,21 +156,39 @@ prim p    = Prim p
 -- I know HasTy (u :* v), but I need HasTy u and HasTy v for Fst.
 
 infixr 9 @.
--- | Optimizing arrow composition
+-- | Optimizing morphism composition
 (@.) :: HasTy3 a b c => (b :-> c) -> (a :-> b) -> (a :-> c)
 #ifdef Simplify
-Id      @. f                         = f
-g       @. Id                        = g
-Konst k @. _                         = Konst k
-Apply   @. (Konst k          :&&& f) = prim k @. f
-Apply   @. (h@Prim{} :. f    :&&& g) = Uncurry h @. (f  &&& g)
-Apply   @. (h@Prim{}         :&&& g) = Uncurry h @. (Id &&& g)
--- apply . (curry (g . snd) &&& f) == g . f
-Apply   @. (Curry (decompR -> g :. Snd) :&&& f) = g @. f
--- apply . (curry h . f &&& g) == h . (f &&& g)
-Apply   @. ((decompL -> (Curry h :. f)) :&&& g) = h @. (f &&& g)
+Id      @. f  = f
+g       @. Id = g
+Konst k @. _  = Konst k
+Apply   @. (decompL -> g :. f) = composeApply g @. f
 #endif
-g @. f  = g :. f
+g       @. f  = g :. f
+
+--  Apply    :: HasTy2 a b   => ((a :=> b) :* a) :-> b
+
+-- | @'composeApply' h == 'apply' . h@
+composeApply :: HasTy3 a b z => (z :-> (a :=> b) :* a) -> (z :-> b)
+composeApply (Konst k          :&&& f) = prim k @. f
+composeApply (h@Prim{} :. f    :&&& g) = Uncurry h @. (f  &&& g)
+composeApply (h@Prim{}         :&&& g) = Uncurry h @. (Id &&& g)
+-- apply . (curry (g . snd) &&& f) == g . f
+composeApply (Curry (decompR -> g :. Snd) :&&& f) = g @. f
+-- apply . (curry h . f &&& g) == h . (f &&& g)
+composeApply ((decompL -> (Curry h :. f)) :&&& g) = h @. (f &&& g)
+-- apply . first f == uncurry f  -- see proof below
+composeApply (f :. Fst :&&& Snd) = uncurryE f
+composeApply h = Apply :. h
+
+{-
+  apply . first f
+== \ p -> apply (first f p)
+== \ (a,b) -> apply (first f (a,b))
+== \ (a,b) -> apply (f a, b)
+== \ (a,b) -> f a b
+== uncurry f
+-}
 
 -- Note: the Prim{} specialization is unnecessary for validity but I suspect
 -- useful for introducing just the uncurryings we want. TODO: verify.
