@@ -22,13 +22,14 @@ source-repository head
 Library
   hs-Source-Dirs:   src
   Include-Dirs:     src
-  Build-Depends:    base < 5,
-                    ghc >= 7.6,
-                    ghc-prim,
-                    hermit >= 0.2.0.0,
-                    template-haskell,
-                    containers,
-                    ty >= 0.1.4
+  Build-Depends:    base < 5
+                  , ghc >= 7.6
+                  , ghc-prim
+                  , hermit >= 0.2.0.0
+                  , template-haskell
+                  , containers
+                  , ty >= 0.1.4
+                  , circat
   Exposed-Modules:  LambdaCCC
                     LambdaCCC.Misc
                     LambdaCCC.ShowUtils
@@ -43,5 +44,9 @@ Library
                     LambdaCCC.ReifyLambda
                     LambdaCCCDemo.Reify
                     LambdaCCCDemo.Embedding
+                    LambdaCCC.ToCircuit
+
+-- TODO: trim
+
   Other-Modules:
                     LambdaCCC.Tests
