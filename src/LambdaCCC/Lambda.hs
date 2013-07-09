@@ -3,7 +3,7 @@
 {-# LANGUAGE MagicHash, ConstraintKinds, ViewPatterns #-}
 {-# LANGUAGE CPP #-}
 
-{-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
@@ -55,7 +55,7 @@ import LambdaCCC.Ty
 #define Sugared
 
 -- Whether to simplify during construction
-#define Simplify
+-- #define Simplify
 
 -- | Variable names
 type Name = String
@@ -374,3 +374,15 @@ vars2 (na,nb) = (PairPat ap bp, (ae,be))
 -- TODO: Generalize the false & true rules. I think I'll need to do via an
 -- explicit Core transformation. I'll have to be able to find out whether the
 -- type is Showable. I suppose I could handle a few known type constructors.
+
+{-# RULES
+ 
+"if/pair" forall a b c b' c'.
+          ifThenElse a (b,c) (b',c') = (ifThenElse a b c,ifThenElse a b' c')
+
+"condPair" forall q. cond q = condPair q
+
+  #-}
+
+condPair :: (Bool,((a,b),(a,b))) -> (a,b)
+condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))

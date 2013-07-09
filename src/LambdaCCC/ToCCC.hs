@@ -30,7 +30,7 @@ import LambdaCCC.Misc
 import LambdaCCC.CCC
 import LambdaCCC.Ty
 import LambdaCCC.Lambda
-import LambdaCCC.Prim (Prim(PairP))
+import LambdaCCC.Prim (Prim(PairP,CondP))
 
 {--------------------------------------------------------------------
     Conversion
@@ -57,12 +57,13 @@ convert :: HasTy2 a b => Pat a -> E b -> (a :-> b)
 convert _ (Const o _) = Konst o
 convert k (Var v) = fromMaybe (error $ "convert: unbound variable: " ++ show v) $
                     convertVar v k
+-- cond k (u,v)   -- TODO: revisit. Couldn't Cond be nullary?
+convert k (Const CondP _ :^ f) = Cond (convert k f)
 -- convert k (u :# v)   = convert k u &&& convert k v
 convert k (Const PairP (tu :=> tv :=> _) :^ u :^ v)
   | (HasTy,HasTy) <- tyHasTy2 tu tv
   = convert k u &&& convert k v
-convert k (u :^ v)
-  | HasTy <- tyHasTy (domTy (expTy u))
+convert k (u :^ v)   | HasTy <- tyHasTy (domTy (expTy u))
   = applyE @. (convert k u &&& convert k v)
 convert k (Lam p e)  | (HasTy,HasTy) <- tyHasTy2 (patTy p) (expTy e)
                      = curryE (convert (PairPat k p) e)

@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, RebindableSyntax #-}
+{-# LANGUAGE TypeOperators, RebindableSyntax, ConstraintKinds #-}
 {-# OPTIONS_GHC -Wall -fno-warn-unused-imports #-}
 
 ----------------------------------------------------------------------
@@ -22,10 +22,16 @@ import Prelude
 import LambdaCCC.Misc (Unop,Binop)
 import LambdaCCC.Lambda (reifyE,xor,ifThenElse)
 import LambdaCCC.ToCCC (toCCC)
+import LambdaCCC.ToCircuit
+
+import Circat.Circuit (IsSource2,(:>),outG)
+import Circat.Netlist (outV)
 
 -- Needed for resolving names. Bug? Is there an alternative?
 import qualified LambdaCCC.Lambda
 import qualified LambdaCCC.Ty
+
+{-
 
 constPair :: (Bool,Bool)
 constPair = (True,False)
@@ -109,17 +115,60 @@ step3 ((d0,(d1,d2)),(i0,(i1,i2))) =
   else
     (i0,(i1,i2))
 
+-}
+
+-- Add in left shift, and switch to fourth-degree (five-coefficient) polynomial.
+
+type V5 a = (a,(a,(a,(a,a))))
+
+type Seg5 = V5 Bool
+
+step4c :: (Seg5,(Seg5,Bool)) -> Seg5
+step4c (poly,(seg,b)) = shiftL4c seg' b
+ where
+   seg' = if fst seg then xor5 poly seg else seg
+
+shiftL4c :: Seg5 -> Bool -> Seg5
+shiftL4c (_,(a,(b,(c,d)))) e = (a,(b,(c,(d,e))))
+
+liftA2_5 :: (a -> b -> c) ->
+            V5 a -> V5 b -> V5 c
+liftA2_5 op (a,(b,(c,(d,e)))) (a',(b',(c',(d',e')))) =
+  (a `op` a',(b `op` b',(c `op` c',(d `op` d',e `op` e'))))
+
+xor5 :: Seg5 -> Seg5 -> Seg5
+xor5 = liftA2_5 xor
+
+
+-- Help break up the conditional
+
+step4d :: (Seg5,(Seg5,Bool)) -> Seg5
+step4d ((aPoly,(bPoly,(cPoly,(dPoly,ePoly)))),((aSeg,(bSeg,(cSeg,(dSeg,eSeg)))),b)) = shiftL4c seg' b
+ where
+   seg' = if aSeg then
+            xor5 (aPoly,(bPoly,(cPoly,(dPoly,ePoly)))) (aSeg,(bSeg,(cSeg,(dSeg,eSeg))))
+          else (aSeg,(bSeg,(cSeg,(dSeg,eSeg))))
+
+----
+
 fiddle :: Int
 fiddle = length "Fiddle"
 
 -- WEIRD: sometimes when I comment out this fiddle definition, I get the dread
 -- "expectJust initTcInteractive" GHC panic.
 
+
+
 main :: IO ()
 main = do print e
-          print (toCCC e)
+          print c
+          outGV "step4c" (cccToCircuit c)
  where
-   e = reifyE "step3" step3
+   e = reifyE "step4c" step4c
+   c = toCCC e
+
+outGV :: IsSource2 a b => String -> (a :> b) -> IO ()
+outGV s c = outG s c >> outV s c
 
 -- TODO: maybe a TH macro for reifyE "foo" foo, "[r|foo]".
 -- Maybe additional macros for specialized contexts like toCCC [r|foo].

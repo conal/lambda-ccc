@@ -393,6 +393,10 @@ anybuER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) 
            Rewrite c m CoreExpr -> Rewrite c m g
 anybuER r = anybuR (promoteExprR r)
 
+-- anytdER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) =>
+--            Rewrite c m CoreExpr -> Rewrite c m g
+-- anytdER r = anytdR (promoteExprR r)
+
 reifyRules :: RewriteH Core
 reifyRules = (tryR $ anybuER $ applyRules $ map ("reify/" ++)
                ["not","(&&)","(||)","xor","(+)","fst","snd","pair","if","false","true"])
@@ -420,8 +424,9 @@ inlineCleanup nm = anybuER (inlineName nm) >>> anybuER cleanupUnfoldR
 
 reifyNamed :: TH.Name -> RewriteH Core
 reifyNamed nm = snocPathIn (rhsOf nm)
-                  (   unshadow  -- since reifyExpr extracts variable names
+                  (   tryR unshadow  -- since reifyExpr extracts variable names
                   >>> inlineCleanup 'E.ifThenElse
+                  -- >>> (tryR $ anytdER $ rule "if/pair")
                   >>> promoteExprR reifyExpr
                   >>> reifyRules
                   >>> pathR [App_Arg] (promoteExprR (letIntro nm'))
@@ -435,6 +440,7 @@ reifyNamed nm = snocPathIn (rhsOf nm)
             >>> simplifyR  -- For the rule applications at least
  where
    nm' = TH.mkName (TH.showName nm ++ "_reified")
+
 
 -- I don't know why I need both cleanupUnfoldR and simplifyR.
 
@@ -458,6 +464,9 @@ externals =
     , external "reify-rules"
         (reifyRules :: RewriteH Core)
         ["convert some non-local vars to consts"]
+    , external "inline-cleanup"
+        (inlineCleanup :: TH.Name -> RewriteH Core)
+        ["inline a named definition, and clean-up beta-redexes"]
     , external "reify-def"
         (reifyDef :: RewriteH Core)
         ["reify for definitions"]

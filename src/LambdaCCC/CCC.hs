@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures, CPP #-}
 {-# LANGUAGE PatternGuards, ViewPatterns, ConstraintKinds #-}
-{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE ExistentialQuantification, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-} -- EXPERIMENT
 {-# OPTIONS_GHC -Wall #-}
 
@@ -23,13 +23,16 @@ module LambdaCCC.CCC
   ( module LambdaCCC.Misc
   , (:->)(..)
   , (@.), applyE, curryE, uncurryE
+  -- , condPair
   , (&&&), (***), (+++), (|||)
+  , twiceP, twiceC
   , dup, jam, swapP, swapC
   , first, second, left, right
   , cccTys
   ) where
 
 import qualified Control.Arrow as A
+-- import Control.Applicative (liftA3)
 
 import Data.IsTy
 import Data.Proof.EQ
@@ -37,7 +40,7 @@ import Data.Proof.EQ
 import LambdaCCC.Misc (Unop,Evalable(..),(:*),(:+),(:=>))
 import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 import LambdaCCC.Ty
-import LambdaCCC.Prim (Prim(..))
+import LambdaCCC.Prim (Prim(..),cond) -- ,ifThenElse
 
 infix  0 :->
 infixr 3 &&&, ***
@@ -79,6 +82,10 @@ data (:->) :: * -> * -> * where
   Apply    :: HasTy2 a b   => ((a :=> b) :* a) :-> b
   Curry    :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
   Uncurry  :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
+  -- Boolean
+  Cond     :: HasTy2 a b   => (a :-> (Bool :* (b :* b))) -> (a :-> b)
+
+-- Note: Cond isn't nullary only because I'd want Const Cond. REVISIT.
 
 instance IsTy2 (:->) where
   type IsTy2Constraint (:->) u v = HasTy2 u v
@@ -121,25 +128,27 @@ cccTys (:|||)  {} = typ2
 cccTys Apply   {} = typ2
 cccTys Curry   {} = typ2
 cccTys Uncurry {} = typ2
+cccTys Cond    {} = typ2
 
 -- Maybe parametrize this GADT by a constraint. Sadly, I'd lose the pretty infix
 -- syntax ("a :-> b").
 
 instance Evalable (a :-> b) where
   type ValT (a :-> b) = a :=> b
-  eval Id          = id
-  eval (g :. f)    = eval g . eval f
-  eval (Konst b)   = const (eval b)
-  eval (Prim p)    = eval p
-  eval Fst         = fst
-  eval Snd         = snd
-  eval (f :&&& g)  = eval f A.&&& eval g
-  eval Lft         = Left
-  eval Rht         = Right
-  eval (f :||| g)  = eval f A.||| eval g
-  eval Apply       = uncurry ($)
-  eval (Curry   h) = curry   (eval h)
-  eval (Uncurry f) = uncurry (eval f)
+  eval Id           = id
+  eval (g :. f)     = eval g . eval f
+  eval (Konst b)    = const (eval b)
+  eval (Prim p)     = eval p
+  eval Fst          = fst
+  eval Snd          = snd
+  eval (f :&&& g)   = eval f A.&&& eval g
+  eval Lft          = Left
+  eval Rht          = Right
+  eval (f :||| g)   = eval f A.||| eval g
+  eval Apply        = uncurry ($)
+  eval (Curry   h)  = curry   (eval h)
+  eval (Uncurry f)  = uncurry (eval f)
+  eval (Cond f)     = cond . eval f
 
 {--------------------------------------------------------------------
     Smart constructors
@@ -222,6 +231,9 @@ f &&& g = f :&&& g
 (***) :: HasTy4 a b c d => (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
 f *** g = f @. Fst &&& g @. Snd
 
+twiceP :: HasTy2 a   c   => (a :-> c)              -> (a :* a :-> c :* c)
+twiceP f = f *** f
+
 first :: HasTy3 a b c => (a :-> c) -> (a :* b :-> c :* b)
 first f = f *** Id
 
@@ -234,6 +246,9 @@ second g = Id *** g
 (+++) :: HasTy4 a b c d => (a :-> c) -> (b :-> d) -> (a :+ b :-> c :+ d)
 f +++ g = Lft @. f ||| Rht @. g
 
+twiceC :: HasTy2 a   c   => (a :-> c)              -> (a :+ a :-> c :+ c)
+twiceC f = f +++ f
+
 left :: HasTy3 a b c => (a :-> c) -> (a :+ b :-> c :+ b)
 left f = f +++ Id
 
@@ -244,11 +259,41 @@ applyE :: HasTy2 a b   => ((a :=> b) :* a) :-> b
 applyE = Apply
 
 curryE :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
+#ifdef Simplify
 curryE (Prim p :. Snd) = Konst p        -- FIX: not general enough
+-- curry (apply . (f . fst &&& snd)) == f  -- Proof below
+curryE (Apply :. (f :. Fst :&&& Snd)) = f
+#endif
 curryE h = Curry h
+
+-- curry/apply proof:
+-- 
+--   curry (apply . (f . fst &&& snd))
+-- == curry (apply . (f . fst &&& id . snd))
+-- == curry (apply . (f *** id))
+-- == curry (apply . first f)
+-- == curry (\ (a,b) -> apply (first f (a,b)))
+-- == curry (\ (a,b) -> apply (f a,b))
+-- == curry (\ (a,b) -> f a b)
+-- == f
 
 uncurryE :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
 uncurryE = Uncurry
+
+{-
+-- Conditional. Breaks down pairs
+cond :: forall a. HasTy a => Bool :* (a :* a) :-> a
+cond = cond' (typ :: Ty a)
+ where
+   cond' (u :* v) | HasTy <- tyHasTy u, HasTy <- tyHasTy v
+                  = condPair
+   cond' _ = Prim CondP
+
+condPair :: HasTy2 a b =>
+            Bool :* ((a :* b) :* (a :* b)) :-> (a :* b)
+condPair = cond @. second (Fst *** Fst) &&& cond @. second (Snd *** Snd)
+
+-}
 
 {--------------------------------------------------------------------
     Factoring (decomposition)
@@ -278,8 +323,14 @@ decompR f                          = Id :. f
 
 instance Show (a :-> b) where
 #ifdef Sugared
-  showsPrec p (f :. Fst :&&& g :. Snd) = showsOp2'  "***" (3,AssocRight) p f g
-  showsPrec p (Lft :. f :||| Rht :. g) = showsOp2'  "+++" (2,AssocRight) p f g
+  -- showsPrec p (f :. Fst :&&& g :. Snd) = showsOp2'  "***" (3,AssocRight) p f g
+  showsPrec p (f :. Fst :&&& g :. Snd)
+    | Just Refl <- f `tyEq2` g = showsApp1 "twiceP" p f
+    | otherwise                = showsOp2'  "***" (3,AssocRight) p f g
+  -- showsPrec p (Lft :. f :||| Rht :. g) = showsOp2'  "+++" (2,AssocRight) p f g
+  showsPrec p (f :. Fst :||| g :. Snd)
+    | Just Refl <- f `tyEq2` g = showsApp1 "twiceC" p f
+    | otherwise                = showsOp2'  "+++" (2,AssocRight) p f g
   showsPrec _ (Id :&&& Id)             = showString "dup"
   showsPrec _ (Id :||| Id)             = showString "jam"
   showsPrec _ (Snd :&&& Fst)           = showString "swapP"
@@ -303,3 +354,4 @@ instance Show (a :-> b) where
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "uncurry" p h
+  showsPrec p (Cond f)    = showsApp1  "cond"    p f

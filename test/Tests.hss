@@ -7,6 +7,28 @@
 -- set-pp ast
 -- set-pp ghc
 
-reify-named 'step3
--- consider 'step3_reified  -- For display
+-- reify-named 'step3
+-- -- consider 'step3_reified  -- For display
+-- resume
+
+-- For step4c, there's a bug. shiftL4c and xor5 are getting treated as
+-- a local variable. Find the bug. Meanwhile, inline.
+
+-- consider 'step4c
+-- inline-cleanup 'ifThenElse
+-- inline-cleanup 'shiftL4c
+-- consider 'step4c_reified
+
+inline-cleanup 'shiftL4c
+inline-cleanup 'xor5
+inline-cleanup 'liftA2_5
+-- any-td case-float  -- for cond
+
+-- consider 'step4c
+-- inline-cleanup 'ifThenElse
+-- any-td (apply-rule "condPair")
+
+reify-named 'step4c
+
+-- consider 'step4c_reified  -- For display
 resume
