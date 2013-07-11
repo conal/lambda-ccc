@@ -360,6 +360,11 @@ reifyExpr =
         let mkEval e' = apps evalId [ty] [e']
         mkEval <$> rew
 
+reifyExprC :: RewriteH Core
+reifyExprC = tryR unshadow >>> promoteExprR reifyExpr
+
+-- unshadow since we extract variable names without the uniques
+
 {-
 letT :: (ExtendPath c Crumb, AddBindings c, Monad m)
      => Translate c m CoreBind a1
@@ -424,10 +429,9 @@ inlineCleanup nm = anybuER (inlineName nm) >>> anybuER cleanupUnfoldR
 
 reifyNamed :: TH.Name -> RewriteH Core
 reifyNamed nm = snocPathIn (rhsOf nm)
-                  (   tryR unshadow  -- since reifyExpr extracts variable names
-                  >>> inlineCleanup 'E.ifThenElse
+                  (   inlineCleanup 'E.ifThenElse
                   -- >>> (tryR $ anytdER $ rule "if/pair")
-                  >>> promoteExprR reifyExpr
+                  >>> reifyExprC
                   >>> reifyRules
                   >>> pathR [App_Arg] (promoteExprR (letIntro nm'))
                   >>> promoteExprR letFloatArg

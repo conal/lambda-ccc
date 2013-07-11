@@ -38,6 +38,7 @@ expToCircuit :: HasTy2 a b => E (a -> b) -> (a :~> b)
 expToCircuit = cccToCircuit . toCCC
 
 cccToCircuit :: (a :-> b) -> (a :~> b)
+cccToCircuit k@(Prim CondP) | Just k' <- expand k = cccToCircuit k'
 cccToCircuit Id                       = id
 cccToCircuit (g :. f)                 = cccToCircuit g . cccToCircuit f
 cccToCircuit (Prim FstP)              = fst -- TODO: Drop the redundant Fst/FstP ??
@@ -49,19 +50,14 @@ cccToCircuit (Uncurry (Prim XorP))    = xor
 cccToCircuit k@(Uncurry (Prim AddP))  | (PSource, PSource) <- cccPS k
                                       = namedC "add"
 
--- cccToCircuit k@(Prim CondP)           | (PSource, PSource) <- cccPS k
---                                       = namedC "cond"
+cccToCircuit k@(Prim CondP)           | (PSource, PSource) <- cccPS k
+                                      = namedC "mux"
 
--- cccToCircuit k@(Prim CondP)           | (PSource, PSource) <- cccPS k =
---   case cccTys k of
---     (_,u :* v) -> cccToCircuit condPair
---     _          -> namedC "cond"
-
-
-cccToCircuit k@(Konst (LitP b))       | (PSource, PSource) <- cccPS k
+cccToCircuit k@(Prim (ConstP (LitP b)))  | (PSource, PSource) <- cccPS k
                                       = constC b
 cccToCircuit Fst                      = fst
 cccToCircuit Snd                      = snd
+
 cccToCircuit (f :&&& g)               = cccToCircuit f &&& cccToCircuit g
 
 -- cccToCircuit Lft                      = lft
@@ -71,10 +67,19 @@ cccToCircuit (f :&&& g)               = cccToCircuit f &&& cccToCircuit g
 -- cccToCircuit (Curry h)                = curry (cccToCircuit h)
 -- cccToCircuit (Uncurry h)              = uncurry (cccToCircuit h)
 
-cccToCircuit k@(Cond f)              | (PSource, PSource) <- cccPS k
-                                     = namedC "mux" . cccToCircuit f
-
 cccToCircuit ccc = error $ "cccToCircuit: not yet handled: " ++ show ccc
+
+expand :: HasTy2 a b => (a :-> b) -> Maybe (a :-> b)
+expand k@(Prim CondP) | (_,u :* v) <- cccTys k
+                      , HasTy <- tyHasTy u, HasTy <- tyHasTy v
+                      = Just condPair
+expand _ = Nothing
+
+-- TODO: tweak condPair to expand one step at a time.
+-- Remove condC if I can't find a way to use it.
+
+--     (_,u :* v) -> cccToCircuit condPair
+--     _          -> namedC "cond"
 
 {- Incompleteness notes: 
 

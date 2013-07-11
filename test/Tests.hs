@@ -24,7 +24,7 @@ import LambdaCCC.Lambda (reifyE,xor,ifThenElse)
 import LambdaCCC.ToCCC (toCCC)
 import LambdaCCC.ToCircuit
 
-import Circat.Circuit (IsSource2,(:>),outG)
+import Circat.Circuit (IsSource2,(:>),outGWith)
 import Circat.Netlist (outV)
 
 -- Needed for resolving names. Bug? Is there an alternative?
@@ -139,15 +139,12 @@ liftA2_5 op (a,(b,(c,(d,e)))) (a',(b',(c',(d',e')))) =
 xor5 :: Seg5 -> Seg5 -> Seg5
 xor5 = liftA2_5 xor
 
+-- Wire in a polynomial
 
--- Help break up the conditional
-
-step4d :: (Seg5,(Seg5,Bool)) -> Seg5
-step4d ((aPoly,(bPoly,(cPoly,(dPoly,ePoly)))),((aSeg,(bSeg,(cSeg,(dSeg,eSeg)))),b)) = shiftL4c seg' b
+step4d :: (Seg5,Bool) -> Seg5
+step4d (seg,b) = step4c (poly,(seg,b))
  where
-   seg' = if aSeg then
-            xor5 (aPoly,(bPoly,(cPoly,(dPoly,ePoly)))) (aSeg,(bSeg,(cSeg,(dSeg,eSeg))))
-          else (aSeg,(bSeg,(cSeg,(dSeg,eSeg))))
+   poly = (True,(False,(True,(True,False))))
 
 ----
 
@@ -157,18 +154,26 @@ fiddle = length "Fiddle"
 -- WEIRD: sometimes when I comment out this fiddle definition, I get the dread
 -- "expectJust initTcInteractive" GHC panic.
 
-
-
 main :: IO ()
 main = do print e
           print c
-          outGV "step4c" (cccToCircuit c)
+          outGV "step4d" (cccToCircuit c)
  where
-   e = reifyE "step4c" step4c
+   e = reifyE "step4d" step4d
    c = toCCC e
 
 outGV :: IsSource2 a b => String -> (a :> b) -> IO ()
-outGV s c = outG s c >> outV s c
+outGV s c = do 
+            -- outGW ("png","-Gdpi=400")
+               outGW ("pdf","")
+            -- outGW ("svg","")
+            -- outGW ("jpg","-Gdpi=200")
+               outV s c
+ where
+   outGW x = outGWith x s c
+
+-- TODO: outGWiths taking a list of string pairs. Make the graph and the dot
+-- file just once.
 
 -- TODO: maybe a TH macro for reifyE "foo" foo, "[r|foo]".
 -- Maybe additional macros for specialized contexts like toCCC [r|foo].

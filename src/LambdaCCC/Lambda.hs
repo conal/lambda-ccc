@@ -55,7 +55,7 @@ import LambdaCCC.Ty
 #define Sugared
 
 -- Whether to simplify during construction
--- #define Simplify
+#define Simplify
 
 -- | Variable names
 type Name = String
@@ -219,9 +219,9 @@ patToE (PairPat p q) | HasTy <- patHasTy p, HasTy <- patHasTy q
 lam :: Pat a -> E b -> E (a -> b)
 #ifdef Simplify
 -- Eta-reduction
-lam p (f :^ u) | HasTy     <- patHasTy p
-               , Just Refl <- patToE p `sameTyE` u
-               , not (p `occursPE` f) = f
+-- lam p (f :^ u) | HasTy     <- patHasTy p
+--                , Just Refl <- patToE p `sameTyE` u
+--                , not (p `occursPE` f) = f
 -- Re-nest lambda patterns
 lam p (Lam q w :^ Var v) | occursVP v p && not (occursVE v w) =
   lam (substVP v q p) w

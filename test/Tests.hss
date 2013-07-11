@@ -28,7 +28,8 @@ inline-cleanup 'liftA2_5
 -- inline-cleanup 'ifThenElse
 -- any-td (apply-rule "condPair")
 
-reify-named 'step4c
+inline-cleanup 'step4c
+reify-named 'step4d
 
--- consider 'step4c_reified  -- For display
+-- consider 'step4d_reified  -- For display
 resume

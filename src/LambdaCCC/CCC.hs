@@ -1,10 +1,10 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures, CPP #-}
 {-# LANGUAGE PatternGuards, ViewPatterns, ConstraintKinds #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts #-} -- EXPERIMENT
+{-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS_GHC -Wall #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -23,7 +23,7 @@ module LambdaCCC.CCC
   ( module LambdaCCC.Misc
   , (:->)(..)
   , (@.), applyE, curryE, uncurryE
-  -- , condPair
+  , prim, condC, condPair                     -- TODO: use condC instead
   , (&&&), (***), (+++), (|||)
   , twiceP, twiceC
   , dup, jam, swapP, swapC
@@ -40,7 +40,7 @@ import Data.Proof.EQ
 import LambdaCCC.Misc (Unop,Evalable(..),(:*),(:+),(:=>))
 import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 import LambdaCCC.Ty
-import LambdaCCC.Prim (Prim(..),cond) -- ,ifThenElse
+import LambdaCCC.Prim (Prim(..)) -- ,cond,ifThenElse
 
 infix  0 :->
 infixr 3 &&&, ***
@@ -66,7 +66,7 @@ data (:->) :: * -> * -> * where
   -- Primitives. I'm unsure of this one. It's closer to UKonst than I like.
   Prim     :: HasTy2 a b => Prim (a -> b) -> (a :-> b) -- TODO: Prim (a :=> b)?
   -- Constant
-  Konst    :: HasTy2 a b => Prim b -> (a :-> b)
+  -- Konst    :: HasTy2 a b => Prim b -> (a :-> b)
   -- Products.
   -- Note that I'm using a different approach to the constraints here.
   -- It lets the prim optimizations work. See whether it suffices, and perhaps
@@ -82,8 +82,8 @@ data (:->) :: * -> * -> * where
   Apply    :: HasTy2 a b   => ((a :=> b) :* a) :-> b
   Curry    :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
   Uncurry  :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
-  -- Boolean
-  Cond     :: HasTy2 a b   => (a :-> (Bool :* (b :* b))) -> (a :-> b)
+--   -- Boolean
+--   Cond     :: HasTy2 a b   => (a :-> (Bool :* (b :* b))) -> (a :-> b)
 
 -- Note: Cond isn't nullary only because I'd want Const Cond. REVISIT.
 
@@ -95,7 +95,7 @@ instance HasTy2 a b => Eq (a :-> b) where
   Id         == Id                                     = True
   (g :. f)   == (g' :. f') | Just Refl <- f `tyEq2` f' = g == g'
   Prim p     == Prim p'                                = p == p'
-  Konst p    == Konst p'                               = p == p'
+--   Konst p    == Konst p'                               = p == p'
   Fst        == Fst                                    = True
   Snd        == Snd                                    = True
   (f :&&& g) == (f' :&&& g')                           = f == f' && g == g'
@@ -118,7 +118,7 @@ cccTys :: (a :-> b) -> (Ty a, Ty b)
 cccTys Id      {} = typ2
 cccTys (:.)    {} = typ2
 cccTys Prim    {} = typ2
-cccTys Konst   {} = typ2
+-- cccTys Konst   {} = typ2
 cccTys Fst     {} = typ2
 cccTys Snd     {} = typ2
 cccTys (:&&&)  {} = typ2
@@ -128,7 +128,7 @@ cccTys (:|||)  {} = typ2
 cccTys Apply   {} = typ2
 cccTys Curry   {} = typ2
 cccTys Uncurry {} = typ2
-cccTys Cond    {} = typ2
+-- cccTys Cond    {} = typ2
 
 -- Maybe parametrize this GADT by a constraint. Sadly, I'd lose the pretty infix
 -- syntax ("a :-> b").
@@ -137,7 +137,7 @@ instance Evalable (a :-> b) where
   type ValT (a :-> b) = a :=> b
   eval Id           = id
   eval (g :. f)     = eval g . eval f
-  eval (Konst b)    = const (eval b)
+--   eval (Konst b)    = const (eval b)
   eval (Prim p)     = eval p
   eval Fst          = fst
   eval Snd          = snd
@@ -148,7 +148,7 @@ instance Evalable (a :-> b) where
   eval Apply        = uncurry ($)
   eval (Curry   h)  = curry   (eval h)
   eval (Uncurry f)  = uncurry (eval f)
-  eval (Cond f)     = cond . eval f
+--   eval (Cond f)     = cond . eval f
 
 {--------------------------------------------------------------------
     Smart constructors
@@ -170,7 +170,7 @@ infixr 9 @.
 #ifdef Simplify
 Id      @. f  = f
 g       @. Id = g
-Konst k @. _  = Konst k
+Prim (ConstP p) @. _  = prim (ConstP p)
 Apply   @. (decompL -> g :. f) = composeApply g @. f
 #endif
 g       @. f  = g :. f
@@ -179,7 +179,7 @@ g       @. f  = g :. f
 
 -- | @'composeApply' h == 'apply' . h@
 composeApply :: HasTy3 a b z => (z :-> (a :=> b) :* a) -> (z :-> b)
-composeApply (Konst k          :&&& f) = prim k @. f
+composeApply (Prim (ConstP p)          :&&& f) = prim p @. f
 composeApply (h@Prim{} :. f    :&&& g) = Uncurry h @. (f  &&& g)
 composeApply (h@Prim{}         :&&& g) = Uncurry h @. (Id &&& g)
 -- apply . (curry (g . snd) &&& f) == g . f
@@ -260,7 +260,7 @@ applyE = Apply
 
 curryE :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
 #ifdef Simplify
-curryE (Prim p :. Snd) = Konst p        -- FIX: not general enough
+curryE (Prim p :. Snd) = prim (ConstP p)   -- FIX: not general enough
 -- curry (apply . (f . fst &&& snd)) == f  -- Proof below
 curryE (Apply :. (f :. Fst :&&& Snd)) = f
 #endif
@@ -280,20 +280,25 @@ curryE h = Curry h
 uncurryE :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
 uncurryE = Uncurry
 
-{-
 -- Conditional. Breaks down pairs
-cond :: forall a. HasTy a => Bool :* (a :* a) :-> a
-cond = cond' (typ :: Ty a)
+condC :: forall a. HasTy a => Bool :* (a :* a) :-> a
+condC = cond' (typ :: Ty a)
  where
    cond' (u :* v) | HasTy <- tyHasTy u, HasTy <- tyHasTy v
-                  = condPair
+           = condPair
    cond' _ = Prim CondP
+
+-- TODO: Move this smarts into the smart prim constructor.
 
 condPair :: HasTy2 a b =>
             Bool :* ((a :* b) :* (a :* b)) :-> (a :* b)
-condPair = cond @. second (Fst *** Fst) &&& cond @. second (Snd *** Snd)
+condPair = half Fst &&& half Snd
+ where
+   half f = condC @. second (twiceP f)
 
--}
+-- condPair = condC @. second (twiceP Fst) &&& condC @. second (twiceP Snd)
+
+-- TODO: Rewrite condC,cond',condPair more prettily
 
 {--------------------------------------------------------------------
     Factoring (decomposition)
@@ -344,7 +349,7 @@ instance Show (a :-> b) where
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
   showsPrec p (Prim x)    = showsPrec p x
                             -- or: showsApp1 "prim" p x
-  showsPrec p (Konst b)   = showsApp1 "konst" p b
+--   showsPrec p (Konst b)   = showsApp1 "konst" p b
   showsPrec p (f :&&& g)  = showsOp2' "&&&" (3,AssocRight) p f g
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
   showsPrec _ Fst         = showString "fst"
@@ -354,4 +359,4 @@ instance Show (a :-> b) where
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "uncurry" p h
-  showsPrec p (Cond f)    = showsApp1  "cond"    p f
+--   showsPrec p (Cond f)    = showsApp1  "cond"    p f
