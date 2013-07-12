@@ -178,7 +178,8 @@ instance IsTy E where
 instance Eq (E a) where
   Var v     == Var v'                                   = v == v'
   Const x _ == Const x' _                               = x == x'
-  (f :^ a)  == (f' :^ a') | Just Refl <- a `sameTyE` a' = f == f'
+  (f :^ a)  == (f' :^ a') | Just Refl <- a `sameTyE` a'
+                          , f == f', a == a'            = f == f'
   Lam p e   == Lam p' e'                                = p == p' && e == e'
   _         == _                                        = False
 
@@ -219,9 +220,8 @@ patToE (PairPat p q) | HasTy <- patHasTy p, HasTy <- patHasTy q
 lam :: Pat a -> E b -> E (a -> b)
 #ifdef Simplify
 -- Eta-reduction
-lam p (f :^ u) | HasTy     <- patHasTy p
-               , Just Refl <- patTy p `tyEq` expTy u
-               , patToE p == u
+lam p (f :^ u) | Just Refl <- patTy p `tyEq` expTy u
+               , u == patToE p
                , not (p `occursPE` f)
                = f
 -- Re-nest lambda patterns
@@ -268,8 +268,8 @@ data OpInfo = OpInfo String Fixity
 
 opInfo :: Prim a -> Maybe OpInfo
 opInfo AddP = Just $ OpInfo "+"     (6,AssocLeft )
-opInfo AndP = Just $ OpInfo "&&&"   (3,AssocRight)
-opInfo OrP  = Just $ OpInfo "|||"   (2,AssocRight)
+opInfo AndP = Just $ OpInfo "&&"    (3,AssocRight)
+opInfo OrP  = Just $ OpInfo "||"    (2,AssocRight)
 opInfo XorP = Just $ OpInfo "`xor`" (2,AssocRight)
 opInfo _   = Nothing
 
