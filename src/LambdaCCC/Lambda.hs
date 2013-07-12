@@ -125,7 +125,7 @@ occursPP (PairPat a b) q = occursPP a q || occursPP b q
 substVP :: V a -> Pat a -> Unop (Pat b)
 substVP v p = substIn
  where
-   substIn :: Unop (Pat b)
+   substIn :: Unop (Pat c)
    substIn (VarPat (tyEq v -> Just Refl)) = p
    substIn (PairPat a b)                  = PairPat (substIn a) (substIn b)
    substIn q                              = q
@@ -219,9 +219,11 @@ patToE (PairPat p q) | HasTy <- patHasTy p, HasTy <- patHasTy q
 lam :: Pat a -> E b -> E (a -> b)
 #ifdef Simplify
 -- Eta-reduction
--- lam p (f :^ u) | HasTy     <- patHasTy p
---                , Just Refl <- patToE p `sameTyE` u
---                , not (p `occursPE` f) = f
+lam p (f :^ u) | HasTy     <- patHasTy p
+               , Just Refl <- patTy p `tyEq` expTy u
+               , patToE p == u
+               , not (p `occursPE` f)
+               = f
 -- Re-nest lambda patterns
 lam p (Lam q w :^ Var v) | occursVP v p && not (occursVE v w) =
   lam (substVP v q p) w
