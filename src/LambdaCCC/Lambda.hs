@@ -178,8 +178,7 @@ instance IsTy E where
 instance Eq (E a) where
   Var v     == Var v'                                   = v == v'
   Const x _ == Const x' _                               = x == x'
-  (f :^ a)  == (f' :^ a') | Just Refl <- a `sameTyE` a'
-                          , f == f', a == a'            = f == f'
+  (f :^ a)  == (f' :^ a') | Just Refl <- a `sameTyE` a' = a == a' && f == f'
   Lam p e   == Lam p' e'                                = p == p' && e == e'
   _         == _                                        = False
 
