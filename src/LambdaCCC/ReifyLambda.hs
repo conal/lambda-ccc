@@ -425,7 +425,7 @@ reifyEval = reifyArg >>> evalArg
 -- rswE = reifyE' ▲ (evalE ▲ swapBI_reified) ($fHasTy(->) ▲ ▲ tup ▹ ■)
 
 inlineCleanup :: TH.Name -> RewriteH Core
-inlineCleanup nm = anybuER (inlineName nm) >>> anybuER cleanupUnfoldR
+inlineCleanup nm = tryR $ anybuER (inlineName nm) >>> anybuER cleanupUnfoldR
 
 reifyNamed :: TH.Name -> RewriteH Core
 reifyNamed nm = snocPathIn (rhsOf nm)
@@ -440,7 +440,7 @@ reifyNamed nm = snocPathIn (rhsOf nm)
                   (promoteProgR letFloatLetTop)
             >>> inlineCleanup nm
             >>> inlineCleanup 'E.reifyE
-            >>> anybuER (promoteExprR reifyEval)
+            >>> tryR (anybuER (promoteExprR reifyEval))
             >>> simplifyR  -- For the rule applications at least
  where
    nm' = TH.mkName (TH.showName nm ++ "_reified")
