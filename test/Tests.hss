@@ -24,6 +24,8 @@ inline-cleanup 'xor5
 inline-cleanup 'liftA2_5
 -- any-td case-float  -- for cond
 
+-- reify-named 'step4c
+
 -- consider 'step4c
 -- inline-cleanup 'ifThenElse
 -- any-td (apply-rule "condPair")

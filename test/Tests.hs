@@ -124,7 +124,7 @@ type V5 a = (a,(a,(a,(a,a))))
 type Seg5 = V5 Bool
 
 step4c :: (Seg5,(Seg5,Bool)) -> Seg5
-step4c (poly,(seg,b)) = shiftL4c seg' b
+step4c (poly,(seg,bit)) = shiftL4c seg' bit
  where
    seg' = if fst seg then xor5 poly seg else seg
 
