@@ -398,13 +398,16 @@ anybuER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) 
            Rewrite c m CoreExpr -> Rewrite c m g
 anybuER r = anybuR (promoteExprR r)
 
--- anytdER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) =>
---            Rewrite c m CoreExpr -> Rewrite c m g
--- anytdER r = anytdR (promoteExprR r)
+anytdER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) =>
+           Rewrite c m CoreExpr -> Rewrite c m g
+anytdER r = anytdR (promoteExprR r)
+
+tryRulesBU :: [String] -> RewriteH Core
+tryRulesBU = tryR . anybuER . applyRules
 
 reifyRules :: RewriteH Core
-reifyRules = (tryR $ anybuER $ applyRules $ map ("reify/" ++)
-               ["not","(&&)","(||)","xor","(+)","fst","snd","pair","if","false","true"])
+reifyRules = tryRulesBU $ map ("reify/" ++)
+  ["not","(&&)","(||)","xor","(+)","fst","snd","pair","if","false","true"]
 
 -- or: words $ "not (&&) (||) xor ..."
 
@@ -422,10 +425,15 @@ reifyEval = reifyArg >>> evalArg
    evalArg  = do (_evalE, [Type _, body])       <- callNameT 'E.evalE
                  return body
 
+-- reifyEval = 
+
 -- rswE = reifyE' ▲ (evalE ▲ swapBI_reified) ($fHasTy(->) ▲ ▲ tup ▹ ■)
 
 inlineCleanup :: TH.Name -> RewriteH Core
 inlineCleanup nm = tryR $ anybuER (inlineName nm) >>> anybuER cleanupUnfoldR
+
+inlineNamesTD :: [TH.Name] -> RewriteH Core
+inlineNamesTD nms = anytdER (catchesM (inlineName <$> nms))
 
 reifyNamed :: TH.Name -> RewriteH Core
 reifyNamed nm = snocPathIn (rhsOf nm)
@@ -471,6 +479,9 @@ externals =
     , external "inline-cleanup"
         (inlineCleanup :: TH.Name -> RewriteH Core)
         ["inline a named definition, and clean-up beta-redexes"]
+    , external "inline-names-td"
+        (inlineNamesTD :: [TH.Name] -> RewriteH Core)
+        ["inline given names, traversing top-down"]
     , external "reify-def"
         (reifyDef :: RewriteH Core)
         ["reify for definitions"]
