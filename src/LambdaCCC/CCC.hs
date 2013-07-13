@@ -172,6 +172,7 @@ Id      @. f  = f
 g       @. Id = g
 Prim (ConstP p) @. _  = prim (ConstP p)
 Apply   @. (decompL -> g :. f) = composeApply g @. f
+(h :. g) @. f = h @. (g @. f) -- reduce parens
 #endif
 g       @. f  = g :. f
 
@@ -221,6 +222,8 @@ swapC = Rht ||| Lft
 
 (&&&) :: HasTy3 a c d => (a :-> c) -> (a :-> d) -> (a :-> c :* d)
 #ifdef Simplify
+-- Experimental: const a &&& const b == const (a,b)
+-- Prim (ConstP (LitP a)) &&& Prim (ConstP (LitP b)) = Prim (ConstP (LitP (a,b)))
 Fst &&& Snd = Id
 -- f . r &&& g . r == (f &&& g) . r
 (decompR -> f :. r) &&& (decompR -> g :. (tyEq2 r -> Just Refl)) =
