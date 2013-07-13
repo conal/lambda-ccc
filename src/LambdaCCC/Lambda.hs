@@ -291,10 +291,10 @@ reifyE' msg _ _ = error (printf "Oops -- reifyE' %s was not eliminated" msg)
 
 {-# RULES
 
-"reify'/eval" forall e msg t. reifyE' (evalE e) msg t = e
-"eval/reify'" forall x msg t. evalE (reifyE' x msg t) = x
+"reify'/eval" forall e msg t. reifyE' msg (evalE e) t = e
+"eval/reify'" forall x msg t. evalE (reifyE' msg x t) = x
 
--- "reify/eval"  forall   msg e. reifyE (evalE e) msg = e
+-- "reify/eval"  forall   msg e. reifyE msg (evalE e) = e
 
   #-}
 
@@ -357,20 +357,29 @@ vars2 (na,nb) = (PairPat ap bp, (ae,be))
 
 {-# RULES
  
-"reify/not"   forall s. reifyE' s not  = Const NotP
-"reify/(&&)"  forall s. reifyE' s (&&) = Const AndP
-"reify/(||)"  forall s. reifyE' s (||) = Const OrP
-"reify/xor"   forall s. reifyE' s xor  = Const XorP
-"reify/(+)"   forall s. reifyE' s (+)  = Const AddP
-"reify/fst"   forall s. reifyE' s fst  = Const FstP
-"reify/snd"   forall s. reifyE' s snd  = Const SndP
-"reify/pair"  forall s. reifyE' s (,)  = Const PairP
-"reify/if"    forall s. reifyE' s cond = Const CondP
+"reify/not"   forall s. reifyE' s not   = Const NotP
+"reify/(&&)"  forall s. reifyE' s (&&)  = Const AndP
+"reify/(||)"  forall s. reifyE' s (||)  = Const OrP
+"reify/xor"   forall s. reifyE' s xor   = Const XorP
+"reify/(+)"   forall s. reifyE' s (+)   = Const AddP
+"reify/fst"   forall s. reifyE' s fst   = Const FstP
+"reify/snd"   forall s. reifyE' s snd   = Const SndP
+"reify/pair"  forall s. reifyE' s (,)   = Const PairP
+"reify/if"    forall s. reifyE' s cond  = Const CondP
  
 "reify/false" forall s. reifyE' s False = Const (LitP False)
 "reify/true"  forall s. reifyE' s True  = Const (LitP True)
  
   #-}
+
+{-# RULES
+
+"True/xor"  forall b. True  `xor` b     = not b
+"xor/True"  forall a. a     `xor` True  = not a
+"False/xor" forall b. False `xor` b     = b
+"xor/False" forall a. a     `xor` False = a
+
+ #-}
 
 -- TODO: Generalize the false & true rules. I think I'll need to do via an
 -- explicit Core transformation. I'll have to be able to find out whether the
