@@ -1,37 +1,10 @@
 -- HERMIT script for Tests.hs
 
--- set-auto-corelint True
--- set-pp-coercion Show
--- set-pp-type Show
--- -- Pretty-printing alternatives
--- set-pp ast
--- set-pp ghc
-
--- reify-named 'step3
--- -- consider 'step3_reified  -- For display
--- resume
-
--- For step4c, there's a bug. shiftL4c and xor5 are getting treated as
--- a local variable. Find the bug. Meanwhile, inline.
-
--- consider 'step4c
--- inline-cleanup 'ifThenElse
--- inline-cleanup 'shiftL4c
--- consider 'step4c_reified
-
-inline-cleanup 'shiftL4c
-inline-cleanup 'xor5
-inline-cleanup 'liftA2_5
--- any-td case-float  -- for cond
-
--- reify-named 'step4c
-
--- consider 'step4c
--- inline-cleanup 'ifThenElse
--- any-td (apply-rule "condPair")
-
-inline-cleanup 'step4c
+{ rhs-of 'step4d
+; inline-names-td ['curry,'shiftL4c,'xor5,'liftA2_5,'step4c]
+; bash
+; let-unfloat ; bash  -- for the curry. sigh.
+; any-bu (apply-rules ["True/xor","xor/True","False/xor","xor/False"]) ; bash
+}
 reify-named 'step4d
-
--- consider 'step4d_reified  -- For display
 resume

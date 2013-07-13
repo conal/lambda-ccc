@@ -142,9 +142,34 @@ xor5 = liftA2_5 xor
 -- Wire in a polynomial
 
 step4d :: (Seg5,Bool) -> Seg5
-step4d (seg,b) = step4c (poly,(seg,b))
+step4d = curry step4c (True,(False,(True,(True,False))))
+
+----
+
+type V2 a = (a,a)
+
+type Seg2 = V2 Bool
+
+step4c_2 :: (Seg2,(Seg2,Bool)) -> Seg2
+step4c_2 (poly,(seg,bit)) = shiftL4c_2 seg' bit
  where
-   poly = (True,(False,(True,(True,False))))
+   seg' = if fst seg then xor2 poly seg else seg
+
+shiftL4c_2 :: Seg2 -> Bool -> Seg2
+shiftL4c_2 (_,a) b = (a,b)
+
+liftA2_2 :: (a -> b -> c) ->
+            V2 a -> V2 b -> V2 c
+liftA2_2 op (a,b) (a',b') = (a `op` a',b `op` b')
+
+xor2 :: Seg2 -> Seg2 -> Seg2
+xor2 = liftA2_2 xor
+
+step4d_2 :: (Seg2,Bool) -> Seg2
+
+step4d_2 (seg,b) = step4c_2 (poly,(seg,b))
+ where
+   poly = (True,False)
 
 ----
 
