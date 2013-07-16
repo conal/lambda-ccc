@@ -1,16 +1,5 @@
-Convert lambda expressions to CCC combinators
+Convert lambda expressions to CCC combinators.
 
-# GHC Plugin
+See instructions in test/Tests.hs.
 
-This package provides a HERMIT GHC plugin that converts
-GHC Core to CCC combinators. You must `cabal install` the
-package for the plugin to be available. To invoke the plugin:
-
-hermit File.hs -opt=LambdaCCC +Target.Module.Name
-
-Example:
-
-hermit Simple.hs -opt=LambdaCCC +Main
-
-Note: the `hermit` command simply invokes `ghc` with some
-default flags.
+This package uses the KU [netlist](https://github.com/ku-fpg/netlist) packages.
