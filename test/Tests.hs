@@ -183,9 +183,9 @@ fiddle = length "Fiddle"
 main :: IO ()
 main = do print e
           print c
-          outGV "step4dK" (cccToCircuit c)
+          outGV "step4cK" (cccToCircuit c)
  where
-   e = reifyE "step4dK" step4dK
+   e = reifyE "step4cK" step4cK
    c = toCCC e
 
 outGV :: IsSource2 a b => String -> (a :> b) -> IO ()
