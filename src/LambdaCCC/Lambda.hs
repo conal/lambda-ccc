@@ -6,7 +6,7 @@
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
-{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -26,7 +26,7 @@ module LambdaCCC.Lambda
   , V, Pat(..), E(..)
   , varTy, patTy, expTy
   , varHasTy, patHasTy, expHasTy
-  , var#, varPat#, (@^), lam, lamv#, lett
+  , var#, varPat#, asPat#, (@^), lam, lamv#, lett
   , varT, constT
   , (#)
   , reifyE, reifyE', evalE
@@ -84,6 +84,7 @@ data Pat :: * -> * where
   UnitPat :: Pat Unit
   VarPat  :: V a -> Pat a
   PairPat :: Pat a -> Pat b -> Pat (a :* b)
+  AndPat  :: Pat a -> Pat a -> Pat a
 
 -- TODO: Rename PairPat to (:#), with
 -- infixr 1 :#
@@ -100,11 +101,13 @@ instance Show (Pat a) where
   showsPrec _ UnitPat       = showString "()"
   showsPrec p (VarPat v)    = showsPrec p v
   showsPrec p (PairPat a b) = showsPair p a b
+  showsPrec p (AndPat  a b) = showsOp2' "@" (0,AssocNone) p a b
 
 patTy :: Pat a -> Ty a
 patTy UnitPat       = UnitT
 patTy (VarPat v)    = varTy v
 patTy (PairPat a b) = patTy a :* patTy b
+patTy (AndPat a _)  = patTy a
 
 patHasTy :: Pat a -> HasTyJt a
 patHasTy = tyHasTy . patTy
@@ -114,12 +117,18 @@ occursVP :: V a -> Pat b -> Bool
 occursVP _ UnitPat       = False
 occursVP v (VarPat v')   = isJust (v `tyEq` v')
 occursVP v (PairPat a b) = occursVP v a || occursVP v b
+occursVP v (AndPat  a b) = occursVP v a || occursVP v b
 
+-- TODO: Pull v out of the recursion.
+
+{-
 -- | Does any variable from the first pattern occur in the second?
 occursPP :: Pat a -> Pat b -> Bool
 occursPP UnitPat _ = False
 occursPP (VarPat v) q = occursVP v q
 occursPP (PairPat a b) q = occursPP a q || occursPP b q
+occursPP (AndPat  a b) q = occursPP a q || occursPP b q
+-}
 
 -- | Substitute in a pattern
 substVP :: V a -> Pat a -> Unop (Pat b)
@@ -163,6 +172,7 @@ occursPE :: Pat a -> E b -> Bool
 occursPE UnitPat       = pure False
 occursPE (VarPat v)    = occursVE v
 occursPE (PairPat p q) = liftA2 (||) (occursPE p) (occursPE q)
+occursPE (AndPat  p q) = liftA2 (||) (occursPE p) (occursPE q)
 
 sameTyE :: E a -> E b -> Maybe (a :=: b)
 sameTyE ea eb = expTy ea `tyEq` expTy eb
@@ -199,6 +209,9 @@ var# addr ty = Var (V (unpackCString# addr) ty)
 varPat# :: forall a. Addr# -> Ty a -> Pat a
 varPat# addr ty = VarPat (V (unpackCString# addr) ty)
 
+asPat# :: forall a. Addr# -> Pat a -> Pat a
+asPat# addr pat = AndPat (varPat# addr (patTy pat)) pat
+
 infixl 9 @^
 
 -- | Smart application
@@ -208,21 +221,41 @@ infixl 9 @^
 #endif
 f @^ a = f :^ a
 
+{-
 patToE :: Pat a -> E a
 patToE UnitPat       = Const (LitP ()) UnitT
 patToE (VarPat v)    = Var v
 patToE (PairPat p q) | HasTy <- patHasTy p, HasTy <- patHasTy q
                      = patToE p # patToE q
+patToE (AndPat  _ _) = error "patToE: AndPat not yet handled"
+-}
 
--- TODO: Maybe Add HasTy constraints to PairPat, and remove the guard here.
+-- Try this instead:
+
+patToEs :: Pat a -> [E a]
+patToEs UnitPat       = pure $ Const (LitP ()) UnitT
+patToEs (VarPat v)    = pure $ Var v
+patToEs (PairPat p q) | HasTy <- patHasTy p, HasTy <- patHasTy q
+                       = liftA2 (#) (patToEs p) (patToEs q)
+patToEs (AndPat  p q) | HasTy <- patHasTy p, HasTy <- patHasTy q
+                       = patToEs p ++ patToEs q
+
+-- TODO: watch out for repeated (++)
 
 lam :: Pat a -> E b -> E (a -> b)
 #ifdef Simplify
 -- Eta-reduction
+
+-- lam p (f :^ u) | Just Refl <- patTy p `tyEq` expTy u
+--                , u == patToE p
+--                , not (p `occursPE` f)
+--                = f
+
 lam p (f :^ u) | Just Refl <- patTy p `tyEq` expTy u
-               , u == patToE p
+               , u `elem` patToEs p
                , not (p `occursPE` f)
                = f
+
 -- Re-nest lambda patterns
 lam p (Lam q w :^ Var v) | occursVP v p && not (occursVE v w) =
   lam (substVP v q p) w
@@ -325,6 +358,7 @@ extendEnv :: Pat b -> b -> Env -> Env
 extendEnv UnitPat       ()    = id
 extendEnv (VarPat vb)   b     = (Bind vb b :)
 extendEnv (PairPat p q) (a,b) = extendEnv q b . extendEnv p a
+extendEnv (AndPat  p q) b     = extendEnv q b . extendEnv p b
 
 lookupVar :: forall a. V a -> Env -> Maybe a
 lookupVar va = listToMaybe . catMaybes . map check
@@ -391,6 +425,13 @@ vars2 (na,nb) = (PairPat ap bp, (ae,be))
           ifThenElse a (b,c) (b',c') = (ifThenElse a b c,ifThenElse a b' c')
 
 "condPair" forall q. cond q = condPair q
+
+  #-}
+
+{-# RULES
+
+"if-split" forall a b c.
+  ifThenElse a b c = (ifThenElse a (fst b) (fst c),ifThenElse a (snd b) (snd c))
 
   #-}
 

@@ -94,3 +94,4 @@ ifThenElse i t e = cond (i,(t,e))
 cond :: (Bool, (a,a)) -> a
 cond (True ,(a,_)) = a
 cond (False,(_,b)) = b
+{-# NOINLINE cond #-}

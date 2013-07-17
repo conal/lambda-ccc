@@ -140,36 +140,37 @@ xor5 :: Seg5 -> Seg5 -> Seg5
 xor5 = liftA2_5 xor
 
 -- Wire in a polynomial
-
-step4d :: (Seg5,Bool) -> Seg5
-step4d = curry step4c (True,(False,(True,(True,False))))
+step4cK :: (Seg5,Bool) -> Seg5
+step4cK = curry step4c (True,(False,(True,(True,False))))
 
 ----
 
-type V2 a = (a,a)
+-- We don't need to xor the first bit, since we know the result (zero) will be
+-- discarded.
 
-type Seg2 = V2 Bool
+type V4 a = (a,(a,(a,a)))
 
-step4c_2 :: (Seg2,(Seg2,Bool)) -> Seg2
-step4c_2 (poly,(seg,bit)) = shiftL4c_2 seg' bit
+type Seg4 = V4 Bool
+
+step4d :: (Seg4,(Seg5,Bool)) -> Seg5
+step4d (poly,((s0,seg),bit)) = shiftL4d seg' bit
  where
-   seg' = if fst seg then xor2 poly seg else seg
+   seg' = if s0 then xor4 poly seg else seg
 
-shiftL4c_2 :: Seg2 -> Bool -> Seg2
-shiftL4c_2 (_,a) b = (a,b)
+shiftL4d :: Seg4 -> Bool -> Seg5
+shiftL4d (a,(b,(c,d))) e = (a,(b,(c,(d,e))))
 
-liftA2_2 :: (a -> b -> c) ->
-            V2 a -> V2 b -> V2 c
-liftA2_2 op (a,b) (a',b') = (a `op` a',b `op` b')
+liftA2_4 :: (a -> b -> c) ->
+            V4 a -> V4 b -> V4 c
+liftA2_4 op (b,(c,(d,e))) (b',(c',(d',e'))) =
+  (b `op` b',(c `op` c',(d `op` d',e `op` e')))
 
-xor2 :: Seg2 -> Seg2 -> Seg2
-xor2 = liftA2_2 xor
+xor4 :: Seg4 -> Seg4 -> Seg4
+xor4 = liftA2_4 xor
 
-step4d_2 :: (Seg2,Bool) -> Seg2
-
-step4d_2 (seg,b) = step4c_2 (poly,(seg,b))
- where
-   poly = (True,False)
+-- Wire in a polynomial
+step4dK :: (Seg5,Bool) -> Seg5
+step4dK = curry step4d (False,(True,(False,True)))
 
 ----
 
@@ -182,9 +183,9 @@ fiddle = length "Fiddle"
 main :: IO ()
 main = do print e
           print c
-          outGV "step4d" (cccToCircuit c)
+          outGV "step4dK" (cccToCircuit c)
  where
-   e = reifyE "step4d" step4d
+   e = reifyE "step4dK" step4dK
    c = toCCC e
 
 outGV :: IsSource2 a b => String -> (a :> b) -> IO ()

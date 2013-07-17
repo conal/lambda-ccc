@@ -80,6 +80,7 @@ convertVar b = conv
    conv UnitPat = Nothing
    conv (PairPat p q) | (HasTy,HasTy) <- tyHasTy2 (patTy p) (patTy q)
                       = ((@. Snd) <$> conv q) `mplus` ((@. Fst) <$> conv p)
+   conv (AndPat  p q) = conv q `mplus` conv p
 
 -- Alternatively,
 -- 
