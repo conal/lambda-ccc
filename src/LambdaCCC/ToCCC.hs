@@ -57,8 +57,6 @@ convert :: HasTy2 a b => Pat a -> E b -> (a :-> b)
 convert _ (Const o _) = prim (ConstP o)
 convert k (Var v) = fromMaybe (error $ "convert: unbound variable: " ++ show v) $
                     convertVar v k
--- cond k (u,v)   -- TODO: revisit. Couldn't Cond be nullary?
--- convert k (Const CondP _ :^ f) = Cond (convert k f)
 -- convert k (u :# v)   = convert k u &&& convert k v
 convert k (Const PairP (tu :=> tv :=> _) :^ u :^ v)
   | (HasTy,HasTy) <- tyHasTy2 tu tv
