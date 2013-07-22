@@ -34,10 +34,10 @@ import Circat.Circuit
 import Circat.Category
 import Circat.Classes
 
-expToCircuit :: HasTy2 a b => E (a -> b) -> (a :~> b)
+expToCircuit :: HasTy2 a b => E (a -> b) -> (a :> b)
 expToCircuit = cccToCircuit . toCCC
 
-cccToCircuit :: (a :-> b) -> (a :~> b)
+cccToCircuit :: (a :-> b) -> (a :> b)
 cccToCircuit k@(Prim CondP) | Just k' <- expand k = cccToCircuit k'
 cccToCircuit Id                       = id
 cccToCircuit (g :. f)                 = cccToCircuit g . cccToCircuit f
@@ -107,7 +107,7 @@ cccPS = tyPSource2 . cccTys
 
 -- | Judgment (proof) that @'IsSource' ('Pins' a)@
 data PSourceJt :: * -> * where
-  PSource :: IsSource (Pins a) => PSourceJt a
+  PSource :: IsSourceP a => PSourceJt a
 
 -- TODO: shorter descriptive name
 

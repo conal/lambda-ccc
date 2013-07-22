@@ -1,4 +1,5 @@
-{-# LANGUAGE TypeOperators, RebindableSyntax, ConstraintKinds #-}
+{-# LANGUAGE TypeOperators, FlexibleContexts, ConstraintKinds #-}
+{-# LANGUAGE RebindableSyntax #-}
 {-# OPTIONS_GHC -Wall -fno-warn-unused-imports #-}
 
 ----------------------------------------------------------------------
@@ -24,7 +25,7 @@ import LambdaCCC.Lambda (reifyE,xor,ifThenElse)
 import LambdaCCC.ToCCC (toCCC)
 import LambdaCCC.ToCircuit
 
-import Circat.Circuit (IsSource2,(:>),outGWith)
+import Circat.Circuit (IsSourceP2,(:>),outGWith)
 import Circat.Netlist (outV)
 
 -- Needed for resolving names. Bug? Is there an alternative?
@@ -188,7 +189,7 @@ main = do print e
    e = reifyE "step4cK" step4cK
    c = toCCC e
 
-outGV :: IsSource2 a b => String -> (a :> b) -> IO ()
+outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()
 outGV s c = do 
             -- outGW ("png","-Gdpi=400")
                outGW ("pdf","")
