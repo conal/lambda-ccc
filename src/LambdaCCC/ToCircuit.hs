@@ -39,8 +39,10 @@ expToCircuit = cccToCircuit . toCCC
 
 cccToCircuit :: (a :-> b) -> (a :> b)
 cccToCircuit k@(Prim CondP) | Just k' <- expand k = cccToCircuit k'
+-- Category
 cccToCircuit Id                       = id
 cccToCircuit (g :. f)                 = cccToCircuit g . cccToCircuit f
+-- Primitives
 cccToCircuit (Prim FstP)              = fst -- TODO: Drop the redundant Fst/FstP ??
 cccToCircuit (Prim SndP)              = snd
 cccToCircuit (Prim NotP)              = not
@@ -53,16 +55,28 @@ cccToCircuit k@(Uncurry (Prim AddP))  | (PSource, PSource) <- cccPS k
 cccToCircuit k@(Prim CondP)           | (PSource, PSource) <- cccPS k
                                       = namedC "mux"
 
-cccToCircuit k@(Prim (ConstP (LitP b)))  | (PSource, PSource) <- cccPS k
+cccToCircuit k@(Prim (ConstP (LitP b))) | (PSource, PSource) <- cccPS k
                                       = constC b
+-- Product
 cccToCircuit Fst                      = fst
 cccToCircuit Snd                      = snd
 
 cccToCircuit (f :&&& g)               = cccToCircuit f &&& cccToCircuit g
-
--- cccToCircuit Lft                      = lft
--- cccToCircuit Rht                      = rht
--- cccToCircuit (f :||| g)               = cccToCircuit f ||| cccToCircuit g
+-- Coproduct
+cccToCircuit k@Lft                    | (a, _ :+ b) <- cccTys k
+                                      , PSource <- tyPSource a
+                                      , PSource <- tyPSource b
+                                      = lftC
+cccToCircuit k@Rht                    | (b, a :+ _) <- cccTys k
+                                      , PSource <- tyPSource a
+                                      , PSource <- tyPSource b
+                                      = rhtC
+cccToCircuit k@(f :||| g)             | (a :+ b, c) <- cccTys k
+                                      , PSource <- tyPSource a
+                                      , PSource <- tyPSource b
+                                      , PSource <- tyPSource c
+                                      = cccToCircuit f |||* cccToCircuit g
+-- Exponential
 -- cccToCircuit Apply                    = apply
 -- cccToCircuit (Curry h)                = curry (cccToCircuit h)
 -- cccToCircuit (Uncurry h)              = uncurry (cccToCircuit h)
