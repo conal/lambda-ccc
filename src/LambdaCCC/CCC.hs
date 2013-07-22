@@ -82,10 +82,6 @@ data (:->) :: * -> * -> * where
   Apply    :: HasTy2 a b   => ((a :=> b) :* a) :-> b
   Curry    :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
   Uncurry  :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
---   -- Boolean
---   Cond     :: HasTy2 a b   => (a :-> (Bool :* (b :* b))) -> (a :-> b)
-
--- Note: Cond isn't nullary only because I'd want Const Cond. REVISIT.
 
 instance IsTy2 (:->) where
   type IsTy2Constraint (:->) u v = HasTy2 u v
