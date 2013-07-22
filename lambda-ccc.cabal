@@ -29,7 +29,7 @@ Library
                   , template-haskell
                   , containers
                   , ty >= 0.1.4
-                  , circat
+                  , circat >= 0.2.0
   Exposed-Modules:  LambdaCCC
                     LambdaCCC.Misc
                     LambdaCCC.ShowUtils
