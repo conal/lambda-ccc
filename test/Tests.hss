@@ -7,4 +7,5 @@
 ; any-bu (apply-rules ["True/xor","xor/True","False/xor","xor/False"]) ; bash
 }
 reify-named 'step4cK
+-- consider 'step4cK_reified
 resume

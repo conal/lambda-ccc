@@ -34,6 +34,8 @@ data Prim :: * -> * where
   SndP          :: Prim (a :* b -> b)
   PairP         :: Prim (a -> b -> a :* b)
   CondP         :: Prim (Bool :* (a :* a) -> a)
+  LftP          :: Prim (a -> a :+ b)
+  RhtP          :: Prim (b -> a :+ b)
   -- More here
   ConstP        :: Prim b -> Prim (a -> b)
 
@@ -64,6 +66,8 @@ instance Show (Prim a) where
   showsPrec _ FstP       = showString "fst"
   showsPrec _ SndP       = showString "snd"
   showsPrec _ PairP      = showString "(,)"
+  showsPrec _ LftP       = showString "Left"
+  showsPrec _ RhtP       = showString "Right"
   showsPrec _ CondP      = showString "cond"
   showsPrec p (ConstP w) = showsApp1 "const" p w
 
@@ -78,6 +82,8 @@ instance Evalable (Prim a) where
   eval FstP          = fst
   eval SndP          = snd
   eval PairP         = (,)
+  eval LftP          = Left
+  eval RhtP          = Right
   eval CondP         = cond
   eval (ConstP w)    = const (eval w)
 
@@ -87,6 +93,7 @@ xor :: Binop Bool
 xor = (/=)
 {-# NOINLINE xor #-}
 
+-- For desugaring if-then-else expressions (assuming RebindableSyntax)
 ifThenElse :: Bool -> Binop a
 ifThenElse i t e = cond (i,(t,e))
 {-# INLINE ifThenElse #-}

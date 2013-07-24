@@ -142,7 +142,7 @@ xor5 = liftA2_5 xor
 
 -- Wire in a polynomial
 step4cK :: (Seg5,Bool) -> Seg5
-step4cK = curry step4c (True,(False,(True,(True,False))))
+step4cK = curry step4c (True,(False,(True,(False,True))))
 
 ----
 

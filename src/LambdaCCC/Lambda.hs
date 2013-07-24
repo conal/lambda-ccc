@@ -162,10 +162,13 @@ expHasTy = tyHasTy . expTy
 
 -- | A variable occurs freely in an expression
 occursVE :: V a -> E b -> Bool
-occursVE v (Var v')  = isJust (v `tyEq` v')
-occursVE v (f :^ e)  = occursVE v f || occursVE v e
-occursVE v (Lam p e) = not (occursVP v p) && occursVE v e
-occursVE _ _         = False
+occursVE v = occ
+ where
+   occ :: E c -> Bool
+   occ (Var v')   = isJust (v `tyEq` v')
+   occ (Const {}) = False
+   occ (f :^ e)   = occ f || occ e
+   occ (Lam p e)  = not (occursVP v p) && occ e
 
 -- | Some variable in a pattern occurs freely in an expression
 occursPE :: Pat a -> E b -> Bool
@@ -399,6 +402,8 @@ vars2 (na,nb) = (PairPat ap bp, (ae,be))
 "reify/fst"   forall s. reifyE' s fst   = Const FstP
 "reify/snd"   forall s. reifyE' s snd   = Const SndP
 "reify/pair"  forall s. reifyE' s (,)   = Const PairP
+"reify/lft"   forall s. reifyE' s Left  = Const LftP
+"reify/rht"   forall s. reifyE' s Right = Const RhtP
 "reify/if"    forall s. reifyE' s cond  = Const CondP
  
 "reify/false" forall s. reifyE' s False = Const (LitP False)
