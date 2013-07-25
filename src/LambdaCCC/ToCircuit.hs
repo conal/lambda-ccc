@@ -95,15 +95,6 @@ expand _ = Nothing
 --     (_,u :* v) -> cccToCircuit condPair
 --     _          -> namedC "cond"
 
-{- Incompleteness notes: 
-
-Not handing sums or exponentials yet. The commented-out definitions above
-erroneously assume that Pins distributes over sums and (I think) exponentials,
-which is not the case. I think it would be the case with categorical products
-and coproducts, so that the coproduct needn't coincide with sum.
-
--}
-
 -- TODO: I don't know whether to keep add. We'll probably want to build it from
 -- simpler pieces.
 --
@@ -134,6 +125,7 @@ tyPSource :: Ty a -> PSourceJt a
 tyPSource UnitT = PSource
 tyPSource BoolT = PSource
 tyPSource (a :* b) | (PSource,PSource) <- tyPSource2 (a,b) = PSource
+tyPSource (a :+ b) | (PSource,PSource) <- tyPSource2 (a,b) = PSource
 tyPSource ty = error $ "tyPSource: Oops -- not yet handling " ++ show ty
 
 -- TODO: IntT, a :+ b, a :=> b.
