@@ -79,35 +79,38 @@ varTy (V _ ty) = ty
 varHasTy :: V a -> HasTyJt a
 varHasTy = tyHasTy . varTy
 
+infixr 1 :#
+infixr 8 :@
+
 -- | Lambda patterns
 data Pat :: * -> * where
   UnitPat :: Pat Unit
   VarPat  :: V a -> Pat a
-  PairPat :: Pat a -> Pat b -> Pat (a :* b)
-  AndPat  :: Pat a -> Pat a -> Pat a
+  (:#)    :: Pat a -> Pat b -> Pat (a :* b)
+  (:@)    :: Pat a -> Pat a -> Pat a
 
--- TODO: Rename PairPat to (:#), with
--- infixr 1 :#
+-- NOTE: ":@" is named to suggest "as patterns", but is more general ("and patterns").
 
 -- TODO: Rename UnitPat and VarPat to PUnit and PVar
 
 instance Eq (Pat a) where
-  UnitPat     == UnitPat       = True
-  VarPat v    == VarPat v'     = v == v'
-  PairPat a b == PairPat a' b' = a == a' && b == b'
-  _           == _             = False
+  UnitPat  == UnitPat    = True
+  VarPat v == VarPat v'  = v == v'
+  (a :# b) == (a' :# b') = a == a' && b == b'
+  (a :@ b) == (a' :@ b') = a == a' && b == b'
+  _        == _          = False
 
 instance Show (Pat a) where
-  showsPrec _ UnitPat       = showString "()"
-  showsPrec p (VarPat v)    = showsPrec p v
-  showsPrec p (PairPat a b) = showsPair p a b
-  showsPrec p (AndPat  a b) = showsOp2' "@" (0,AssocNone) p a b
+  showsPrec _ UnitPat    = showString "()"
+  showsPrec p (VarPat v) = showsPrec p v
+  showsPrec p (a :# b)   = showsPair p a b
+  showsPrec p (a :@ b)   = showsOp2' "@" (8,AssocRight) p a b
 
 patTy :: Pat a -> Ty a
-patTy UnitPat       = UnitT
-patTy (VarPat v)    = varTy v
-patTy (PairPat a b) = patTy a :* patTy b
-patTy (AndPat a _)  = patTy a
+patTy UnitPat    = UnitT
+patTy (VarPat v) = varTy v
+patTy (a :# b)   = patTy a :* patTy b
+patTy (a :@ _)   = patTy a
 
 patHasTy :: Pat a -> HasTyJt a
 patHasTy = tyHasTy . patTy
@@ -116,8 +119,8 @@ patHasTy = tyHasTy . patTy
 occursVP :: V a -> Pat b -> Bool
 occursVP _ UnitPat       = False
 occursVP v (VarPat v')   = isJust (v `tyEq` v')
-occursVP v (PairPat a b) = occursVP v a || occursVP v b
-occursVP v (AndPat  a b) = occursVP v a || occursVP v b
+occursVP v (a :# b) = occursVP v a || occursVP v b
+occursVP v (a :@ b) = occursVP v a || occursVP v b
 
 -- TODO: Pull v out of the recursion.
 
@@ -136,7 +139,8 @@ substVP v p = substIn
  where
    substIn :: Unop (Pat c)
    substIn (VarPat (tyEq v -> Just Refl)) = p
-   substIn (PairPat a b)                  = PairPat (substIn a) (substIn b)
+   substIn (a :# b)                       = substIn a :# substIn b
+   substIn (a :@ b)                       = substIn a :@ substIn b
    substIn q                              = q
 
 infixl 9 :^
@@ -174,8 +178,8 @@ occursVE v = occ
 occursPE :: Pat a -> E b -> Bool
 occursPE UnitPat       = pure False
 occursPE (VarPat v)    = occursVE v
-occursPE (PairPat p q) = liftA2 (||) (occursPE p) (occursPE q)
-occursPE (AndPat  p q) = liftA2 (||) (occursPE p) (occursPE q)
+occursPE (p :# q) = liftA2 (||) (occursPE p) (occursPE q)
+occursPE (p :@ q) = liftA2 (||) (occursPE p) (occursPE q)
 
 sameTyE :: E a -> E b -> Maybe (a :=: b)
 sameTyE ea eb = expTy ea `tyEq` expTy eb
@@ -213,7 +217,7 @@ varPat# :: forall a. Addr# -> Ty a -> Pat a
 varPat# addr ty = VarPat (V (unpackCString# addr) ty)
 
 asPat# :: forall a. Addr# -> Pat a -> Pat a
-asPat# addr pat = AndPat (varPat# addr (patTy pat)) pat
+asPat# addr pat = varPat# addr (patTy pat) :@ pat
 
 infixl 9 @^
 
@@ -236,12 +240,12 @@ patToE (AndPat  _ _) = error "patToE: AndPat not yet handled"
 -- Try this instead:
 
 patToEs :: Pat a -> [E a]
-patToEs UnitPat       = pure $ Const (LitP ()) UnitT
-patToEs (VarPat v)    = pure $ Var v
-patToEs (PairPat p q) | HasTy <- patHasTy p, HasTy <- patHasTy q
-                       = liftA2 (#) (patToEs p) (patToEs q)
-patToEs (AndPat  p q) | HasTy <- patHasTy p, HasTy <- patHasTy q
-                       = patToEs p ++ patToEs q
+patToEs UnitPat    = pure $ Const (LitP ()) UnitT
+patToEs (VarPat v) = pure $ Var v
+patToEs (p :# q)   | HasTy <- patHasTy p, HasTy <- patHasTy q
+                   = liftA2 (#) (patToEs p) (patToEs q)
+patToEs (p :@ q)   | HasTy <- patHasTy p, HasTy <- patHasTy q
+                   = patToEs p ++ patToEs q
 
 -- TODO: watch out for repeated (++)
 
@@ -360,8 +364,8 @@ eval' (Lam p e) env = \ x -> eval' e (extendEnv p x env)
 extendEnv :: Pat b -> b -> Env -> Env
 extendEnv UnitPat       ()    = id
 extendEnv (VarPat vb)   b     = (Bind vb b :)
-extendEnv (PairPat p q) (a,b) = extendEnv q b . extendEnv p a
-extendEnv (AndPat  p q) b     = extendEnv q b . extendEnv p b
+extendEnv (p :# q) (a,b) = extendEnv q b . extendEnv p a
+extendEnv (p :@ q) b     = extendEnv q b . extendEnv p b
 
 lookupVar :: forall a. V a -> Env -> Maybe a
 lookupVar va = listToMaybe . catMaybes . map check
@@ -383,7 +387,7 @@ vars = (VarPat &&& Var) . flip V typ
 
 vars2 :: HasTy2 a b =>
          (Name,Name) -> (Pat (a,b), (E a,E b))
-vars2 (na,nb) = (PairPat ap bp, (ae,be))
+vars2 (na,nb) = (ap :# bp, (ae,be))
  where
    (ap,ae) = vars na
    (bp,be) = vars nb

@@ -64,7 +64,7 @@ convert k (Const PairP (tu :=> tv :=> _) :^ u :^ v)
 convert k (u :^ v)   | HasTy <- tyHasTy (domTy (expTy u))
   = applyE @. (convert k u &&& convert k v)
 convert k (Lam p e)  | (HasTy,HasTy) <- tyHasTy2 (patTy p) (expTy e)
-                     = curryE (convert (PairPat k p) e)
+                     = curryE (convert (k :# p) e)
 
 -- Convert a variable in context
 convertVar :: forall b a. HasTy2 a b => V b -> Pat a -> Maybe (a :-> b)
@@ -75,10 +75,10 @@ convertVar b = conv
                    -- , HasTy <- tyHasTy (varTy c)
                    = Just Id
                    | otherwise = Nothing
-   conv UnitPat = Nothing
-   conv (PairPat p q) | (HasTy,HasTy) <- tyHasTy2 (patTy p) (patTy q)
-                      = ((@. Snd) <$> conv q) `mplus` ((@. Fst) <$> conv p)
-   conv (AndPat  p q) = conv q `mplus` conv p
+   conv UnitPat  = Nothing
+   conv (p :# q) | (HasTy,HasTy) <- tyHasTy2 (patTy p) (patTy q)
+                 = ((@. Snd) <$> conv q) `mplus` ((@. Fst) <$> conv p)
+   conv (p :@ q) = conv q `mplus` conv p
 
 -- Alternatively,
 -- 

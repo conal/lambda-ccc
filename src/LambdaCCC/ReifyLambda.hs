@@ -284,7 +284,7 @@ reifyExpr =
      reifyId   <- findIdT 'E.reifyE'
      letId     <- findIdT 'E.lett
      varPatId# <- findIdT 'E.varPat#
-     pairPatId <- findIdT 'E.PairPat
+     pairPatId <- findIdT '(E.:#)
      asPatId#  <- findIdT 'E.asPat#
      let rew :: ReExpr
          rew = tries [ ("Var#" ,rVar#)
