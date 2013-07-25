@@ -63,14 +63,8 @@ infixr 2 :|||
 data (:->) :: * -> * -> * where
   Id       :: HasTy a => a :-> a
   (:.)     :: HasTy3 a b c => (b :-> c) -> (a :-> b) -> (a :-> c)
-  -- Primitives. I'm unsure of this one. It's closer to UKonst than I like.
-  Prim     :: HasTy2 a b => Prim (a -> b) -> (a :-> b) -- TODO: Prim (a :=> b)?
-  -- Constant
-  -- Konst    :: HasTy2 a b => Prim b -> (a :-> b)
-  -- Products.
-  -- Note that I'm using a different approach to the constraints here.
-  -- It lets the prim optimizations work. See whether it suffices, and perhaps
-  -- change others.
+  -- Primitives
+  Prim     :: HasTy2 a b => Prim (a -> b) -> (a :-> b)
   Fst      :: HasTy2 (a :* b) a => a :* b :-> a
   Snd      :: HasTy2 (a :* b) b => a :* b :-> b
   (:&&&)   :: HasTy3 a c d => (a :-> c) -> (a :-> d) -> (a :-> c :* d)
@@ -79,7 +73,7 @@ data (:->) :: * -> * -> * where
   Rht      :: HasTy2 a b => b :-> a :+ b
   (:|||)   :: HasTy3 a b c => (a :-> c) -> (b :-> c) -> (a :+ b :-> c)
   -- Exponentials
-  Apply    :: HasTy2 a b   => ((a :=> b) :* a) :-> b
+  Apply    :: HasTy2 a b   => (a :=> b) :* a :-> b
   Curry    :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
   Uncurry  :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
 
