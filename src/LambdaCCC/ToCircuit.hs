@@ -128,10 +128,9 @@ tyPSource (a :* b) | (PSource,PSource) <- tyPSource2 (a,b) = PSource
 tyPSource (a :+ b) | (PSource,PSource) <- tyPSource2 (a,b) = PSource
 tyPSource ty = error $ "tyPSource: Oops -- not yet handling " ++ show ty
 
--- TODO: IntT, a :+ b, a :=> b.
+-- TODO: a :=> b
 -- 
--- I guess I'll use nested pairs for Int, a product-plus-mux encoding for sums,
--- and some sort of memoization and/or closure for functions.
+-- I guess I'll use some sort of memoization and/or closure for functions.
 
 tyPSource2 :: (Ty a,Ty b) -> (PSourceJt a, PSourceJt b)
 tyPSource2 (a,b) = (tyPSource a,tyPSource b)
