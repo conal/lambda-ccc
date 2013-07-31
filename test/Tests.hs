@@ -13,7 +13,7 @@
 -- 
 -- Test conversion of Haskell source code into circuits. To run:
 -- 
---   hermit Tests.hs -opt=LambdaCCC.ReifyLambda +Main Tests.hss -- -v0 && ./Tests
+--   hermit Tests.hs -v0 -opt=LambdaCCC.ReifyLambda +Main Tests.hss resume && ./Tests
 ----------------------------------------------------------------------
 
 module Main where
