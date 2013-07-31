@@ -67,11 +67,11 @@ data (:->) :: * -> * -> * where
   Prim     :: HasTy2 a b => Prim (a -> b) -> (a :-> b)
   Fst      :: HasTy2 (a :* b) a => a :* b :-> a
   Snd      :: HasTy2 (a :* b) b => a :* b :-> b
-  (:&&&)   :: HasTy3 a c d => (a :-> c) -> (a :-> d) -> (a :-> c :* d)
+  (:&&&)   :: HasTy3 a b c => (a :-> b) -> (a :-> c) -> (a :-> b :* c)
   -- Coproducts
   Lft      :: HasTy2 a b => a :-> a :+ b
   Rht      :: HasTy2 a b => b :-> a :+ b
-  (:|||)   :: HasTy3 a b c => (a :-> c) -> (b :-> c) -> (a :+ b :-> c)
+  (:|||)   :: HasTy3 a b c => (b :-> a) -> (c :-> a) -> (b :+ c :-> a)
   -- Exponentials
   Apply    :: HasTy2 a b   => (a :=> b) :* a :-> b
   Curry    :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
