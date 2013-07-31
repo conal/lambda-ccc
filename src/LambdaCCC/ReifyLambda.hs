@@ -457,7 +457,7 @@ reifyNamed nm = snocPathIn (rhsOf nm)
             >>> tryRulesBU ["reify'/eval","eval/reify'"]
             >>> simplifyR  -- For the rule applications at least
  where
-   nm' = TH.mkName (TH.showName nm ++ "_reified")
+   nm' = TH.showName nm ++ "_reified"
 
 
 -- I don't know why I need both cleanupUnfoldR and simplifyR.
