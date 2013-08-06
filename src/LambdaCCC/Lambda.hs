@@ -143,9 +143,9 @@ substVP v p = substIn
    substIn (a :@ b)                       = substIn a :@ substIn b
    substIn q                              = q
 
-infixl 9 :^
+-- | Case alternatives
 
--- infix 1 :#
+infixl 9 :^
 
 -- | Lambda expressions
 data E :: * -> * where
@@ -317,11 +317,11 @@ data Bind = forall a. Bind (V a) a
 -- | Variable environment
 type Env = [Bind]
 
-reifyE :: HasTy a => String -> a -> E a
-reifyE msg a = reifyE' msg a typ
+reifyE :: HasTy a => a -> String -> E a
+reifyE a msg = reifyE' a msg typ
 
-reifyE' :: String -> a -> Ty a -> E a
-reifyE' msg _ _ = error (printf "Oops -- reifyE' %s was not eliminated" msg)
+reifyE' :: a -> String -> Ty a -> E a
+reifyE' _ msg _ = error (printf "Oops -- reifyE' %s was not eliminated" msg)
 {-# NOINLINE reifyE' #-}
 
 -- The artificially strange definition of reifyE' prevents it from getting
@@ -331,10 +331,8 @@ reifyE' msg _ _ = error (printf "Oops -- reifyE' %s was not eliminated" msg)
 
 {-# RULES
 
-"reify'/eval" forall e msg t. reifyE' msg (evalE e) t = e
-"eval/reify'" forall x msg t. evalE (reifyE' msg x t) = x
-
--- "reify/eval"  forall   msg e. reifyE msg (evalE e) = e
+"reify'/eval" forall e msg t. reifyE' (evalE e) msg t = e
+"eval/reify'" forall x msg t. evalE (reifyE' x msg t) = x
 
   #-}
 
@@ -396,24 +394,33 @@ vars2 (na,nb) = (ap :# bp, (ae,be))
     Rules
 --------------------------------------------------------------------}
 
+kConst :: Prim a -> String -> Ty a -> E a
+kConst p _msg ty = Const p ty
+
+kLit :: (Show a, Eq a) => a -> String -> Ty a -> E a
+kLit = kConst . LitP
+
 {-# RULES
  
-"reify/not"   forall s. reifyE' s not   = Const NotP
-"reify/(&&)"  forall s. reifyE' s (&&)  = Const AndP
-"reify/(||)"  forall s. reifyE' s (||)  = Const OrP
-"reify/xor"   forall s. reifyE' s xor   = Const XorP
-"reify/(+)"   forall s. reifyE' s (+)   = Const AddP
-"reify/fst"   forall s. reifyE' s fst   = Const FstP
-"reify/snd"   forall s. reifyE' s snd   = Const SndP
-"reify/pair"  forall s. reifyE' s (,)   = Const PairP
-"reify/lft"   forall s. reifyE' s Left  = Const LftP
-"reify/rht"   forall s. reifyE' s Right = Const RhtP
-"reify/if"    forall s. reifyE' s cond  = Const CondP
- 
-"reify/false" forall s. reifyE' s False = Const (LitP False)
-"reify/true"  forall s. reifyE' s True  = Const (LitP True)
+"reify/not"   reifyE' not   = kConst NotP
+"reify/(&&)"  reifyE' (&&)  = kConst AndP
+"reify/(||)"  reifyE' (||)  = kConst OrP
+"reify/xor"   reifyE' xor   = kConst XorP
+"reify/(+)"   reifyE' (+)   = kConst AddP
+"reify/fst"   reifyE' fst   = kConst FstP
+"reify/snd"   reifyE' snd   = kConst SndP
+"reify/pair"  reifyE' (,)   = kConst PairP
+"reify/lft"   reifyE' Left  = kConst LftP
+"reify/rht"   reifyE' Right = kConst RhtP
+"reify/if"    reifyE' cond  = kConst CondP
+"reify/false" reifyE' False = kLit False
+"reify/true"  reifyE' True  = kLit True
  
   #-}
+
+-- TODO: Generalize the false & true rules. I think I'll need to do via an
+-- explicit Core transformation. I'll have to be able to find out whether the
+-- type is Showable. I suppose I could handle a few known type constructors.
 
 {-# RULES
 
@@ -423,10 +430,6 @@ vars2 (na,nb) = (ap :# bp, (ae,be))
 "xor/False" forall a. a     `xor` False = a
 
  #-}
-
--- TODO: Generalize the false & true rules. I think I'll need to do via an
--- explicit Core transformation. I'll have to be able to find out whether the
--- type is Showable. I suppose I could handle a few known type constructors.
 
 {-# RULES
  
@@ -446,3 +449,6 @@ vars2 (na,nb) = (ap :# bp, (ae,be))
 
 condPair :: (Bool,((a,b),(a,b))) -> (a,b)
 condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))
+
+-- TODO: if-splitting has gone through a few incarnations. Re-examine, and
+-- prune away unused code.
