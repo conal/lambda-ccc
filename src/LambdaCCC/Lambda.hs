@@ -117,10 +117,10 @@ patHasTy = tyHasTy . patTy
 
 -- | Does a variable occur in a pattern?
 occursVP :: V a -> Pat b -> Bool
-occursVP _ UnitPat       = False
-occursVP v (VarPat v')   = isJust (v `tyEq` v')
-occursVP v (a :# b) = occursVP v a || occursVP v b
-occursVP v (a :@ b) = occursVP v a || occursVP v b
+occursVP _ UnitPat     = False
+occursVP v (VarPat v') = isJust (v `tyEq` v')
+occursVP v (a :# b)    = occursVP v a || occursVP v b
+occursVP v (a :@ b)    = occursVP v a || occursVP v b
 
 -- TODO: Pull v out of the recursion.
 
@@ -176,10 +176,10 @@ occursVE v = occ
 
 -- | Some variable in a pattern occurs freely in an expression
 occursPE :: Pat a -> E b -> Bool
-occursPE UnitPat       = pure False
-occursPE (VarPat v)    = occursVE v
-occursPE (p :# q) = liftA2 (||) (occursPE p) (occursPE q)
-occursPE (p :@ q) = liftA2 (||) (occursPE p) (occursPE q)
+occursPE UnitPat    = pure False
+occursPE (VarPat v) = occursVE v
+occursPE (p :# q)   = liftA2 (||) (occursPE p) (occursPE q)
+occursPE (p :@ q)   = liftA2 (||) (occursPE p) (occursPE q)
 
 sameTyE :: E a -> E b -> Maybe (a :=: b)
 sameTyE ea eb = expTy ea `tyEq` expTy eb
