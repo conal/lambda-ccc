@@ -143,10 +143,7 @@ substVP v p = substIn
    substIn (a :@ b)                       = substIn a :@ substIn b
    substIn q                              = q
 
--- | Case alternatives
-
 infixl 9 :^
-
 -- | Lambda expressions
 data E :: * -> * where
   Var   :: forall a   . V a -> E a
