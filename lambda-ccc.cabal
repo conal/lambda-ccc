@@ -30,20 +30,15 @@ Library
                   , containers
                   , ty >= 0.1.4
                   , circat >= 0.2.0
-  Exposed-Modules:  LambdaCCC
-                    LambdaCCC.Misc
+  Exposed-Modules:  LambdaCCC.Misc
                     LambdaCCC.ShowUtils
                     LambdaCCC.Ty
                     LambdaCCC.Prim
                     LambdaCCC.Lambda
                     LambdaCCC.CCC
                     LambdaCCC.ToCCC
-                    LambdaCCC.FunCCC
-                    LambdaCCC.Core
                     LambdaCCC.MkStringExpr
                     LambdaCCC.ReifyLambda
-                    LambdaCCCDemo.Reify
-                    LambdaCCCDemo.Embedding
                     LambdaCCC.ToCircuit
 
 -- TODO: trim
