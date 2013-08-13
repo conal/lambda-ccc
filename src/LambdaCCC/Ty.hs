@@ -89,9 +89,9 @@ fab `tyEq2'` fcd
 -- | Synthesize a type
 class HasTy a where typ :: Ty a
 
-type HasTy2 a b     = (HasTy a, HasTy b)
+type HasTy2 a b     = (HasTy  a, HasTy b)
 type HasTy3 a b c   = (HasTy2 a b, HasTy c)
-type HasTy4 a b c d = (HasTy2 a b, HasTy2 c d)
+type HasTy4 a b c d = (HasTy3 a b c, HasTy d)
 
 instance HasTy Unit where typ = UnitT
 instance HasTy Int  where typ = IntT
