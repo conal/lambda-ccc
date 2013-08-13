@@ -24,7 +24,7 @@ module LambdaCCC.Encode where
 
 import Data.Foldable
 import Data.Traversable
-import Control.Arrow ((***),(+++))
+import Control.Arrow ((***),(+++),(|||))
 
 import Control.Compose ((<~))
 
@@ -68,20 +68,13 @@ instance (Encodable a, Encodable b) => Encodable (a -> b) where
 -- instance Encodable Bool where
 --   { type Encode Bool = Bool ; encode = id ; decode = id }
 
-type Bool' = () :+ ()
-
-fromBool :: Bool -> Bool'
-fromBool False = Left  ()
-fromBool True  = Right ()
-
-toBool :: Bool' -> Bool
-toBool (Left  ()) = False
-toBool (Right ()) = True
-
 instance Encodable Bool where
   type Encode Bool = () :+ ()
-  encode = fromBool
-  decode = toBool
+  encode = bool (Left ()) (Right ())
+  decode = const False ||| const True
+
+bool :: a -> a -> Bool -> a
+bool t e i = if i then t else e
 
 instance Encodable Any where
   { type Encode Any = Encode Bool ; encode = encode . getAny ; decode = Any . decode }
@@ -143,9 +136,13 @@ infixr 2 ||*
   #-}
 
 -- instance Encodable a => Encodable [a] where
---   type Encode [a] = Encode (() :+ a :* [a])
+--   -- type Encode [a] = Encode (() :+ a :* [a])
+--   type Encode [a] = () :+ a :* Encode [a]
 --   encode []     = Left  ()
 --   encode (a:as) = Right (encode (a,as))
+--   decode (Left  ()    ) = []    
+--   decode (Right (a,as)) = decode a : decode as
+
 
 -- Oops! Infinite type:
 -- 
