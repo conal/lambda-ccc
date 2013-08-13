@@ -309,7 +309,7 @@ reifyExpr =
                      let t = exprType e
                      (str,_) <- apply' mkVarName v
                      te <- apply' reifyType t
-                     return $ apps reifyId [t] [str,e,te]
+                     return $ apps reifyId [t] [e,str,te]
          rApp  = do App (exprType -> funTy) _ <- idR
                     appT  rew rew $ arr $ \ u' v' ->
                       let (a,b) = splitFunTy funTy in
