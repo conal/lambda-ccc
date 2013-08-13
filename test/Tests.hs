@@ -186,7 +186,7 @@ main = do print e
           print c
           outGV "step4cK" (cccToCircuit c)
  where
-   e = reifyE "step4cK" step4cK
+   e = reifyE step4cK "step4cK"
    c = toCCC e
 
 outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()
