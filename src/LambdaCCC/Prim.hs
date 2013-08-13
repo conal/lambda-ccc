@@ -16,31 +16,89 @@
 -- Primitives
 ----------------------------------------------------------------------
 
-module LambdaCCC.Prim (Prim(..)) where
+module LambdaCCC.Prim (Prim(..),xor,ifThenElse,cond) where
+
+import Data.IsTy
 
 import LambdaCCC.Misc
+import LambdaCCC.Ty
+import LambdaCCC.ShowUtils (showsApp1)
 
 -- | Primitives
 data Prim :: * -> * where
-  Lit        :: Show a => a -> Prim a
-  Not        :: Prim (Bool :=> Bool)
-  And,Or,Xor :: Prim (Bool :* Bool :=> Bool)
-  Add        :: Num  a => Prim (a :* a :=> a)
+  LitP          :: (Eq a, Show a) => a -> Prim a
+  NotP          :: Prim (Bool -> Bool)
+  AndP,OrP,XorP :: Prim (Bool -> Bool -> Bool)
+  AddP          :: Num  a => Prim (a -> a -> a)
+  FstP          :: Prim (a :* b -> a)
+  SndP          :: Prim (a :* b -> b)
+  PairP         :: Prim (a -> b -> a :* b)
+  CondP         :: Prim (Bool :* (a :* a) -> a)
+  LftP          :: Prim (a -> a :+ b)
+  RhtP          :: Prim (b -> a :+ b)
   -- More here
+  ConstP        :: Prim b -> Prim (a -> b)
+
+instance Eq (Prim a) where
+  LitP a == LitP b = a == b
+  NotP   == NotP   = True
+  AndP   == AndP   = True
+  OrP    == OrP    = True
+  XorP   == XorP   = True
+  AddP   == AddP   = True
+  FstP   == FstP   = True
+  SndP   == SndP   = True
+  PairP  == PairP  = True
+  CondP  == CondP  = True
+  _      == _      = False
+
+instance IsTy Prim where
+  type IsTyConstraint Prim z = HasTy z
+  tyEq = tyEq'
 
 instance Show (Prim a) where
-  showsPrec p (Lit a) = showsPrec p a
-  showsPrec _ Not     = showString "not"
-  showsPrec _ And     = showString "and"
-  showsPrec _ Or      = showString "or"
-  showsPrec _ Xor     = showString "xor"
-  showsPrec _ Add     = showString "add"
+  showsPrec p (LitP a)   = showsPrec p a
+  showsPrec _ NotP       = showString "not"
+  showsPrec _ AndP       = showString "(&&)"
+  showsPrec _ OrP        = showString "(||)"
+  showsPrec _ XorP       = showString "xor"
+  showsPrec _ AddP       = showString "add"
+  showsPrec _ FstP       = showString "fst"
+  showsPrec _ SndP       = showString "snd"
+  showsPrec _ PairP      = showString "(,)"
+  showsPrec _ LftP       = showString "Left"
+  showsPrec _ RhtP       = showString "Right"
+  showsPrec _ CondP      = showString "cond"
+  showsPrec p (ConstP w) = showsApp1 "const" p w
 
 instance Evalable (Prim a) where
   type ValT (Prim a) = a
-  eval (Lit x) = x
-  eval Not     = not
-  eval And     = uncurry (&&)
-  eval Or      = uncurry (||)
-  eval Xor     = uncurry (/=)
-  eval Add     = uncurry (+)
+  eval (LitP x)      = x
+  eval NotP          = not
+  eval AndP          = (&&)
+  eval OrP           = (||)
+  eval XorP          = (/=)
+  eval AddP          = (+)
+  eval FstP          = fst
+  eval SndP          = snd
+  eval PairP         = (,)
+  eval LftP          = Left
+  eval RhtP          = Right
+  eval CondP         = cond
+  eval (ConstP w)    = const (eval w)
+
+infixr 3 `xor`
+
+xor :: Binop Bool
+xor = (/=)
+{-# NOINLINE xor #-}
+
+-- For desugaring if-then-else expressions (assuming RebindableSyntax)
+ifThenElse :: Bool -> Binop a
+ifThenElse i t e = cond (i,(t,e))
+{-# INLINE ifThenElse #-}
+
+cond :: (Bool, (a,a)) -> a
+cond (True ,(a,_)) = a
+cond (False,(_,b)) = b
+{-# NOINLINE cond #-}

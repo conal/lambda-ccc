@@ -16,9 +16,11 @@
 -- Miscellany
 ----------------------------------------------------------------------
 
-module LambdaCCC.Misc where
-
--- TODO: explicit exports
+module LambdaCCC.Misc
+  ( Unop, Binop, compose
+  , (:=>), (:+), (:*), Unit
+  , Evalable(..)
+  ) where
 
 {--------------------------------------------------------------------
     Transformations

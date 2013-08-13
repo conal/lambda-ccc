@@ -1,4 +1,5 @@
-{-# LANGUAGE TypeOperators, GADTs, PatternGuards #-}
+{-# LANGUAGE TypeOperators, GADTs, PatternGuards, ScopedTypeVariables #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -16,7 +17,7 @@
 -- Convert lambda expressions to CCC combinators
 ----------------------------------------------------------------------
 
-module LambdaCCC.ToCCC (toCCC, toCCC') where
+module LambdaCCC.ToCCC (toCCC) where
 
 import Data.Functor ((<$>))
 import Control.Monad (mplus)
@@ -26,41 +27,65 @@ import Data.IsTy
 import Data.Proof.EQ
 
 import LambdaCCC.Misc
-import LambdaCCC.Ty
 import LambdaCCC.CCC
+import LambdaCCC.Ty
 import LambdaCCC.Lambda
+import LambdaCCC.Prim
 
 {--------------------------------------------------------------------
     Conversion
 --------------------------------------------------------------------}
 
--- | Rewrite a lambda expression via CCC combinators
-toCCC :: E a -> (Unit :-> a)
-toCCC = convert UnitP
+-- -- | Rewrite a lambda expression via CCC combinators
+-- toCCC' :: E a -> (Unit :-> a)
+-- toCCC' a | HasTy <- expHasTy a
+--          = convert UnitPat a
 
-toCCC' :: HasTy a => E (a :=> b) -> (a :-> b)
-toCCC' (Lam p e) = convert p e
-toCCC' e = toCCC' (Lam vp (e :^ ve))
+toCCC :: E (a :=> b) -> (a :-> b)
+toCCC e | (HasTy,HasTy) <- tyHasTy2 a b = to' e
+ where
+   (a,b) = splitFunTy (expTy e)
+
+to' :: HasTy2 a b => E (a :=> b) -> (a :-> b)
+to' (Lam p e) = convert p e
+to' e = to' (Lam vp (e :^ ve))
  where
    (vp,ve) = vars "ETA"
 
 -- | Convert @\ p -> e@ to CCC combinators
-convert :: Pat a -> E b -> (a :-> b)
-convert _ (Const o)  = Konst o
-convert k (Var n t)  = fromMaybe (error $ "unbound variable: " ++ n) $
-                       convertVar k n t
-convert k (u :# v)   = convert k u &&& convert k v
-convert k (u :^ v)   = Apply @. (convert k u &&& convert k v)
-                  -- = Apply @. convert k (u :# v)
-convert k (Lam p e)  = Curry (convert (PairP k p) e)
+convert :: HasTy2 a b => Pat a -> E b -> (a :-> b)
+convert _ (Const o _) = prim (ConstP o)
+convert k (Var v) = fromMaybe (error $ "convert: unbound variable: " ++ show v) $
+                    convertVar v k
+-- convert k (u :# v)   = convert k u &&& convert k v
+convert k (Const PairP (tu :=> tv :=> _) :^ u :^ v)
+  | (HasTy,HasTy) <- tyHasTy2 tu tv
+  = convert k u &&& convert k v
+convert k (u :^ v)   | HasTy <- tyHasTy (domTy (expTy u))
+  = applyE @. (convert k u &&& convert k v)
+convert k (Lam p e)  | (HasTy,HasTy) <- tyHasTy2 (patTy p) (expTy e)
+                     = curryE (convert (k :# p) e)
 
 -- Convert a variable in context
-convertVar :: Pat a -> Name -> Ty b -> Maybe (a :-> b)
-convertVar (VarP x a) n b | x == n, Just Refl <- a `tyEq` b = Just Id
-                          | otherwise = Nothing
-convertVar UnitP _ _ = Nothing
-convertVar (PairP p q) n b = 
-  ((@. Snd) <$> convertVar q n b) `mplus` ((@. Fst) <$> convertVar p n b)
+convertVar :: forall b a. HasTy2 a b => V b -> Pat a -> Maybe (a :-> b)
+convertVar b = conv
+ where
+   conv :: forall c. HasTy2 c b => Pat c -> Maybe (c :-> b)
+   conv (VarPat c) | Just Refl <- c `tyEq` b
+                   -- , HasTy <- tyHasTy (varTy c)
+                   = Just Id
+                   | otherwise = Nothing
+   conv UnitPat  = Nothing
+   conv (p :# q) | (HasTy,HasTy) <- tyHasTy2 (patTy p) (patTy q)
+                 = ((@. Snd) <$> conv q) `mplus` ((@. Fst) <$> conv p)
+   conv (p :@ q) = conv q `mplus` conv p
+
+-- Alternatively,
+-- 
+--    conv (PairPat p q) = descend Snd q `mplus` descend Fst p
+--     where
+--       descend :: (c :-> d) -> Pat d -> Maybe (c :-> b)
+--       descend sel r = (@. sel) <$> conv r
 
 -- Note that we try q before p. This choice cooperates with uncurrying and
 -- shadowing.

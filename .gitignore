@@ -8,9 +8,18 @@ tags
 tarballs
 out/
 
+test/Tests
+
 # Mac OS generates
 .DS_Store
 
 # Where do these files come from?  They're not readable.
 # For instance, .#Help.page
 .#*
+
+# vim swap files
+*.swp
+*.swo
+
+*.hi
+*.o

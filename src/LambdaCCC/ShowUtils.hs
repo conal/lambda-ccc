@@ -16,9 +16,11 @@
 -- Helpers for implementing Show
 ----------------------------------------------------------------------
 
-module LambdaCCC.ShowUtils where
-
--- TODO: explicit exports
+module LambdaCCC.ShowUtils
+  ( showsApp1, showsApp, showSpaced
+  , Prec, Assoc(..), Fixity
+  , showsOp2, showsOp2', showsPair
+  ) where
 
 import Data.List (intersperse)
 
@@ -81,6 +83,9 @@ showsOp2' = showsOp2 False -- no extra parens
 -- parend sh p q = showParen (q > p) sh
 
 showsPair :: (Show a, Show b) => Prec -> a -> b -> ShowS
-showsPair = showsOp2 True "," (-1,AssocNone)
+showsPair _ a b = showParen True $
+  showsPrec 0 a . showChar ',' . showsPrec 0 b
 
--- showChar '(' . showsPrec 0 a . showChar ',' . showsPrec 0 b . showChar ')'
+-- Simpler, but I don't like the resulting spaces around ",":
+-- 
+-- showsPair = showsOp2 True "," (-1,AssocNone)

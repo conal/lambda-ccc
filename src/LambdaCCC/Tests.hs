@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeOperators, ConstraintKinds #-}
 {-# OPTIONS_GHC -Wall #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- For tests
@@ -19,33 +19,66 @@ module LambdaCCC.Tests where
 
 import LambdaCCC.Misc
 import LambdaCCC.Prim
-import LambdaCCC.Ty (Ty(..))
+import LambdaCCC.Ty
 import LambdaCCC.Lambda
 import LambdaCCC.ToCCC
 
-va,vb,vc :: E Int
-va = Var "a" IntT
-vb = Var "b" IntT
-vc = Var "c" IntT
+{--------------------------------------------------------------------
+    Convenient notation for expression building
+--------------------------------------------------------------------}
 
-ty1 :: Ty (Int :=> Int)
+-- TODO: Maybe eliminate this notation or move it elsewhere, since we're mainly
+-- translating automatically rather than hand-coding. I'm using this vocabulary
+-- for tests.
+
+notE :: Unop (E Bool)
+notE b = constT NotP :^ b
+
+infixr 2 ||*, `xorE`
+infixr 3 &&*
+
+binop :: HasTy3 a b c => Prim (a -> b -> c) -> E a -> E b -> E c
+binop op a b = constT op :^ a :^ b
+
+(&&*), (||*), xorE :: Binop (E Bool)
+(&&*) = binop AndP
+(||*) = binop OrP
+xorE  = binop XorP
+
+infixl 6 +@
+(+@) :: (HasTy a, Num a) => Binop (E a)
+(+@) = binop AddP
+
+-- TODO: Use Num and Boolean classes
+
+
+{--------------------------------------------------------------------
+    Examples
+--------------------------------------------------------------------}
+
+va,vb,vc :: E Int
+va = varT "a"
+vb = varT "b"
+vc = varT "c"
+
+ty1 :: Ty (Int -> Int)
 ty1 = IntT :=> IntT
 
-ty2 :: Ty ((Int :=> Int) :* Bool)
+ty2 :: Ty ((Int -> Int) :* Bool)
 ty2 = (IntT :=> IntT) :* BoolT
 
 e1 :: E Bool
-e1 = Const (Lit False)
+e1 = constT (LitP False)
 
 e2 :: E Bool
 e2 = notE e1
 
 infixr 1 :+>
-type a :+> b = E (a :=> b)
+type a :+> b = E (a -> b)
 
 -- \ x -> not
 e3 :: Bool :+> Bool
-e3 = Const Not
+e3 = constT NotP
 
 -- \ x -> x
 e4 :: Int :+> Int
@@ -77,7 +110,7 @@ e8 = Lam p (b # a) where (p,(a,b)) = vars2 ("a","b")
 
 -- Half adder: \ (a,b) -> (a `xor` b, a && b)
 e9 :: Bool :* Bool :+> Bool :* Bool
-e9 = Lam p ((a `xor` b) # (a &&* b))   -- half-adder
+e9 = Lam p ((a `xorE` b) # (a &&* b))   -- half-adder
  where
    (p,(a,b)) = vars2 ("a","b")
 
@@ -101,59 +134,36 @@ False
 
 -}
 
-{- Conversions (with Simplify and ShowFolded, though ShowFolded isn't helping):
-
-> toCCC e1
-konst False
-> toCCC e2
-prim not . konst False
-> toCCC e3
-konst not
-> toCCC e4
-curry snd
-> toCCC e5
-curry (prim add . (snd &&& snd))
-> toCCC e6
-curry (snd &&& snd)
-> toCCC e7
-curry (prim not . prim and . (prim not . fst . snd &&& prim not . snd . snd))
-> toCCC e8
-curry (snd . snd &&& fst . snd)
-> toCCC e9
-curry (prim xor . (fst . snd &&& snd . snd) &&& prim and . (fst . snd &&& snd . snd))
-
--}
-
-{- Examples e3 through e9, without extra unit context, i.e., with toCCC':
+{- toCCC apd to examples e3 through e9:
 
 Without Simplify and without ShowFolded:
 
 > apply . (konst not &&& id)
 > id
-> apply . (konst add &&& id &&& id)
+> apply . (apply . (konst add &&& id) &&& id)
 > id &&& id
-> apply . (konst not &&& apply . (konst and &&& apply . (konst not &&& id . fst) &&& apply . (konst not &&& id . snd)))
+> apply . (konst not &&& apply . (apply . (konst (&&) &&& apply . (konst not &&& id . fst)) &&& apply . (konst not &&& id . snd)))
 > id . snd &&& id . fst
-> apply . (konst xor &&& id . fst &&& id . snd) &&& apply . (konst and &&& id . fst &&& id . snd)
+> apply . (apply . (konst xor &&& id . fst) &&& id . snd) &&& apply . (apply . (konst (&&) &&& id . fst) &&& id . snd)
 
 With Simplify:
 
-> prim not
+> not
 > id
-> prim add . (id &&& id)
+> apply . (add &&& id)
 > id &&& id
-> prim not . prim and . (prim not . fst &&& prim not . snd)
+> not . uncurry (&&) . (not . fst &&& not . snd)
 > snd &&& fst
-> prim xor &&& prim and
+> uncurry xor &&& uncurry (&&)
 
 With Simplify and ShowFolded:
 
-> prim not
+> not
 > id
-> prim add . dup
+> uncurry add . dup
 > dup
-> prim not . prim and . (prim not *** prim not)
+> not . uncurry (&&) . (not *** not)
 > swapP
-> prim xor &&& prim and
+> uncurry xor &&& uncurry (&&)
 
 -}

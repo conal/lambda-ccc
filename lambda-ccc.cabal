@@ -1,28 +1,52 @@
-Name:                lambda-ccc
-Version:             0.1
-Cabal-Version:       >= 1.6
-Synopsis:            Convert lambda expressions to CCC combinators
-Category:            categories
-Description: 
-  Convert lambda expressions to CCC combinators
-Author:              Conal Elliott
-Maintainer:          conal@tabula.com
-Copyright:           (c) 2013 by Tabula, Inc
-License:             BSD3
-Stability:           experimental
-build-type:          Simple
+Name:               lambda-ccc
+Version:            0.1
+Cabal-Version:      >= 1.6
+Synopsis:           Convert lambda expressions to CCC combinators
+Category:           categories
+Description:        Convert lambda expressions to CCC combinators
+Author:             Conal Elliott
+Maintainer:         conal@tabula.com
+Copyright:          (c) 2013 by Tabula, Inc
+License:            BSD3
+Stability:          experimental
+build-type:         Simple
+
+Extra-Source-Files:
+                    test/Tests.hs
+                    test/Tests.hss
+
+source-repository head
+  type:             git
+  location:         git://github.com/ku-fpg/lambda-ccc
 
 Library
-  hs-Source-Dirs:      src
-  Include-Dirs:        src
-  Build-Depends:       base<5, ty
-  Exposed-Modules:     
-                       LambdaCCC.Misc
-                       LambdaCCC.ShowUtils
-                       LambdaCCC.Ty
-                       LambdaCCC.Prim
-                       LambdaCCC.Lambda
-                       LambdaCCC.CCC
-                       LambdaCCC.ToCCC
+  hs-Source-Dirs:   src
+  Include-Dirs:     src
+  Build-Depends:    base < 5
+                  , ghc >= 7.6
+                  , ghc-prim
+                  , hermit >= 0.2.0.0
+                  , template-haskell
+                  , containers
+                  , ty >= 0.1.4
+                  , circat >= 0.2.0
+  Exposed-Modules:  LambdaCCC
+                    LambdaCCC.Misc
+                    LambdaCCC.ShowUtils
+                    LambdaCCC.Ty
+                    LambdaCCC.Prim
+                    LambdaCCC.Lambda
+                    LambdaCCC.CCC
+                    LambdaCCC.ToCCC
+                    LambdaCCC.FunCCC
+                    LambdaCCC.Core
+                    LambdaCCC.MkStringExpr
+                    LambdaCCC.ReifyLambda
+                    LambdaCCCDemo.Reify
+                    LambdaCCCDemo.Embedding
+                    LambdaCCC.ToCircuit
+
+-- TODO: trim
+
   Other-Modules:
-                       LambdaCCC.Tests
+                    LambdaCCC.Tests
