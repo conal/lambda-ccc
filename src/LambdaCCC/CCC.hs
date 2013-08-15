@@ -86,7 +86,6 @@ instance HasTy2 a b => Eq (a :-> b) where
   Id         == Id                                     = True
   (g :. f)   == (g' :. f') | Just Refl <- f `tyEq2` f' = g == g'
   Prim p     == Prim p'                                = p == p'
---   Konst p    == Konst p'                               = p == p'
   Fst        == Fst                                    = True
   Snd        == Snd                                    = True
   (f :&&& g) == (f' :&&& g')                           = f == f' && g == g'
@@ -109,7 +108,6 @@ cccTys :: (a :-> b) -> (Ty a, Ty b)
 cccTys Id      {} = typ2
 cccTys (:.)    {} = typ2
 cccTys Prim    {} = typ2
--- cccTys Konst   {} = typ2
 cccTys Fst     {} = typ2
 cccTys Snd     {} = typ2
 cccTys (:&&&)  {} = typ2
@@ -128,7 +126,6 @@ instance Evalable (a :-> b) where
   type ValT (a :-> b) = a :=> b
   eval Id           = id
   eval (g :. f)     = eval g . eval f
---   eval (Konst b)    = const (eval b)
   eval (Prim p)     = eval p
   eval Fst          = fst
   eval Snd          = snd
@@ -343,7 +340,6 @@ instance Show (a :-> b) where
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
   showsPrec p (Prim x)    = showsPrec p x
                             -- or: showsApp1 "prim" p x
---   showsPrec p (Konst b)   = showsApp1 "konst" p b
   showsPrec p (f :&&& g)  = showsOp2' "&&&" (3,AssocRight) p f g
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
   showsPrec _ Fst         = showString "fst"
