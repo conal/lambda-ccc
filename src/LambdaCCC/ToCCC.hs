@@ -68,13 +68,11 @@ convert k (Lam p e)  | (HasTy,HasTy) <- tyHasTy2 (patTy p) (expTy e)
 
 -- Convert a variable in context
 convertVar :: forall b a. HasTy2 a b => V b -> Pat a -> Maybe (a :-> b)
-convertVar b = conv
+convertVar u = conv
  where
    conv :: forall c. HasTy2 c b => Pat c -> Maybe (c :-> b)
-   conv (VarPat c) | Just Refl <- c `tyEq` b
-                   -- , HasTy <- tyHasTy (varTy c)
-                   = Just Id
-                   | otherwise = Nothing
+   conv (VarPat v) | Just Refl <- v `tyEq` u = Just Id
+                   | otherwise               = Nothing
    conv UnitPat  = Nothing
    conv (p :# q) | (HasTy,HasTy) <- tyHasTy2 (patTy p) (patTy q)
                  = ((@. Snd) <$> conv q) `mplus` ((@. Fst) <$> conv p)
@@ -82,7 +80,7 @@ convertVar b = conv
 
 -- Alternatively,
 -- 
---    conv (PairPat p q) = descend Snd q `mplus` descend Fst p
+--    conv (p :# q) = descend Snd q `mplus` descend Fst p
 --     where
 --       descend :: (c :-> d) -> Pat d -> Maybe (c :-> b)
 --       descend sel r = (@. sel) <$> conv r
