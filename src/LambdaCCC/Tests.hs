@@ -62,10 +62,10 @@ vb = varT "b"
 vc = varT "c"
 
 ty1 :: Ty (Int -> Int)
-ty1 = IntT :=> IntT
+ty1 = Int :=> Int
 
 ty2 :: Ty ((Int -> Int) :* Bool)
-ty2 = (IntT :=> IntT) :* BoolT
+ty2 = (Int :=> Int) :* Bool
 
 e1 :: E Bool
 e1 = constT (LitP False)

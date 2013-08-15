@@ -39,25 +39,25 @@ infixl 7 :*
 
 -- | Typed type representation
 data Ty :: * -> * where
-  UnitT :: Ty Unit
-  IntT  :: Ty Int
-  BoolT :: Ty Bool
+  Unit  :: Ty Unit
+  Int   :: Ty Int
+  Bool  :: Ty Bool
   (:*)  :: Ty a -> Ty b -> Ty (a :*  b)
   (:+)  :: Ty a -> Ty b -> Ty (a :+  b)
   (:=>) :: Ty a -> Ty b -> Ty (a :=> b)
 
 instance Show (Ty a) where
-  showsPrec _ UnitT     = showString "Unit"
-  showsPrec _ IntT      = showString "Int"
-  showsPrec _ BoolT     = showString "Bool"
+  showsPrec _ Unit      = showString "Unit"
+  showsPrec _ Int       = showString "Int"
+  showsPrec _ Bool      = showString "Bool"
   showsPrec p (a :*  b) = showsOp2' ":*"  (7,AssocLeft ) p a b
   showsPrec p (a :+  b) = showsOp2' ":+"  (6,AssocLeft ) p a b
   showsPrec p (a :=> b) = showsOp2' ":=>" (1,AssocRight) p a b
 
 instance IsTy Ty where
-  UnitT     `tyEq` UnitT       = Just Refl
-  IntT      `tyEq` IntT        = Just Refl
-  BoolT     `tyEq` BoolT       = Just Refl
+  Unit     `tyEq` Unit         = Just Refl
+  Int      `tyEq` Int          = Just Refl
+  Bool     `tyEq` Bool         = Just Refl
   (a :*  b) `tyEq` (a' :*  b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
   (a :+  b) `tyEq` (a' :+  b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
   (a :=> b) `tyEq` (a' :=> b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
@@ -93,9 +93,9 @@ type HasTy2 a b     = (HasTy  a, HasTy b)
 type HasTy3 a b c   = (HasTy2 a b, HasTy c)
 type HasTy4 a b c d = (HasTy3 a b c, HasTy d)
 
-instance HasTy Unit where typ = UnitT
-instance HasTy Int  where typ = IntT
-instance HasTy Bool where typ = BoolT
+instance HasTy Unit where typ = Unit
+instance HasTy Int  where typ = Int
+instance HasTy Bool where typ = Bool
 instance HasTy2 a b => HasTy (a :*  b) where typ = typ :*  typ
 instance HasTy2 a b => HasTy (a :+  b) where typ = typ :+  typ
 instance HasTy2 a b => HasTy (a :=> b) where typ = typ :=> typ
@@ -114,9 +114,9 @@ data HasTyJt :: * -> * where
 
 -- | Proof of @'HasTy' a@ from @'Ty' a@
 tyHasTy :: Ty a -> HasTyJt a
-tyHasTy UnitT = HasTy
-tyHasTy IntT  = HasTy
-tyHasTy BoolT = HasTy
+tyHasTy Unit = HasTy
+tyHasTy Int  = HasTy
+tyHasTy Bool = HasTy
 tyHasTy (a :*  b) | (HasTy,HasTy) <- tyHasTy2 a b = HasTy
 tyHasTy (a :+  b) | (HasTy,HasTy) <- tyHasTy2 a b = HasTy
 tyHasTy (a :=> b) | (HasTy,HasTy) <- tyHasTy2 a b = HasTy

@@ -237,9 +237,9 @@ reifyType :: ReType
 reifyType =
   do funTId  <- findIdT '(T.:=>)
      pairTId <- findIdT '(T.:*)
-     unitTId <- findIdT 'T.UnitT
-     intTID  <- findIdT 'T.IntT
-     boolTID <- findIdT 'T.BoolT
+     unitTId <- findIdT 'T.Unit
+     intTID  <- findIdT 'T.Int
+     boolTID <- findIdT 'T.Bool
      let simples :: M.Map Unique Id
          simples = M.fromList [ (unitTyConKey,unitTId),(boolTyConKey,boolTID)
                               , (intTyConKey,intTID) ]
