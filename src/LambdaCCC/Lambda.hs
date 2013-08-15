@@ -24,6 +24,7 @@ module LambdaCCC.Lambda
   ( xor, ifThenElse  -- From Prim
   , Name
   , V, Pat(..), E(..)
+  , occursVP, occursVE, occursPE
   , varTy, patTy, expTy
   , varHasTy, patHasTy, expHasTy
   , var#, varPat#, asPat#, (@^), lam, lamv#, lett
@@ -107,7 +108,7 @@ instance Show (Pat a) where
   showsPrec p (a :@ b)   = showsOp2' "@" (8,AssocRight) p a b
 
 patTy :: Pat a -> Ty a
-patTy UnitPat    = UnitT
+patTy UnitPat    = Unit
 patTy (VarPat v) = varTy v
 patTy (a :# b)   = patTy a :* patTy b
 patTy (a :@ _)   = patTy a
@@ -227,7 +228,7 @@ f @^ a = f :^ a
 
 {-
 patToE :: Pat a -> E a
-patToE UnitPat       = Const (LitP ()) UnitT
+patToE UnitPat       = Const (LitP ()) Unit
 patToE (VarPat v)    = Var v
 patToE (PairPat p q) | HasTy <- patHasTy p, HasTy <- patHasTy q
                      = patToE p # patToE q
@@ -237,7 +238,7 @@ patToE (AndPat  _ _) = error "patToE: AndPat not yet handled"
 -- Try this instead:
 
 patToEs :: Pat a -> [E a]
-patToEs UnitPat    = pure $ Const (LitP ()) UnitT
+patToEs UnitPat    = pure $ Const (LitP ()) Unit
 patToEs (VarPat v) = pure $ Var v
 patToEs (p :# q)   | HasTy <- patHasTy p, HasTy <- patHasTy q
                    = liftA2 (#) (patToEs p) (patToEs q)
