@@ -117,7 +117,6 @@ cccTys (:|||)  {} = typ2
 cccTys Apply   {} = typ2
 cccTys Curry   {} = typ2
 cccTys Uncurry {} = typ2
--- cccTys Cond    {} = typ2
 
 -- Maybe parametrize this GADT by a constraint. Sadly, I'd lose the pretty infix
 -- syntax ("a :-> b").
@@ -136,7 +135,6 @@ instance Evalable (a :-> b) where
   eval Apply        = uncurry ($)
   eval (Curry   h)  = curry   (eval h)
   eval (Uncurry f)  = uncurry (eval f)
---   eval (Cond f)     = cond . eval f
 
 {--------------------------------------------------------------------
     Smart constructors
@@ -349,4 +347,3 @@ instance Show (a :-> b) where
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "uncurry" p h
---   showsPrec p (Cond f)    = showsApp1  "cond"    p f
