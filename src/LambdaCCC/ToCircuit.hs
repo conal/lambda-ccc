@@ -122,8 +122,8 @@ data PSourceJt :: * -> * where
 
 -- | Proof of @'IsSource' ('Pins' a)@ from @'Ty' a@
 tyPSource :: Ty a -> PSourceJt a
-tyPSource UnitT = PSource
-tyPSource BoolT = PSource
+tyPSource Unit = PSource
+tyPSource Bool = PSource
 tyPSource (a :* b) | (PSource,PSource) <- tyPSource2 (a,b) = PSource
 tyPSource (a :+ b) | (PSource,PSource) <- tyPSource2 (a,b) = PSource
 tyPSource ty = error $ "tyPSource: Oops -- not yet handling " ++ show ty
