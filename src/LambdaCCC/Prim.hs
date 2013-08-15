@@ -30,12 +30,12 @@ data Prim :: * -> * where
   NotP          :: Prim (Bool -> Bool)
   AndP,OrP,XorP :: Prim (Bool -> Bool -> Bool)
   AddP          :: Num  a => Prim (a -> a -> a)
-  FstP          :: Prim (a :* b -> a)
-  SndP          :: Prim (a :* b -> b)
+  ExlP          :: Prim (a :* b -> a)
+  ExrP          :: Prim (a :* b -> b)
   PairP         :: Prim (a -> b -> a :* b)
   CondP         :: Prim (Bool :* (a :* a) -> a)
-  LftP          :: Prim (a -> a :+ b)
-  RhtP          :: Prim (b -> a :+ b)
+  InlP          :: Prim (a -> a :+ b)
+  InrP          :: Prim (b -> a :+ b)
   -- More here
   ConstP        :: Prim b -> Prim (a -> b)
 
@@ -46,8 +46,8 @@ instance Eq (Prim a) where
   OrP    == OrP    = True
   XorP   == XorP   = True
   AddP   == AddP   = True
-  FstP   == FstP   = True
-  SndP   == SndP   = True
+  ExlP   == ExlP   = True
+  ExrP   == ExrP   = True
   PairP  == PairP  = True
   CondP  == CondP  = True
   _      == _      = False
@@ -63,11 +63,11 @@ instance Show (Prim a) where
   showsPrec _ OrP        = showString "(||)"
   showsPrec _ XorP       = showString "xor"
   showsPrec _ AddP       = showString "add"
-  showsPrec _ FstP       = showString "fst"
-  showsPrec _ SndP       = showString "snd"
+  showsPrec _ ExlP       = showString "exl"
+  showsPrec _ ExrP       = showString "exr"
   showsPrec _ PairP      = showString "(,)"
-  showsPrec _ LftP       = showString "Left"
-  showsPrec _ RhtP       = showString "Right"
+  showsPrec _ InlP       = showString "Left"
+  showsPrec _ InrP       = showString "Right"
   showsPrec _ CondP      = showString "cond"
   showsPrec p (ConstP w) = showsApp1 "const" p w
 
@@ -79,11 +79,11 @@ instance Evalable (Prim a) where
   eval OrP           = (||)
   eval XorP          = (/=)
   eval AddP          = (+)
-  eval FstP          = fst
-  eval SndP          = snd
+  eval ExlP          = fst
+  eval ExrP          = snd
   eval PairP         = (,)
-  eval LftP          = Left
-  eval RhtP          = Right
+  eval InlP          = Left
+  eval InrP          = Right
   eval CondP         = cond
   eval (ConstP w)    = const (eval w)
 

@@ -276,7 +276,7 @@ lett pat e body = lam pat body @^ e
 
 infixr 1 #
 (#) :: E a -> E b -> E (a :* b)
--- (Const Fst :^ p) # (Const Snd :^ p') | ... = ...
+-- (Const Exl :^ p) # (Const Exr :^ p') | ... = ...
 a # b | HasTy <- expHasTy a, HasTy <- expHasTy b
       = constT PairP @^ a @^ b
 
@@ -405,11 +405,11 @@ kLit = kConst . LitP
 "reify/(||)"  reifyE' (||)  = kConst OrP
 "reify/xor"   reifyE' xor   = kConst XorP
 "reify/(+)"   reifyE' (+)   = kConst AddP
-"reify/fst"   reifyE' fst   = kConst FstP
-"reify/snd"   reifyE' snd   = kConst SndP
+"reify/exl"   reifyE' fst   = kConst ExlP
+"reify/exr"   reifyE' snd   = kConst ExrP
 "reify/pair"  reifyE' (,)   = kConst PairP
-"reify/lft"   reifyE' Left  = kConst LftP
-"reify/rht"   reifyE' Right = kConst RhtP
+"reify/inl"   reifyE' Left  = kConst InlP
+"reify/inr"   reifyE' Right = kConst InrP
 "reify/if"    reifyE' cond  = kConst CondP
 "reify/false" reifyE' False = kLit False
 "reify/true"  reifyE' True  = kLit True
@@ -441,7 +441,7 @@ kLit = kConst . LitP
 {-# RULES
 
 "if-split" forall a b c.
-  ifThenElse a b c = (ifThenElse a (fst b) (fst c),ifThenElse a (snd b) (snd c))
+  ifThenElse a b c = (ifThenElse a (fst b) (fst c),ifThenElse a (fst b) (fst c))
 
   #-}
 

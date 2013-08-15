@@ -66,12 +66,12 @@ data (:->) :: * -> * -> * where
   -- Primitives
   Prim    :: HasTy2 a b => Prim (a -> b) -> (a :-> b)
   -- Products
-  Fst     :: HasTy2 (a :* b) a => a :* b :-> a
-  Snd     :: HasTy2 (a :* b) b => a :* b :-> b
+  Exl     :: HasTy2 (a :* b) a => a :* b :-> a
+  Exr     :: HasTy2 (a :* b) b => a :* b :-> b
   (:&&&)  :: HasTy3 a b c => (a :-> b) -> (a :-> c) -> (a :-> b :* c)
   -- Coproducts
-  Lft     :: HasTy2 a b => a :-> a :+ b
-  Rht     :: HasTy2 a b => b :-> a :+ b
+  Inl     :: HasTy2 a b => a :-> a :+ b
+  Inr     :: HasTy2 a b => b :-> a :+ b
   (:|||)  :: HasTy3 a b c => (b :-> a) -> (c :-> a) -> (b :+ c :-> a)
   -- Exponentials
   Apply   :: HasTy2 a b   => (a :=> b) :* a :-> b
@@ -86,11 +86,11 @@ instance HasTy2 a b => Eq (a :-> b) where
   Id         == Id                                     = True
   (g :. f)   == (g' :. f') | Just Refl <- f `tyEq2` f' = g == g'
   Prim p     == Prim p'                                = p == p'
-  Fst        == Fst                                    = True
-  Snd        == Snd                                    = True
+  Exl        == Exl                                    = True
+  Exr        == Exr                                    = True
   (f :&&& g) == (f' :&&& g')                           = f == f' && g == g'
-  Lft        == Lft                                    = True
-  Rht        == Rht                                    = True
+  Inl        == Inl                                    = True
+  Inr        == Inr                                    = True
   (f :||| g) == (f' :||| g')                           = f == f' && g == g'
   Apply      == Apply                                  = True
   Curry h    == Curry h'                               = h == h'
@@ -108,11 +108,11 @@ cccTys :: (a :-> b) -> (Ty a, Ty b)
 cccTys Id      {} = typ2
 cccTys (:.)    {} = typ2
 cccTys Prim    {} = typ2
-cccTys Fst     {} = typ2
-cccTys Snd     {} = typ2
+cccTys Exl     {} = typ2
+cccTys Exr     {} = typ2
 cccTys (:&&&)  {} = typ2
-cccTys Lft     {} = typ2
-cccTys Rht     {} = typ2
+cccTys Inl     {} = typ2
+cccTys Inr     {} = typ2
 cccTys (:|||)  {} = typ2
 cccTys Apply   {} = typ2
 cccTys Curry   {} = typ2
@@ -126,11 +126,11 @@ instance Evalable (a :-> b) where
   eval Id           = id
   eval (g :. f)     = eval g . eval f
   eval (Prim p)     = eval p
-  eval Fst          = fst
-  eval Snd          = snd
+  eval Exl          = fst
+  eval Exr          = snd
   eval (f :&&& g)   = eval f A.&&& eval g
-  eval Lft          = Left
-  eval Rht          = Right
+  eval Inl          = Left
+  eval Inr          = Right
   eval (f :||| g)   = eval f A.||| eval g
   eval Apply        = uncurry ($)
   eval (Curry   h)  = curry   (eval h)
@@ -141,14 +141,14 @@ instance Evalable (a :-> b) where
 --------------------------------------------------------------------}
 
 prim :: HasTy2 a b => Prim (a -> b) -> (a :-> b)
-prim FstP = Fst
-prim SndP = Snd
+prim ExlP = Exl
+prim ExrP = Exr
 prim p    = Prim p
 
--- The FstP and SndP cases don't type-check with my old constraints on those
+-- The ExlP and ExrP cases don't type-check with my old constraints on those
 -- constructors.
--- Consider FstP :: Prim (u :* v -> u), so that a = u :* v and b = u.
--- I know HasTy (u :* v), but I need HasTy u and HasTy v for Fst.
+-- Consider ExlP :: Prim (u :* v -> u), so that a = u :* v and b = u.
+-- I know HasTy (u :* v), but I need HasTy u and HasTy v for Exl.
 
 infixr 9 @.
 -- | Optimizing morphism composition
@@ -169,12 +169,12 @@ composeApply :: HasTy3 a b z => (z :-> (a :=> b) :* a) -> (z :-> b)
 composeApply (Prim (ConstP p)          :&&& f) = prim p @. f
 composeApply (h@Prim{} :. f    :&&& g) = Uncurry h @. (f  &&& g)
 composeApply (h@Prim{}         :&&& g) = Uncurry h @. (Id &&& g)
--- apply . (curry (g . snd) &&& f) == g . f
-composeApply (Curry (decompR -> g :. Snd) :&&& f) = g @. f
+-- apply . (curry (g . exr) &&& f) == g . f
+composeApply (Curry (decompR -> g :. Exr) :&&& f) = g @. f
 -- apply . (curry h . f &&& g) == h . (f &&& g)
 composeApply ((decompL -> (Curry h :. f)) :&&& g) = h @. (f &&& g)
 -- apply . first f == uncurry f  -- see proof below
-composeApply (f :. Fst :&&& Snd) = uncurryE f
+composeApply (f :. Exl :&&& Exr) = uncurryE f
 composeApply h = Apply :. h
 
 {-
@@ -200,17 +200,17 @@ jam = Id ||| Id
 
 -- | Product swap
 swapP :: HasTy2 a b => a :* b :-> b :* a
-swapP = Snd &&& Fst
+swapP = Exr &&& Exl
 
 -- | Coproduct swap
 swapC :: HasTy2 a b => a :+ b :-> b :+ a
-swapC = Rht ||| Lft
+swapC = Inr ||| Inl
 
 (&&&) :: HasTy3 a c d => (a :-> c) -> (a :-> d) -> (a :-> c :* d)
 #ifdef Simplify
 -- Experimental: const a &&& const b == const (a,b)
 -- Prim (ConstP (LitP a)) &&& Prim (ConstP (LitP b)) = Prim (ConstP (LitP (a,b)))
-Fst &&& Snd = Id
+Exl &&& Exr = Id
 -- f . r &&& g . r == (f &&& g) . r
 (decompR -> f :. r) &&& (decompR -> g :. (tyEq2 r -> Just Refl)) =
   (f &&& g) @. r
@@ -218,7 +218,7 @@ Fst &&& Snd = Id
 f &&& g = f :&&& g
 
 (***) :: HasTy4 a b c d => (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
-f *** g = f @. Fst &&& g @. Snd
+f *** g = f @. Exl &&& g @. Exr
 
 twiceP :: HasTy2 a   c   => (a :-> c)              -> (a :* a :-> c :* c)
 twiceP f = f *** f
@@ -233,7 +233,7 @@ second g = Id *** g
 (|||) = (:|||)
 
 (+++) :: HasTy4 a b c d => (a :-> c) -> (b :-> d) -> (a :+ b :-> c :+ d)
-f +++ g = Lft @. f ||| Rht @. g
+f +++ g = Inl @. f ||| Inr @. g
 
 twiceC :: HasTy2 a   c   => (a :-> c)              -> (a :+ a :-> c :+ c)
 twiceC f = f +++ f
@@ -249,16 +249,16 @@ applyE = Apply
 
 curryE :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
 #ifdef Simplify
-curryE (Prim p :. Snd) = prim (ConstP p)   -- FIX: not general enough
--- curry (apply . (f . fst &&& snd)) == f  -- Proof below
-curryE (Apply :. (f :. Fst :&&& Snd)) = f
+curryE (Prim p :. Exr) = prim (ConstP p)   -- FIX: not general enough
+-- curry (apply . (f . exl &&& exr)) == f  -- Proof below
+curryE (Apply :. (f :. Exl :&&& Exr)) = f
 #endif
 curryE h = Curry h
 
 -- curry/apply proof:
 -- 
---   curry (apply . (f . fst &&& snd))
--- == curry (apply . (f . fst &&& id . snd))
+--   curry (apply . (f . exl &&& exr))
+-- == curry (apply . (f . exl &&& id . exr))
 -- == curry (apply . (f *** id))
 -- == curry (apply . first f)
 -- == curry (\ (a,b) -> apply (first f (a,b)))
@@ -281,11 +281,11 @@ condC = cond' (typ :: Ty a)
 
 condPair :: HasTy2 a b =>
             Bool :* ((a :* b) :* (a :* b)) :-> (a :* b)
-condPair = half Fst &&& half Snd
+condPair = half Exl &&& half Exr
  where
    half f = condC @. second (twiceP f)
 
--- condPair = condC @. second (twiceP Fst) &&& condC @. second (twiceP Snd)
+-- condPair = condC @. second (twiceP Exl) &&& condC @. second (twiceP Exr)
 
 -- TODO: Rewrite condC,cond',condPair more prettily
 
@@ -317,22 +317,22 @@ decompR f                          = Id :. f
 
 instance Show (a :-> b) where
 #ifdef Sugared
-  -- showsPrec p (f :. Fst :&&& g :. Snd) = showsOp2'  "***" (3,AssocRight) p f g
-  showsPrec p (f :. Fst :&&& g :. Snd)
+  -- showsPrec p (f :. Exl :&&& g :. Exr) = showsOp2'  "***" (3,AssocRight) p f g
+  showsPrec p (f :. Exl :&&& g :. Exr)
     | Just Refl <- f `tyEq2` g = showsApp1 "twiceP" p f
     | otherwise                = showsOp2'  "***" (3,AssocRight) p f g
-  -- showsPrec p (Lft :. f :||| Rht :. g) = showsOp2'  "+++" (2,AssocRight) p f g
-  showsPrec p (f :. Fst :||| g :. Snd)
+  -- showsPrec p (Inl :. f :||| Inr :. g) = showsOp2'  "+++" (2,AssocRight) p f g
+  showsPrec p (f :. Exl :||| g :. Exr)
     | Just Refl <- f `tyEq2` g = showsApp1 "twiceC" p f
     | otherwise                = showsOp2'  "+++" (2,AssocRight) p f g
   showsPrec _ (Id :&&& Id)             = showString "dup"
   showsPrec _ (Id :||| Id)             = showString "jam"
-  showsPrec _ (Snd :&&& Fst)           = showString "swapP"
-  showsPrec _ (Rht :&&& Lft)           = showString "swapC"
-  showsPrec p (f :. Fst :&&& Snd)      = showsApp1  "first"  p f
-  showsPrec p (Fst :&&& g :. Snd)      = showsApp1  "second" p g
-  showsPrec p (Lft :. f :||| Rht)      = showsApp1  "left"   p f
-  showsPrec p (Lft :||| Rht :. g)      = showsApp1  "right"  p g
+  showsPrec _ (Exr :&&& Exl)           = showString "swapP"
+  showsPrec _ (Inr :&&& Inl)           = showString "swapC"
+  showsPrec p (f :. Exl :&&& Exr)      = showsApp1  "first"  p f
+  showsPrec p (Exl :&&& g :. Exr)      = showsApp1  "second" p g
+  showsPrec p (Inl :. f :||| Inr)      = showsApp1  "left"   p f
+  showsPrec p (Inl :||| Inr :. g)      = showsApp1  "right"  p g
 #endif
   showsPrec _ Id          = showString "id"
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
@@ -340,10 +340,10 @@ instance Show (a :-> b) where
                             -- or: showsApp1 "prim" p x
   showsPrec p (f :&&& g)  = showsOp2' "&&&" (3,AssocRight) p f g
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
-  showsPrec _ Fst         = showString "fst"
-  showsPrec _ Snd         = showString "snd"
-  showsPrec _ Lft         = showString "lft"
-  showsPrec _ Rht         = showString "rht"
+  showsPrec _ Exl         = showString "exl"
+  showsPrec _ Exr         = showString "exr"
+  showsPrec _ Inl         = showString "inl"
+  showsPrec _ Inr         = showString "inr"
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "uncurry" p h

@@ -75,12 +75,12 @@ convertVar u = conv
                    | otherwise               = Nothing
    conv UnitPat  = Nothing
    conv (p :# q) | (HasTy,HasTy) <- tyHasTy2 (patTy p) (patTy q)
-                 = ((@. Snd) <$> conv q) `mplus` ((@. Fst) <$> conv p)
+                 = ((@. Exr) <$> conv q) `mplus` ((@. Exl) <$> conv p)
    conv (p :@ q) = conv q `mplus` conv p
 
 -- Alternatively,
 -- 
---    conv (p :# q) = descend Snd q `mplus` descend Fst p
+--    conv (p :# q) = descend Exr q `mplus` descend Exl p
 --     where
 --       descend :: (c :-> d) -> Pat d -> Maybe (c :-> b)
 --       descend sel r = (@. sel) <$> conv r

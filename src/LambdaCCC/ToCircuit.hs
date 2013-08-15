@@ -22,7 +22,7 @@ module LambdaCCC.ToCircuit
   -- , PSourceJt(..), tyPSource, tyPSource2
   ) where
 
-import Prelude hiding (id,(.),fst,snd,not,and,or,curry,uncurry)
+import Prelude hiding (id,(.),not,and,or,curry,uncurry)
 
 import LambdaCCC.Ty
 import LambdaCCC.Prim hiding (xor)
@@ -43,8 +43,8 @@ cccToCircuit k@(Prim CondP) | Just k' <- expand k = cccToCircuit k'
 cccToCircuit Id                       = id
 cccToCircuit (g :. f)                 = cccToCircuit g . cccToCircuit f
 -- Primitives
-cccToCircuit (Prim FstP)              = fst -- TODO: Drop the redundant Fst/FstP ??
-cccToCircuit (Prim SndP)              = snd
+cccToCircuit (Prim ExlP)              = exl -- TODO: Drop the redundant Exl/ExlP ??
+cccToCircuit (Prim ExrP)              = exr
 cccToCircuit (Prim NotP)              = not
 cccToCircuit (Uncurry (Prim AndP))    = and
 cccToCircuit (Uncurry (Prim OrP))     = or
@@ -58,19 +58,19 @@ cccToCircuit k@(Prim CondP)           | (PSource, PSource) <- cccPS k
 cccToCircuit k@(Prim (ConstP (LitP b))) | (PSource, PSource) <- cccPS k
                                       = constC b
 -- Product
-cccToCircuit Fst                      = fst
-cccToCircuit Snd                      = snd
+cccToCircuit Exl                      = exl
+cccToCircuit Exr                      = exr
 
 cccToCircuit (f :&&& g)               = cccToCircuit f &&& cccToCircuit g
 -- Coproduct
-cccToCircuit k@Lft                    | (a, _ :+ b) <- cccTys k
+cccToCircuit k@Inl                    | (a, _ :+ b) <- cccTys k
                                       , PSource <- tyPSource a
                                       , PSource <- tyPSource b
-                                      = lftC
-cccToCircuit k@Rht                    | (b, a :+ _) <- cccTys k
+                                      = inlC
+cccToCircuit k@Inr                    | (b, a :+ _) <- cccTys k
                                       , PSource <- tyPSource a
                                       , PSource <- tyPSource b
-                                      = rhtC
+                                      = inrC
 cccToCircuit k@(f :||| g)             | (a :+ b, c) <- cccTys k
                                       , PSource <- tyPSource a
                                       , PSource <- tyPSource b
@@ -98,7 +98,7 @@ expand _ = Nothing
 -- TODO: I don't know whether to keep add. We'll probably want to build it from
 -- simpler pieces.
 --
--- TODO: Maybe implement all primitives (other than fst & snd) with namedC. I
+-- TODO: Maybe implement all primitives (other than exl & exr) with namedC. I
 -- could even use this PrimC type in circat, though it'd be the first dependency
 -- of circat on lambda-ccc.
 

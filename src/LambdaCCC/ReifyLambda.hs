@@ -410,7 +410,7 @@ tryRulesBU = tryR . anybuER . rules
 
 reifyRules :: RewriteH Core
 reifyRules = tryRulesBU $ map ("reify/" ++)
-  ["not","(&&)","(||)","xor","(+)","fst","snd","pair","lft","rht","if","false","true"]
+  ["not","(&&)","(||)","xor","(+)","exl","exr","pair","inl","inr","if","false","true"]
 
 -- or: words $ "not (&&) (||) xor ..."
 

@@ -142,9 +142,9 @@ Without Simplify and without ShowFolded:
 > id
 > apply . (apply . (konst add &&& id) &&& id)
 > id &&& id
-> apply . (konst not &&& apply . (apply . (konst (&&) &&& apply . (konst not &&& id . fst)) &&& apply . (konst not &&& id . snd)))
-> id . snd &&& id . fst
-> apply . (apply . (konst xor &&& id . fst) &&& id . snd) &&& apply . (apply . (konst (&&) &&& id . fst) &&& id . snd)
+> apply . (konst not &&& apply . (apply . (konst (&&) &&& apply . (konst not &&& id . exl)) &&& apply . (konst not &&& id . exr)))
+> id . exr &&& id . exl
+> apply . (apply . (konst xor &&& id . exl) &&& id . exr) &&& apply . (apply . (konst (&&) &&& id . exl) &&& id . exr)
 
 With Simplify:
 
@@ -152,8 +152,8 @@ With Simplify:
 > id
 > apply . (add &&& id)
 > id &&& id
-> not . uncurry (&&) . (not . fst &&& not . snd)
-> snd &&& fst
+> not . uncurry (&&) . (not . exl &&& not . exr)
+> exr &&& exl
 > uncurry xor &&& uncurry (&&)
 
 With Simplify and ShowFolded:
