@@ -61,22 +61,22 @@ infixr 2 :|||
 -- is as the categorical counterparts (terminal object, categorical products,
 -- coproducts, and exponentials).
 data (:->) :: * -> * -> * where
-  Id       :: HasTy a => a :-> a
-  (:.)     :: HasTy3 a b c => (b :-> c) -> (a :-> b) -> (a :-> c)
+  Id      :: HasTy a => a :-> a
+  (:.)    :: HasTy3 a b c => (b :-> c) -> (a :-> b) -> (a :-> c)
   -- Primitives
-  Prim     :: HasTy2 a b => Prim (a -> b) -> (a :-> b)
+  Prim    :: HasTy2 a b => Prim (a -> b) -> (a :-> b)
   -- Products
-  Fst      :: HasTy2 (a :* b) a => a :* b :-> a
-  Snd      :: HasTy2 (a :* b) b => a :* b :-> b
-  (:&&&)   :: HasTy3 a b c => (a :-> b) -> (a :-> c) -> (a :-> b :* c)
+  Fst     :: HasTy2 (a :* b) a => a :* b :-> a
+  Snd     :: HasTy2 (a :* b) b => a :* b :-> b
+  (:&&&)  :: HasTy3 a b c => (a :-> b) -> (a :-> c) -> (a :-> b :* c)
   -- Coproducts
-  Lft      :: HasTy2 a b => a :-> a :+ b
-  Rht      :: HasTy2 a b => b :-> a :+ b
-  (:|||)   :: HasTy3 a b c => (b :-> a) -> (c :-> a) -> (b :+ c :-> a)
+  Lft     :: HasTy2 a b => a :-> a :+ b
+  Rht     :: HasTy2 a b => b :-> a :+ b
+  (:|||)  :: HasTy3 a b c => (b :-> a) -> (c :-> a) -> (b :+ c :-> a)
   -- Exponentials
-  Apply    :: HasTy2 a b   => (a :=> b) :* a :-> b
-  Curry    :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
-  Uncurry  :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
+  Apply   :: HasTy2 a b   => (a :=> b) :* a :-> b
+  Curry   :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
+  Uncurry :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
 
 instance IsTy2 (:->) where
   type IsTy2Constraint (:->) u v = HasTy2 u v
