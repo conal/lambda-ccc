@@ -52,6 +52,9 @@ cccToCircuit (Uncurry (Prim XorP))    = xor
 cccToCircuit k@(Uncurry (Prim AddP))  | (PSource, PSource) <- cccPS k
                                       = namedC "add"
 
+-- Useful when CCC optimization is off
+cccToCircuit (Uncurry (Prim PairP))   = id
+
 cccToCircuit k@(Prim CondP)           | (PSource, PSource) <- cccPS k
                                       = namedC "mux"
 
