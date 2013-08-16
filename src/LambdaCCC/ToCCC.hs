@@ -58,9 +58,9 @@ convert _ (Const o _) = prim (ConstP o)
 convert k (Var v) = fromMaybe (error $ "convert: unbound variable: " ++ show v) $
                     convertVar v k
 -- convert k (u :# v)   = convert k u &&& convert k v
-convert k (Const PairP (tu :=> tv :=> _) :^ u :^ v)
-  | (HasTy,HasTy) <- tyHasTy2 tu tv
-  = convert k u &&& convert k v
+-- convert k (Const PairP (tu :=> tv :=> _) :^ u :^ v)
+--   | (HasTy,HasTy) <- tyHasTy2 tu tv
+--   = convert k u &&& convert k v
 convert k (u :^ v)   | HasTy <- tyHasTy (domTy (expTy u))
   = applyE @. (convert k u &&& convert k v)
 convert k (Lam p e)  | (HasTy,HasTy) <- tyHasTy2 (patTy p) (expTy e)
