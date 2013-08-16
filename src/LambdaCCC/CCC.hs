@@ -22,8 +22,8 @@
 module LambdaCCC.CCC
   ( module LambdaCCC.Misc
   , (:->)(..)
-  , (@.), applyE, curryE, uncurryE
-  , prim, condC, condPair                     -- TODO: use condC instead
+  , (@.), applyE, curryE, uncurryE      -- TODO: "E" --> "C"
+  , prim, condC, condPair               -- TODO: use condC instead
   , (&&&), (***), (+++), (|||)
   , twiceP, twiceC
   , dup, jam, swapP, swapC
@@ -156,6 +156,8 @@ infixr 9 @.
 #ifdef Simplify
 Id      @. f  = f
 g       @. Id = g
+Exl     @. (f :&&& _) = f
+Exr     @. (_ :&&& g) = g
 Prim (ConstP p) @. _  = prim (ConstP p)
 Apply   @. (decompL -> g :. f) = composeApply g @. f
 (h :. g) @. f = h @. (g @. f) -- reduce parens
@@ -164,11 +166,13 @@ g       @. f  = g :. f
 
 --  Apply    :: HasTy2 a b   => ((a :=> b) :* a) :-> b
 
+#ifdef Simplify
+
 -- | @'composeApply' h == 'apply' . h@
 composeApply :: HasTy3 a b z => (z :-> (a :=> b) :* a) -> (z :-> b)
 composeApply (Prim (ConstP p)          :&&& f) = prim p @. f
-composeApply (h@Prim{} :. f    :&&& g) = Uncurry h @. (f  &&& g)
-composeApply (h@Prim{}         :&&& g) = Uncurry h @. (Id &&& g)
+composeApply (h@Prim{} :. f    :&&& g) = uncurryE h @. (f  &&& g)
+composeApply (h@Prim{}         :&&& g) = uncurryE h @. (Id &&& g)
 -- apply . (curry (g . exr) &&& f) == g . f
 composeApply (Curry (decompR -> g :. Exr) :&&& f) = g @. f
 -- apply . (curry h . f &&& g) == h . (f &&& g)
@@ -176,6 +180,8 @@ composeApply ((decompL -> (Curry h :. f)) :&&& g) = h @. (f &&& g)
 -- apply . first f == uncurry f  -- see proof below
 composeApply (f :. Exl :&&& Exr) = uncurryE f
 composeApply h = Apply :. h
+
+#endif
 
 {-
   apply . first f
@@ -267,7 +273,8 @@ curryE h = Curry h
 -- == f
 
 uncurryE :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
-uncurryE = Uncurry
+uncurryE (Prim PairP) = Id
+uncurryE x = Uncurry x
 
 -- Conditional. Breaks down pairs
 condC :: forall a. HasTy a => Bool :* (a :* a) :-> a
