@@ -305,14 +305,14 @@ condPair = half Exl &&& half Exr
 -- | Decompose into @g . f@, where @g@ is as small as possible, but not 'Id'.
 decompL :: HasTy2 a c => Unop (a :-> c)
 decompL Id                         = Id
-decompL ((decompL -> h :. g) :. f) = h @. (g @. f)
+decompL ((decompL -> h :. g) :. f) = h :. (g @. f)
 decompL comp@(_ :. _)              = comp
 decompL f                          = f :. Id
 
 -- | Decompose into @g . f@, where @f@ is as small as possible, but not 'Id'.
 decompR :: HasTy2 a c => Unop (a :-> c)
 decompR Id                         = Id
-decompR (h :. (decompR -> g :. f)) = (h @. g) @. f
+decompR (h :. (decompR -> g :. f)) = (h @. g) :. f
 decompR comp@(_ :. _)              = comp
 decompR f                          = Id :. f
 
