@@ -134,6 +134,7 @@ occursPP (PairPat a b) q = occursPP a q || occursPP b q
 occursPP (AndPat  a b) q = occursPP a q || occursPP b q
 -}
 
+#ifdef Simplify
 -- | Substitute in a pattern
 substVP :: V a -> Pat a -> Unop (Pat b)
 substVP v p = substIn
@@ -143,6 +144,7 @@ substVP v p = substIn
    substIn (a :# b)                       = substIn a :# substIn b
    substIn (a :@ b)                       = substIn a :@ substIn b
    substIn q                              = q
+#endif
 
 infixl 9 :^
 -- | Lambda expressions
@@ -226,6 +228,8 @@ infixl 9 @^
 #endif
 f @^ a = f :^ a
 
+#ifdef Simplify
+
 {-
 patToE :: Pat a -> E a
 patToE UnitPat       = Const (LitP ()) Unit
@@ -244,6 +248,8 @@ patToEs (p :# q)   | HasTy <- patHasTy p, HasTy <- patHasTy q
                    = liftA2 (#) (patToEs p) (patToEs q)
 patToEs (p :@ q)   | HasTy <- patHasTy p, HasTy <- patHasTy q
                    = patToEs p ++ patToEs q
+
+#endif
 
 -- TODO: watch out for repeated (++)
 
@@ -283,12 +289,10 @@ a # b | HasTy <- expHasTy a, HasTy <- expHasTy b
 -- Do surjectivity in @^ rather than here.
 
 instance Show (E a) where
-#ifdef Sugared
---   showsPrec p (Const prim :^ (u :# v)) | Just (OpInfo op fixity) <- opInfo prim =
---     showsOp2' op fixity p u v
   showsPrec p (Const PairP _ :^ u :^ v) = showsPair p u v
   showsPrec p (Const prim _ :^ u :^ v) | Just (OpInfo op fixity) <- opInfo prim =
     showsOp2' op fixity p u v
+#ifdef Sugared
   showsPrec p (Lam q body :^ rhs) =  -- beta redex as "let"
     showParen (p > 0) $
     showString "let " . showsPrec 0 q . showString " = " . showsPrec 0 rhs
@@ -296,7 +300,6 @@ instance Show (E a) where
 #endif
   showsPrec _ (Var (V n _))  = showString n
   showsPrec p (Const c _) = showsPrec p c
---  showsPrec p (u :# v)  = showsPair p u v
   showsPrec p (u :^ v)  = showsApp p u v
   showsPrec p (Lam q e) = showParen (p > 0) $
                           showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
