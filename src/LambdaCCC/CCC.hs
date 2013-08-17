@@ -65,6 +65,7 @@ data (:->) :: * -> * -> * where
   (:.)    :: HasTy3 a b c => (b :-> c) -> (a :-> b) -> (a :-> c)
   -- Primitives
   Prim    :: HasTy2 a b => Prim (a -> b) -> (a :-> b)
+  ConstC  :: HasTy2 a b => Prim       b  -> (a :-> b)
   -- Products
   Exl     :: HasTy2 (a :* b) a => a :* b :-> a
   Exr     :: HasTy2 (a :* b) b => a :* b :-> b
@@ -108,6 +109,7 @@ cccTys :: (a :-> b) -> (Ty a, Ty b)
 cccTys Id      {} = typ2
 cccTys (:.)    {} = typ2
 cccTys Prim    {} = typ2
+cccTys ConstC  {} = typ2
 cccTys Exl     {} = typ2
 cccTys Exr     {} = typ2
 cccTys (:&&&)  {} = typ2
@@ -126,6 +128,7 @@ instance Evalable (a :-> b) where
   eval Id           = id
   eval (g :. f)     = eval g . eval f
   eval (Prim p)     = eval p
+  eval (ConstC p)   = const (eval p)
   eval Exl          = fst
   eval Exr          = snd
   eval (f :&&& g)   = eval f A.&&& eval g
@@ -154,15 +157,15 @@ infixr 9 @.
 -- | Optimizing morphism composition
 (@.) :: HasTy3 a b c => (b :-> c) -> (a :-> b) -> (a :-> c)
 #ifdef Simplify
-Id      @. f  = f
-g       @. Id = g
-Exl     @. (f :&&& _) = f
-Exr     @. (_ :&&& g) = g
-Prim (ConstP p) @. _  = prim (ConstP p)
-Apply   @. (decompL -> g :. f) = composeApply g @. f
+Id       @. f  = f
+g        @. Id = g
+Exl      @. (f :&&& _) = f
+Exr      @. (_ :&&& g) = g
+ConstC p @. _  = ConstC p
+Apply    @. (decompL -> g :. f) = composeApply g @. f
 (h :. g) @. f = h @. (g @. f) -- reduce parens
 #endif
-g       @. f  = g :. f
+g        @. f  = g :. f
 
 --  Apply    :: HasTy2 a b   => ((a :=> b) :* a) :-> b
 
@@ -170,7 +173,7 @@ g       @. f  = g :. f
 
 -- | @'composeApply' h == 'apply' . h@
 composeApply :: HasTy3 a b z => (z :-> (a :=> b) :* a) -> (z :-> b)
-composeApply (Prim (ConstP p)          :&&& f) = prim p @. f
+composeApply (ConstC p         :&&& f) = prim p @. f
 composeApply (h@Prim{} :. f    :&&& g) = uncurryE h @. (f  &&& g)
 composeApply (h@Prim{}         :&&& g) = uncurryE h @. (Id &&& g)
 -- apply . (curry (g . exr) &&& f) == g . f
@@ -255,7 +258,7 @@ applyE = Apply
 
 curryE :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
 #ifdef Simplify
-curryE (Prim p :. Exr) = prim (ConstP p)   -- FIX: not general enough
+curryE (Prim p :. Exr) = ConstC p   -- FIX: not general enough
 -- curry (apply . (f . exl &&& exr)) == f  -- Proof below
 curryE (Apply :. (f :. Exl :&&& Exr)) = f
 #endif
@@ -345,6 +348,7 @@ instance Show (a :-> b) where
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
   showsPrec p (Prim x)    = showsPrec p x
                             -- or: showsApp1 "prim" p x
+  showsPrec p (ConstC w)  = showsApp1 "const" p w
   showsPrec p (f :&&& g)  = showsOp2' "&&&" (3,AssocRight) p f g
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
   showsPrec _ Exl         = showString "exl"

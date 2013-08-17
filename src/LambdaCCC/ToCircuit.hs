@@ -58,7 +58,7 @@ cccToCircuit (Uncurry (Prim PairP))   = id
 cccToCircuit k@(Prim CondP)           | (PSource, PSource) <- cccPS k
                                       = namedC "mux"
 
-cccToCircuit k@(Prim (ConstP (LitP b))) | (PSource, PSource) <- cccPS k
+cccToCircuit k@(ConstC (LitP b))      | (PSource, PSource) <- cccPS k
                                       = constC b
 -- Product
 cccToCircuit Exl                      = exl

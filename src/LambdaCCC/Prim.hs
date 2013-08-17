@@ -22,7 +22,6 @@ import Data.IsTy
 
 import LambdaCCC.Misc
 import LambdaCCC.Ty
-import LambdaCCC.ShowUtils (showsApp1)
 
 -- | Primitives
 data Prim :: * -> * where
@@ -37,7 +36,6 @@ data Prim :: * -> * where
   InlP          :: Prim (a -> a :+ b)
   InrP          :: Prim (b -> a :+ b)
   -- More here
-  ConstP        :: Prim b -> Prim (a -> b)
 
 instance Eq (Prim a) where
   LitP a == LitP b = a == b
@@ -69,7 +67,6 @@ instance Show (Prim a) where
   showsPrec _ InlP       = showString "Left"
   showsPrec _ InrP       = showString "Right"
   showsPrec _ CondP      = showString "cond"
-  showsPrec p (ConstP w) = showsApp1 "const" p w
 
 instance Evalable (Prim a) where
   type ValT (Prim a) = a
@@ -85,7 +82,6 @@ instance Evalable (Prim a) where
   eval InlP          = Left
   eval InrP          = Right
   eval CondP         = cond
-  eval (ConstP w)    = const (eval w)
 
 infixr 3 `xor`
 
