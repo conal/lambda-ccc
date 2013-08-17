@@ -79,6 +79,8 @@ data (:->) :: * -> * -> * where
   Curry   :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
   Uncurry :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
 
+-- TODO: Do we really need both Prim and ConstC?
+
 instance IsTy2 (:->) where
   type IsTy2Constraint (:->) u v = HasTy2 u v
   tyEq2 = tyEq2'
