@@ -148,26 +148,33 @@ instance Evalable (a :-> b) where
 prim :: HasTy2 a b => Prim (a -> b) -> (a :-> b)
 prim ExlP = Exl
 prim ExrP = Exr
+-- prim InlP = Inl
+-- prim InrP = Inr
 prim p    = Prim p
 
--- The ExlP and ExrP cases don't type-check with my old constraints on those
--- constructors.
--- Consider ExlP :: Prim (u :* v -> u), so that a = u :* v and b = u.
--- I know HasTy (u :* v), but I need HasTy u and HasTy v for Exl.
+-- Oops:
+-- 
+--     Could not deduce (HasTy b1) arising from a use of `Inl'
+--     from the context (HasTy2 a b)
+
+-- TODO: Try adding HasTy constraints to the Prim constructors. Then add a
+-- primTy function, and remove the Ty argument from the Const constructor in E.
 
 infixr 9 @.
 -- | Optimizing morphism composition
 (@.) :: HasTy3 a b c => (b :-> c) -> (a :-> b) -> (a :-> c)
 #ifdef Simplify
-Id       @. f  = f
-g        @. Id = g
-Exl      @. (f :&&& _) = f
-Exr      @. (_ :&&& g) = g
-ConstC p @. _  = ConstC p
-Apply    @. (decompL -> g :. f) = composeApply g @. f
-(h :. g) @. f = h @. (g @. f) -- reduce parens
+Id         @. f                   = f
+g          @. Id                  = g
+(h :. g)   @. f                   = h @. (g @. f)
+Exl        @. (f :&&& _)          = f
+Exr        @. (_ :&&& g)          = g
+(f :||| _) @. Inl                 = f
+(_ :||| g) @. Inr                 = g
+ConstC p   @. _                   = ConstC p
+Apply      @. (decompL -> g :. f) = composeApply g @. f
 #endif
-g        @. f  = g :. f
+g          @. f                   = g :. f
 
 --  Apply    :: HasTy2 a b   => ((a :=> b) :* a) :-> b
 
