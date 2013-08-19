@@ -63,9 +63,6 @@ infixr 2 :|||
 data (:->) :: * -> * -> * where
   Id      :: HasTy a => a :-> a
   (:.)    :: HasTy3 a b c => (b :-> c) -> (a :-> b) -> (a :-> c)
-  -- Primitives
-  Prim    :: HasTy2 a b => Prim (a -> b) -> (a :-> b)
-  ConstC  :: HasTy2 a b => Prim       b  -> (a :-> b)
   -- Products
   Exl     :: HasTy2 (a :* b) a => a :* b :-> a
   Exr     :: HasTy2 (a :* b) b => a :* b :-> b
@@ -78,6 +75,9 @@ data (:->) :: * -> * -> * where
   Apply   :: HasTy2 a b   => (a :=> b) :* a :-> b
   Curry   :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
   Uncurry :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
+  -- Primitives
+  Prim    :: HasTy2 a b => Prim (a -> b) -> (a :-> b)
+  ConstC  :: HasTy2 a b => Prim       b  -> (a :-> b)
 
 -- TODO: Do we really need both Prim and ConstC?
 
@@ -183,12 +183,12 @@ g          @. f                   = g :. f
 -- | @'composeApply' h == 'apply' . h@
 composeApply :: HasTy3 a b z => (z :-> (a :=> b) :* a) -> (z :-> b)
 composeApply (ConstC p         :&&& f) = prim p @. f
+-- apply . (curry h . f &&& g) == h . (f &&& g)
+composeApply ((decompL -> (Curry h :. f)) :&&& g) = h @. (f &&& g)
 composeApply (h@Prim{} :. f    :&&& g) = uncurryE h @. (f  &&& g)
 composeApply (h@Prim{}         :&&& g) = uncurryE h @. (Id &&& g)
 -- apply . (curry (g . exr) &&& f) == g . f
 composeApply (Curry (decompR -> g :. Exr) :&&& f) = g @. f
--- apply . (curry h . f &&& g) == h . (f &&& g)
-composeApply ((decompL -> (Curry h :. f)) :&&& g) = h @. (f &&& g)
 -- apply . first f == uncurry f  -- see proof below
 composeApply (f :. Exl :&&& Exr) = uncurryE f
 composeApply h = Apply :. h
