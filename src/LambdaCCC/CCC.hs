@@ -267,9 +267,10 @@ applyE = Apply
 
 curryE :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
 #ifdef Simplify
+curryE (Uncurry h) = h
 curryE (Prim p :. Exr) = Const p   -- FIX: not general enough
 -- curry (apply . (f . exl &&& exr)) == f  -- Proof below
-curryE (Apply :. (f :. Exl :&&& Exr)) = f
+-- curryE (Apply :. (f :. Exl :&&& Exr)) = f
 #endif
 curryE h = Curry h
 
@@ -284,8 +285,14 @@ curryE h = Curry h
 -- == curry (\ (a,b) -> f a b)
 -- == f
 
+-- I commented out this rule. I don't think it'll ever fire, considering
+-- composeApply.
+
 uncurryE :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
+#ifdef Simplify
+uncurryE (Curry f)    = f
 uncurryE (Prim PairP) = Id
+#endif
 uncurryE x = Uncurry x
 
 -- Conditional. Breaks down pairs
