@@ -149,17 +149,17 @@ substVP v p = substIn
 infixl 9 :^
 -- | Lambda expressions
 data E :: * -> * where
-  Var   :: forall a   . V a -> E a
-  Const :: forall a   . Prim a -> Ty a -> E a
-  (:^)  :: forall b a . E (a :=> b) -> E a -> E b
-  Lam   :: forall a b . Pat a -> E b -> E (a :=> b)
+  Var    :: forall a   . V a -> E a
+  ConstE :: forall a   . Prim a -> Ty a -> E a
+  (:^)   :: forall b a . E (a :=> b) -> E a -> E b
+  Lam    :: forall a b . Pat a -> E b -> E (a :=> b)
 
 -- | The type of an expression
 expTy :: E a -> Ty a
-expTy (Var v)      = varTy v
-expTy (Const _ ty) = ty
-expTy (f :^ _)     = case expTy f of _ :=> b -> b
-expTy (Lam p e)    = patTy p :=> expTy e
+expTy (Var v)       = varTy v
+expTy (ConstE _ ty) = ty
+expTy (f :^ _)      = case expTy f of _ :=> b -> b
+expTy (Lam p e)     = patTy p :=> expTy e
 
 expHasTy :: E a -> HasTyJt a
 expHasTy = tyHasTy . expTy
@@ -169,10 +169,10 @@ occursVE :: V a -> E b -> Bool
 occursVE v = occ
  where
    occ :: E c -> Bool
-   occ (Var v')   = isJust (v `tyEq` v')
-   occ (Const {}) = False
-   occ (f :^ e)   = occ f || occ e
-   occ (Lam p e)  = not (occursVP v p) && occ e
+   occ (Var v')    = isJust (v `tyEq` v')
+   occ (ConstE {}) = False
+   occ (f :^ e)    = occ f || occ e
+   occ (Lam p e)   = not (occursVP v p) && occ e
 
 -- | Some variable in a pattern occurs freely in an expression
 occursPE :: Pat a -> E b -> Bool
@@ -193,13 +193,13 @@ instance IsTy E where
   tyEq = tyEq'
 
 instance Eq (E a) where
-  Var v     == Var v'                                   = v == v'
-  Const x _ == Const x' _                               = x == x'
-  (f :^ a)  == (f' :^ a') | Just Refl <- a `sameTyE` a' = a == a' && f == f'
-  Lam p e   == Lam p' e'                                = p == p' && e == e'
-  _         == _                                        = False
+  Var v      == Var v'                                   = v == v'
+  ConstE x _ == ConstE x' _                              = x == x'
+  (f :^ a)   == (f' :^ a') | Just Refl <- a `sameTyE` a' = a == a' && f == f'
+  Lam p e    == Lam p' e'                                = p == p' && e == e'
+  _          == _                                        = False
 
--- TODO: Replace the Const Ty argument with a HasTy constraint for ease of use.
+-- TODO: Replace the ConstE Ty argument with a HasTy constraint for ease of use.
 -- I'm waiting until I know how to construct the required dictionaries in Core.
 -- 
 -- Meanwhile,
@@ -208,7 +208,7 @@ varT :: HasTy a => Name -> E a
 varT nm = Var (V nm typ)
 
 constT :: HasTy a => Prim a -> E a
-constT p = Const p typ
+constT p = ConstE p typ
 
 var# :: forall a. Addr# -> Ty a -> E a
 var# addr ty = Var (V (unpackCString# addr) ty)
@@ -232,7 +232,7 @@ f @^ a = f :^ a
 
 {-
 patToE :: Pat a -> E a
-patToE UnitPat       = Const (LitP ()) Unit
+patToE UnitPat       = ConstE (LitP ()) Unit
 patToE (VarPat v)    = Var v
 patToE (PairPat p q) | HasTy <- patHasTy p, HasTy <- patHasTy q
                      = patToE p # patToE q
@@ -242,7 +242,7 @@ patToE (AndPat  _ _) = error "patToE: AndPat not yet handled"
 -- Try this instead:
 
 patToEs :: Pat a -> [E a]
-patToEs UnitPat    = pure $ Const (LitP ()) Unit
+patToEs UnitPat    = pure $ ConstE (LitP ()) Unit
 patToEs (VarPat v) = pure $ Var v
 patToEs (p :# q)   | HasTy <- patHasTy p, HasTy <- patHasTy q
                    = liftA2 (#) (patToEs p) (patToEs q)
@@ -282,15 +282,15 @@ lett pat e body = lam pat body @^ e
 
 infixr 1 #
 (#) :: E a -> E b -> E (a :* b)
--- (Const Exl :^ p) # (Const Exr :^ p') | ... = ...
+-- (ConstE Exl :^ p) # (ConstE Exr :^ p') | ... = ...
 a # b | HasTy <- expHasTy a, HasTy <- expHasTy b
       = constT PairP @^ a @^ b
 
 -- Do surjectivity in @^ rather than here.
 
 instance Show (E a) where
-  showsPrec p (Const PairP _ :^ u :^ v) = showsPair p u v
-  showsPrec p (Const prim _ :^ u :^ v) | Just (OpInfo op fixity) <- opInfo prim =
+  showsPrec p (ConstE PairP _ :^ u :^ v) = showsPair p u v
+  showsPrec p (ConstE prim _ :^ u :^ v) | Just (OpInfo op fixity) <- opInfo prim =
     showsOp2' op fixity p u v
 #ifdef Sugared
   showsPrec p (Lam q body :^ rhs) =  -- beta redex as "let"
@@ -299,7 +299,7 @@ instance Show (E a) where
     . showString " in " . showsPrec 0 body
 #endif
   showsPrec _ (Var (V n _))  = showString n
-  showsPrec p (Const c _) = showsPrec p c
+  showsPrec p (ConstE c _) = showsPrec p c
   showsPrec p (u :^ v)  = showsApp p u v
   showsPrec p (Lam q e) = showParen (p > 0) $
                           showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
@@ -355,7 +355,7 @@ evalE e = trace ("evalE: " ++ show e) $
 eval' :: E a -> Env -> a
 eval' (Var v)   env = fromMaybe (error $ "eval': unbound variable: " ++ show v) $
                       lookupVar v env
-eval' (Const p _) _   = eval p
+eval' (ConstE p _) _   = eval p
 -- eval' (u :# v)  env = (eval' u env, eval' v env)
 eval' (u :^ v)  env = (eval' u env) (eval' v env)
 eval' (Lam p e) env = \ x -> eval' e (extendEnv p x env)
@@ -396,7 +396,7 @@ vars2 (na,nb) = (ap :# bp, (ae,be))
 --------------------------------------------------------------------}
 
 kConst :: Prim a -> String -> Ty a -> E a
-kConst p _msg ty = Const p ty
+kConst p _msg ty = ConstE p ty
 
 kLit :: (Show a, Eq a) => a -> String -> Ty a -> E a
 kLit = kConst . LitP

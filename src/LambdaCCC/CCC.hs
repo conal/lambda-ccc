@@ -77,9 +77,9 @@ data (:->) :: * -> * -> * where
   Uncurry :: HasTy3 a b c => (a :-> (b :=> c)) -> (a :* b :-> c)
   -- Primitives
   Prim    :: HasTy2 a b => Prim (a -> b) -> (a :-> b)
-  ConstC  :: HasTy2 a b => Prim       b  -> (a :-> b)
+  Const   :: HasTy2 a b => Prim       b  -> (a :-> b)
 
--- TODO: Do we really need both Prim and ConstC?
+-- TODO: Do we really need both Prim and Const?
 
 instance IsTy2 (:->) where
   type IsTy2Constraint (:->) u v = HasTy2 u v
@@ -111,7 +111,7 @@ cccTys :: (a :-> b) -> (Ty a, Ty b)
 cccTys Id      {} = typ2
 cccTys (:.)    {} = typ2
 cccTys Prim    {} = typ2
-cccTys ConstC  {} = typ2
+cccTys Const   {} = typ2
 cccTys Exl     {} = typ2
 cccTys Exr     {} = typ2
 cccTys (:&&&)  {} = typ2
@@ -130,7 +130,7 @@ instance Evalable (a :-> b) where
   eval Id           = id
   eval (g :. f)     = eval g . eval f
   eval (Prim p)     = eval p
-  eval (ConstC p)   = const (eval p)
+  eval (Const p)    = const (eval p)
   eval Exl          = fst
   eval Exr          = snd
   eval (f :&&& g)   = eval f A.&&& eval g
@@ -158,7 +158,7 @@ prim p    = Prim p
 --     from the context (HasTy2 a b)
 
 -- TODO: Try adding HasTy constraints to the Prim constructors. Then add a
--- primTy function, and remove the Ty argument from the Const constructor in E.
+-- primTy function, and remove the Ty argument from the ConstE constructor in E.
 
 infixr 9 @.
 -- | Optimizing morphism composition
@@ -171,7 +171,7 @@ Exl        @. (f :&&& _)          = f
 Exr        @. (_ :&&& g)          = g
 (f :||| _) @. Inl                 = f
 (_ :||| g) @. Inr                 = g
-ConstC p   @. _                   = ConstC p
+Const p    @. _                   = Const p
 Apply      @. (decompL -> g :. f) = composeApply g @. f
 #endif
 g          @. f                   = g :. f
@@ -182,7 +182,7 @@ g          @. f                   = g :. f
 
 -- | @'composeApply' h == 'apply' . h@
 composeApply :: HasTy3 a b z => (z :-> (a :=> b) :* a) -> (z :-> b)
-composeApply (ConstC p         :&&& f) = prim p @. f
+composeApply (Const p :&&& f) = prim p @. f
 -- apply . (curry h . f &&& g) == h . (f &&& g)
 composeApply ((decompL -> (Curry h :. f)) :&&& g) = h @. (f &&& g)
 composeApply (h@Prim{} :. f    :&&& g) = uncurryE h @. (f  &&& g)
@@ -267,7 +267,7 @@ applyE = Apply
 
 curryE :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
 #ifdef Simplify
-curryE (Prim p :. Exr) = ConstC p   -- FIX: not general enough
+curryE (Prim p :. Exr) = Const p   -- FIX: not general enough
 -- curry (apply . (f . exl &&& exr)) == f  -- Proof below
 curryE (Apply :. (f :. Exl :&&& Exr)) = f
 #endif
@@ -357,7 +357,7 @@ instance Show (a :-> b) where
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
   showsPrec p (Prim x)    = showsPrec p x
                             -- or: showsApp1 "prim" p x
-  showsPrec p (ConstC w)  = showsApp1 "const" p w
+  showsPrec p (Const w)   = showsApp1 "const" p w
   showsPrec p (f :&&& g)  = showsOp2' "&&&" (3,AssocRight) p f g
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
   showsPrec _ Exl         = showString "exl"
