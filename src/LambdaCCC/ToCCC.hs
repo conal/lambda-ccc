@@ -30,7 +30,6 @@ import LambdaCCC.Misc
 import LambdaCCC.CCC
 import LambdaCCC.Ty
 import LambdaCCC.Lambda
-import LambdaCCC.Prim
 
 {--------------------------------------------------------------------
     Conversion
