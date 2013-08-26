@@ -17,7 +17,7 @@ Extra-Source-Files:
 
 source-repository head
   type:             git
-  location:         git://github.com/ku-fpg/lambda-ccc
+  location:         git://github.com/conal/lambda-ccc
 
 Library
   hs-Source-Dirs:   src
