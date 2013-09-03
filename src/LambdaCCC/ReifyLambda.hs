@@ -280,6 +280,7 @@ reifyExpr =
   do varId#    <- findIdT 'E.var#
      appId     <- findIdT '(E.@^)
      lamvId#   <- findIdT 'E.lamv#
+     casevId#  <- findIdT 'E.casev#
      evalId    <- findIdT 'E.evalE
      reifyId   <- findIdT 'E.reifyE'
      letId     <- findIdT 'E.lett

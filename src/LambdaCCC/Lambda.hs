@@ -29,7 +29,7 @@ module LambdaCCC.Lambda
   , varHasTy, patHasTy, expHasTy
   , var#, varPat#, asPat#, (@^), lam, lamv#, lett
   , varT, constT
-  , (#)
+  , (#), caseEither, casev#
   , reifyE, reifyE', evalE
   , vars, vars2
   ) where
@@ -149,10 +149,11 @@ substVP v p = substIn
 infixl 9 :^
 -- | Lambda expressions
 data E :: * -> * where
-  Var    :: forall a   . V a -> E a
-  ConstE :: forall a   . Prim a -> Ty a -> E a
-  (:^)   :: forall b a . E (a :=> b) -> E a -> E b
-  Lam    :: forall a b . Pat a -> E b -> E (a :=> b)
+  Var    :: forall a     . V a -> E a
+  ConstE :: forall a     . Prim a -> Ty a -> E a
+  (:^)   :: forall b a   . E (a :=> b) -> E a -> E b
+  Lam    :: forall a b   . Pat a -> E b -> E (a :=> b)
+  Either :: forall a b c . E (a -> c) -> E (b -> c) -> E (a :+ b -> c)
 
 -- | The type of an expression
 expTy :: E a -> Ty a
@@ -160,6 +161,14 @@ expTy (Var v)       = varTy v
 expTy (ConstE _ ty) = ty
 expTy (f :^ _)      = case expTy f of _ :=> b -> b
 expTy (Lam p e)     = patTy p :=> expTy e
+expTy (Either f g)  = a :+ b :=> c
+  where
+    (a,c) = splitFunTy (expTy f)
+    (b,_) = splitFunTy (expTy g)
+
+-- expTy (Either f g)  =
+--   case (expTy f, expTy g) of
+--     (a :=> b, _ :=> c) -> a :+ b :=> c
 
 expHasTy :: E a -> HasTyJt a
 expHasTy = tyHasTy . expTy
@@ -169,10 +178,11 @@ occursVE :: V a -> E b -> Bool
 occursVE v = occ
  where
    occ :: E c -> Bool
-   occ (Var v')    = isJust (v `tyEq` v')
-   occ (ConstE {}) = False
-   occ (f :^ e)    = occ f || occ e
-   occ (Lam p e)   = not (occursVP v p) && occ e
+   occ (Var v')     = isJust (v `tyEq` v')
+   occ (ConstE {})  = False
+   occ (f :^ e)     = occ f || occ e
+   occ (Lam p e)    = not (occursVP v p) && occ e
+   occ (Either f g) = occ f || occ g
 
 -- | Some variable in a pattern occurs freely in an expression
 occursPE :: Pat a -> E b -> Bool
@@ -286,23 +296,43 @@ infixr 1 #
 a # b | HasTy <- expHasTy a, HasTy <- expHasTy b
       = constT PairP @^ a @^ b
 
--- Do surjectivity in @^ rather than here.
+-- Handle surjectivity in @^ rather than here.
+
+eitherE :: forall a b c . E (a -> c) -> E (b -> c) -> E (a :+ b -> c)
+eitherE = Either  -- for now
+
+-- | Encode a case expression on 'Left' & 'Right'.
+caseEither :: forall a b c . Pat a -> E c -> Pat b -> E c -> E (a :+ b) -> E c
+caseEither p u q v ab = (lam p u `eitherE` lam q v) @^ ab
+
+casev# :: forall a b c. Addr# -> Ty a -> E c -> Addr# -> Ty b -> E c -> E (a :+ b) -> E c
+casev# a ta q b tb r = caseEither (varPat# a ta) q (varPat# b tb) r
 
 instance Show (E a) where
-  showsPrec p (ConstE PairP _ :^ u :^ v) = showsPair p u v
-  showsPrec p (ConstE prim _ :^ u :^ v) | Just (OpInfo op fixity) <- opInfo prim =
-    showsOp2' op fixity p u v
 #ifdef Sugared
+  showsPrec p (Either (Lam q a) (Lam r b) :^ ab) =
+    showParen (p > 0) $
+    showString "case " . showsPrec 0 ab . showString " of { "
+                       . showsPrec 0 q . showString " -> " . showsPrec 0 a . showString " ; "
+                       . showsPrec 0 r . showString " -> " . showsPrec 0 b . showString " } "
   showsPrec p (Lam q body :^ rhs) =  -- beta redex as "let"
     showParen (p > 0) $
     showString "let " . showsPrec 0 q . showString " = " . showsPrec 0 rhs
     . showString " in " . showsPrec 0 body
 #endif
-  showsPrec _ (Var (V n _))  = showString n
-  showsPrec p (ConstE c _) = showsPrec p c
-  showsPrec p (u :^ v)  = showsApp p u v
-  showsPrec p (Lam q e) = showParen (p > 0) $
-                          showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
+  showsPrec p (ConstE PairP _ :^ u :^ v) = showsPair p u v
+  showsPrec p (ConstE prim _ :^ u :^ v) | Just (OpInfo op fixity) <- opInfo prim =
+    showsOp2' op fixity p u v
+  showsPrec _ (Var (V n _)) = showString n
+  showsPrec p (ConstE c _)  = showsPrec p c
+  showsPrec p (u :^ v)      = showsApp p u v
+  showsPrec p (Lam q e)     =
+    showParen (p > 0) $
+    showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
+  showsPrec p (Either f g) = showsOp2' "|||" (2,AssocRight) p f g
+
+
+-- TODO: Multi-line pretty printer with indentation
 
 data OpInfo = OpInfo String Fixity
 
@@ -353,18 +383,18 @@ evalE e = trace ("evalE: " ++ show e) $
 -- expressions evaluate to a function from environments.
 
 eval' :: E a -> Env -> a
-eval' (Var v)   env = fromMaybe (error $ "eval': unbound variable: " ++ show v) $
-                      lookupVar v env
+eval' (Var v)   env    = fromMaybe (error $ "eval': unbound variable: " ++ show v) $
+                         lookupVar v env
 eval' (ConstE p _) _   = eval p
--- eval' (u :# v)  env = (eval' u env, eval' v env)
-eval' (u :^ v)  env = (eval' u env) (eval' v env)
-eval' (Lam p e) env = \ x -> eval' e (extendEnv p x env)
+eval' (u :^ v)  env    = (eval' u env) (eval' v env)
+eval' (Lam p e) env    = \ x -> eval' e (extendEnv p x env)
+eval' (Either f g) env = eval' f env `either` eval' g env
 
 extendEnv :: Pat b -> b -> Env -> Env
-extendEnv UnitPat       ()    = id
-extendEnv (VarPat vb)   b     = (Bind vb b :)
-extendEnv (p :# q) (a,b) = extendEnv q b . extendEnv p a
-extendEnv (p :@ q) b     = extendEnv q b . extendEnv p b
+extendEnv UnitPat       ()  = id
+extendEnv (VarPat vb)   b   = (Bind vb b :)
+extendEnv (p :# q)    (a,b) = extendEnv q b . extendEnv p a
+extendEnv (p :@ q)      b   = extendEnv q b . extendEnv p b
 
 lookupVar :: forall a. V a -> Env -> Maybe a
 lookupVar va = listToMaybe . catMaybes . map check

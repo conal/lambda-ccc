@@ -27,7 +27,7 @@ module LambdaCCC.CCC
   , (&&&), (***), (+++), (|||)
   , twiceP, twiceC
   , dup, jam, swapP, swapC
-  , first, second, left, right
+  , first, second, left, right, distl
   , cccTys
   ) where
 
@@ -71,6 +71,7 @@ data (:->) :: * -> * -> * where
   Inl     :: HasTy2 a b => a :-> a :+ b
   Inr     :: HasTy2 a b => b :-> a :+ b
   (:|||)  :: HasTy3 a b c => (b :-> a) -> (c :-> a) -> (b :+ c :-> a)
+  DistL   :: HasTy3 a b c => a :* (b :+ c) :-> a :* b :+ a :* c
   -- Exponentials
   Apply   :: HasTy2 a b   => (a :=> b) :* a :-> b
   Curry   :: HasTy3 a b c => (a :* b :-> c) -> (a :-> (b :=> c))
@@ -118,6 +119,7 @@ cccTys (:&&&)  {} = typ2
 cccTys Inl     {} = typ2
 cccTys Inr     {} = typ2
 cccTys (:|||)  {} = typ2
+cccTys DistL   {} = typ2
 cccTys Apply   {} = typ2
 cccTys Curry   {} = typ2
 cccTys Uncurry {} = typ2
@@ -137,9 +139,15 @@ instance Evalable (a :-> b) where
   eval Inl          = Left
   eval Inr          = Right
   eval (f :||| g)   = eval f A.||| eval g
+  eval DistL        = distlF
   eval Apply        = uncurry ($)
   eval (Curry   h)  = curry   (eval h)
   eval (Uncurry f)  = uncurry (eval f)
+
+distlF :: a :* (b :+ c) -> a :* b :+ a :* c
+distlF (a, Left  b) = Left  (a,b)
+distlF (a, Right c) = Right (a,c)
+
 
 {--------------------------------------------------------------------
     Smart constructors
@@ -262,6 +270,9 @@ left f = f +++ Id
 right :: HasTy3 a b d => (b :-> d) -> (a :+ b :-> a :+ d)
 right g = Id +++ g
 
+distl :: HasTy3 a b c => a :* (b :+ c) :-> a :* b :+ a :* c
+distl = DistL
+
 applyE :: HasTy2 a b   => ((a :=> b) :* a) :-> b
 applyE = Apply
 
@@ -362,15 +373,16 @@ instance Show (a :-> b) where
 #endif
   showsPrec _ Id          = showString "id"
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
-  showsPrec p (Prim x)    = showsPrec p x
-                            -- or: showsApp1 "prim" p x
-  showsPrec p (Const w)   = showsApp1 "const" p w
-  showsPrec p (f :&&& g)  = showsOp2' "&&&" (3,AssocRight) p f g
-  showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
   showsPrec _ Exl         = showString "exl"
   showsPrec _ Exr         = showString "exr"
+  showsPrec p (f :&&& g)  = showsOp2' "&&&" (3,AssocRight) p f g
   showsPrec _ Inl         = showString "inl"
   showsPrec _ Inr         = showString "inr"
+  showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
+  showsPrec _ DistL       = showString "distl"
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "uncurry" p h
+  showsPrec p (Prim x)    = showsPrec p x
+                            -- or: showsApp1 "prim" p x
+  showsPrec p (Const w)   = showsApp1 "const" p w
