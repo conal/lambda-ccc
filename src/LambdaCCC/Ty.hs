@@ -22,6 +22,7 @@ module LambdaCCC.Ty
   ( Ty(..),HasTy(..), tyEq', tyEq2'
   , HasTy2,HasTy3,HasTy4
   , HasTyJt(..), tyHasTy, tyHasTy2
+  , pairTyHasTy, sumTyHasTy, funTyHasTy
   , splitFunTy, domTy, ranTy
   ) where
 
@@ -123,6 +124,16 @@ tyHasTy (a :=> b) | (HasTy,HasTy) <- tyHasTy2 a b = HasTy
 
 tyHasTy2 :: Ty a -> Ty b -> (HasTyJt a,HasTyJt b)
 tyHasTy2 a b = (tyHasTy a,tyHasTy b)
+
+pairTyHasTy :: Ty (a :* b) -> (HasTyJt a,HasTyJt b)
+pairTyHasTy (a :* b) = tyHasTy2 a b
+
+sumTyHasTy :: Ty (a :+ b) -> (HasTyJt a,HasTyJt b)
+sumTyHasTy (a :+ b) = tyHasTy2 a b
+
+funTyHasTy :: Ty (a :=> b) -> (HasTyJt a,HasTyJt b)
+funTyHasTy (a :=> b) = tyHasTy2 a b
+
 
 {--------------------------------------------------------------------
     Utilities
