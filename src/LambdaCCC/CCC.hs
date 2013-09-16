@@ -89,17 +89,23 @@ instance IsTy2 (:->) where
 instance HasTy2 a b => Eq (a :-> b) where
   Id         == Id                                     = True
   (g :. f)   == (g' :. f') | Just Refl <- f `tyEq2` f' = g == g'
-  Prim p     == Prim p'                                = p == p'
   Exl        == Exl                                    = True
   Exr        == Exr                                    = True
   (f :&&& g) == (f' :&&& g')                           = f == f' && g == g'
   Inl        == Inl                                    = True
   Inr        == Inr                                    = True
   (f :||| g) == (f' :||| g')                           = f == f' && g == g'
+  DistL      == DistL                                  = True
   Apply      == Apply                                  = True
   Curry h    == Curry h'                               = h == h'
   Uncurry k  == Uncurry k'                             = k == k'
+  Prim  p    == Prim  p'                               = p == p'
+  Const p    == Const p'                               = p == p'
   _          == _                                      = False
+
+-- WARNING: take care with the (==) definition above. When we add constructors
+-- to the GADT, we won't get a non-exhaustive cases warning, since the last case
+-- is catch-all.
 
 -- TODO: The type constraints prevent (:->) from being a category etc without
 -- some change to those classes, e.g., with instance-specific constraints via
@@ -111,8 +117,6 @@ typ2 = (typ,typ)
 cccTys :: (a :-> b) -> (Ty a, Ty b)
 cccTys Id      {} = typ2
 cccTys (:.)    {} = typ2
-cccTys Prim    {} = typ2
-cccTys Const   {} = typ2
 cccTys Exl     {} = typ2
 cccTys Exr     {} = typ2
 cccTys (:&&&)  {} = typ2
@@ -123,6 +127,8 @@ cccTys DistL   {} = typ2
 cccTys Apply   {} = typ2
 cccTys Curry   {} = typ2
 cccTys Uncurry {} = typ2
+cccTys Prim    {} = typ2
+cccTys Const   {} = typ2
 
 -- Maybe parametrize this GADT by a constraint. Sadly, I'd lose the pretty infix
 -- syntax ("a :-> b").
