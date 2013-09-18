@@ -4,5 +4,5 @@ See instructions in test/Tests.hs.
 
 Dependencies:
 
-*   The [KU netlist](https://github.com/ku-fpg/netlist) packages 
+*   [Anshul Malvi's branch](https://github.com/anshulmalvi/netlist) the KU netlist packages
 *   The [circat](https://github.com/conal/circat) library for circuit specification, display, and conversion to netlists.
