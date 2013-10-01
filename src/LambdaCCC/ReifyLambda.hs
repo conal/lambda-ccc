@@ -28,35 +28,34 @@ import Control.Applicative (Applicative(..))
 -- import Control.Monad ((<=<),liftM2)
 import Control.Arrow (arr,(>>>),(&&&))
 import qualified Data.Map as M
-import qualified Data.Set as S
 import Text.Printf (printf)
 
 import qualified Language.Haskell.TH as TH (Name,mkName)
 import qualified Language.Haskell.TH.Syntax as TH (showName)
 
 -- GHC API
-import GhcPlugins hiding (mkStringExpr)
-import TypeRep (Type(..))
 import PrelNames (unitTyConKey,boolTyConKey,intTyConKey)
 
-import Language.HERMIT.Context
+import HERMIT.Context
   (ReadBindings,AddBindings,HermitBindingSite(..),hermitBindings)
-import Language.HERMIT.Core (Crumb(..))
-import Language.HERMIT.External
-import Language.HERMIT.GHC (uqName,var2String)
-import Language.HERMIT.Primitive.Inline (inlineName)
-import Language.HERMIT.Kure hiding (apply)
-import Language.HERMIT.Optimize
-import Language.HERMIT.Primitive.AlphaConversion (unshadow)
-import Language.HERMIT.Primitive.Common
-import Language.HERMIT.Primitive.Debug (observeR)
-import Language.HERMIT.Primitive.GHC (rule,rules,coreExprFreeIds)
-import Language.HERMIT.Primitive.Local (letIntro,letFloatArg,letFloatLetTop)
-import Language.HERMIT.Primitive.Navigation (rhsOf,parentOf,bindingGroupOf)
-import Language.HERMIT.Primitive.New (simplifyR)
-import Language.HERMIT.Primitive.Unfold (cleanupUnfoldR) -- unfoldNameR,
+import HERMIT.Core (Crumb(..),localFreeIdsExpr)
+import HERMIT.External
+import HERMIT.GHC hiding (mkStringExpr)
+import HERMIT.Kure hiding (apply)
+import HERMIT.Optimize
 
-import qualified Language.HERMIT.Kure as Kure
+-- Note: All of the Dictionary submodules are now re-exported by HERMIT.Dictionary,
+--       so if you prefer you could import all these via that module, rather than seperately.
+import HERMIT.Dictionary.AlphaConversion (unshadowR)
+import HERMIT.Dictionary.Common
+import HERMIT.Dictionary.Composite (simplifyR)
+import HERMIT.Dictionary.Debug (observeR)
+import HERMIT.Dictionary.GHC (rule,rules)
+import HERMIT.Dictionary.Inline (inlineNameR, inlineNamesR)
+import HERMIT.Dictionary.Local (letIntroR,letFloatArgR,letFloatTopR)
+import HERMIT.Dictionary.Navigation (rhsOfT,parentOfT,bindingGroupOfT)
+import HERMIT.Dictionary.Composite (simplifyR)
+import HERMIT.Dictionary.Unfold (cleanupUnfoldR) -- unfoldNameR,
 
 import LambdaCCC.Misc (Unop,Binop)
 import qualified LambdaCCC.Ty     as T
@@ -137,19 +136,16 @@ dropTyApp1 _ _ = error "dropTyApp1: not a unary TyConApp"
     KURE utilities
 --------------------------------------------------------------------}
 
--- | Transformation while focused on a path
-pathIn :: (Eq crumb, ReadPath c crumb, MonadCatch m, Walker c b) =>
-          Translate c m b (Path crumb) -> Unop (Rewrite c m b)
-pathIn mkP f = mkP >>= flip pathR f
+-- -- | Transformation while focused on a path
+-- pathIn :: (Eq crumb, ReadPath c crumb, MonadCatch m, Walker c b) =>
+--           Translate c m b (Path crumb) -> Unop (Rewrite c m b)
+-- pathIn mkP f = mkP >>= flip pathR f
 
 -- | Transformation while focused on a snoc path
 snocPathIn :: ( Eq crumb, Functor m, ReadPath c crumb
               , MonadCatch m, Walker c b ) =>
               Translate c m b (SnocPath crumb) -> Unop (Rewrite c m b)
-snocPathIn mkP = pathIn (snocPathToPath <$> mkP)
-
-apply' :: Translate c m a b -> a -> Translate c m a' b
-apply' tr x = contextonlyT $ \ c -> Kure.apply tr c x
+snocPathIn mkP r = mkP >>= flip localPathR r
 
 {--------------------------------------------------------------------
     HERMIT utilities
@@ -265,8 +261,8 @@ reifyType =
 
 -- TODO: Look up the ids only once in reifyExpr, not every time 'reifyType' is called.
 
--- tyConAppT :: (ExtendPath c Crumb, Monad m) => 
---              Translate c m TyCon a1 -> (Int -> Translate c m KindOrType a2) 
+-- tyConAppT :: (ExtendPath c Crumb, Monad m) =>
+--              Translate c m TyCon a1 -> (Int -> Translate c m KindOrType a2)
 --           -> (a1 -> [a2] -> b) -> Translate c m Type b
 
 -- The type parameter a of an expression of type Ty a.
@@ -301,15 +297,15 @@ reifyExpr =
                        do v <- idR
                           if local v then
                             do let ty = varType v
-                               tye <- apply' reifyType ty
+                               tye <- applyInContextT reifyType ty
                                return $ apps varId# [ty] [varLitE v,tye]
                            else
                             fail "rVar: not a lambda-bound variable"
          -- Reify non-local variables and their polymorphic instantiations.
          rReify = do e@(collectTypeArgs -> (Var v, _)) <- idR
                      let t = exprType e
-                     (str,_) <- apply' mkVarName v
-                     te <- apply' reifyType t
+                     (str,_) <- applyInContextT mkVarName v
+                     te <- applyInContextT reifyType t
                      return $ apps reifyId [t] [e,str,te]
          rApp  = do App (exprType -> funTy) _ <- idR
                     appT  rew rew $ arr $ \ u' v' ->
@@ -318,7 +314,7 @@ reifyExpr =
          rLamT = do Lam (isTyVar -> True) _ <- idR
                     lamT idR rew (arr Lam)
          rLam# = do Lam (varType -> vty) (exprType -> bodyTy) <- idR
-                    vtye <- apply' reifyType vty
+                    vtye <- applyInContextT reifyType vty
                     lamT idR rew $ arr $ \ v e' ->
                       apps lamvId# [vty, bodyTy] [varLitE v,vtye,e']
          rLet  = do -- only NonRec for now
@@ -340,10 +336,10 @@ reifyExpr =
            do -- Only pair patterns for now
               _ <- observeR' "Reifying case alternative"
               (DataAlt (isTupleTyCon.dataConTyCon -> True), vars@[_,_], _) <- idR
-              vPats <- mapM (apply' (labeled "varPatT" varPatT#)) vars
+              vPats <- mapM (applyInContextT (labeled "varPatT" varPatT#)) vars
               altT idR (const idR) rew $ \ _ _ rhs' ->
                 let pat  = apps pairPatId (varType <$> vars) vPats
-                    pat' | wild `S.member` coreExprFreeIds rhs'
+                    pat' | wild `elemVarSet` localFreeIdsExpr rhs'
                          = -- WARNING: untested as of 2013-07-22
                            apps asPatId# [varType wild] [varLitE wild,pat]
                          | otherwise = pat
@@ -352,7 +348,7 @@ reifyExpr =
          varPatT# :: TranslateH Var CoreExpr
          varPatT# = do v <- idR
                        let ty = varType v
-                       tye <- apply' reifyType ty
+                       tye <- applyInContextT reifyType ty
                        return $ apps varPatId# [ty] [varLitE v,tye]
          -- Reify a Core binding into a reified pattern and expression.
          -- Only handle NonRec bindings for now.
@@ -365,7 +361,7 @@ reifyExpr =
         mkEval <$> rew
 
 reifyExprC :: RewriteH Core
-reifyExprC = tryR unshadow >>> promoteExprR reifyExpr
+reifyExprC = tryR unshadowR >>> promoteExprR reifyExpr
 
 -- unshadow since we extract variable names without the uniques
 
@@ -373,7 +369,7 @@ reifyExprC = tryR unshadow >>> promoteExprR reifyExpr
 letT :: (ExtendPath c Crumb, AddBindings c, Monad m)
      => Translate c m CoreBind a1
      -> Translate c m CoreExpr a2
-     -> (a1 -> a2 -> b) 
+     -> (a1 -> a2 -> b)
      -> Translate c m CoreExpr b
 
 caseT :: (ExtendPath c Crumb, AddBindings c, Monad m)
@@ -431,27 +427,27 @@ reifyEval = reifyArg >>> evalArg
 
 -- TODO: Replace reifyEval with tryRulesBU ["reify'/eval","eval/reify'"]
 
--- reifyEval = 
+-- reifyEval =
 
 -- rswE = reifyE' ▲ (evalE ▲ swapBI_reified) ($fHasTy(->) ▲ ▲ tup ▹ ■)
 
 inlineCleanup :: TH.Name -> RewriteH Core
-inlineCleanup nm = tryR $ anybuER (inlineName nm) >>> anybuER cleanupUnfoldR
+inlineCleanup nm = tryR $ anybuER (inlineNameR nm) >>> anybuER cleanupUnfoldR
 
-inlineNamesTD :: [TH.Name] -> RewriteH Core
-inlineNamesTD nms = anytdER (catchesM (inlineName <$> nms))
+-- inlineNamesTD :: [TH.Name] -> RewriteH Core
+-- inlineNamesTD nms = anytdER (inlineNamesR nms)
 
 reifyNamed :: TH.Name -> RewriteH Core
-reifyNamed nm = snocPathIn (rhsOf nm)
+reifyNamed nm = snocPathIn (rhsOfT $ cmpTHName2Var nm)
                   (   inlineCleanup 'E.ifThenElse
                   -- >>> (tryR $ anytdER $ rule "if/pair")
                   >>> reifyExprC
                   >>> reifyRules
-                  >>> pathR [App_Arg] (promoteExprR (letIntro nm'))
-                  >>> promoteExprR letFloatArg
+                  >>> pathR [App_Arg] (promoteExprR (letIntroR nm'))
+                  >>> promoteExprR letFloatArgR
                   )
-            >>> snocPathIn (parentOf (bindingGroupOf nm))
-                  (promoteProgR letFloatLetTop)
+            >>> snocPathIn (extractT $ parentOfT $ bindingGroupOfT $ cmpTHName2Var nm)
+                  (promoteProgR letFloatTopR)
             >>> inlineCleanup nm
             >>> inlineCleanup 'E.reifyE
             -- >>> tryR (anybuER (promoteExprR reifyEval))
@@ -486,9 +482,6 @@ externals =
     , external "inline-cleanup"
         (inlineCleanup :: TH.Name -> RewriteH Core)
         ["inline a named definition, and clean-up beta-redexes"]
-    , external "inline-names-td"
-        (inlineNamesTD :: [TH.Name] -> RewriteH Core)
-        ["inline given names, traversing top-down"]
     , external "reify-def"
         (reifyDef :: RewriteH Core)
         ["reify for definitions"]
