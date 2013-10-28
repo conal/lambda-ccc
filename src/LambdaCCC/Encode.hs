@@ -5,7 +5,7 @@
 
 {-# OPTIONS_GHC -Wall #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -22,11 +22,11 @@
 
 module LambdaCCC.Encode where
 
+-- import Prelude hiding (id,(.))
 import Data.Foldable
 import Data.Traversable
+-- import Control.Category (Category(..))
 import Control.Arrow ((***),(+++),(|||))
-
-import Control.Compose ((<~))
 
 import Data.Monoid
 
@@ -39,6 +39,16 @@ infixl 7 :*
 type Unit  = ()
 type (:*)  = (,)
 type (:+)  = Either
+
+
+infixr 1 -->
+-- | Add pre- and post processing
+(-->) :: (a' -> a) -> (b -> b') -> ((a -> b) -> (a' -> b'))
+(f --> h) g = h . g . f
+
+-- (-->) :: Category k =>
+--          (a' `k` a) -> (b `k` b') -> ((a `k` b) -> (a' `k` b'))
+
 
 class Encodable a where
   type Encode a
@@ -62,16 +72,23 @@ instance (Encodable a, Encodable b) => Encodable (a :+ b) where
 
 instance (Encodable a, Encodable b) => Encodable (a -> b) where
   type Encode (a -> b) = Encode a -> Encode b
-  encode = encode <~ decode
-  decode = decode <~ encode
+  encode = decode --> encode
+  decode = encode --> decode
 
 -- instance Encodable Bool where
 --   { type Encode Bool = Bool ; encode = id ; decode = id }
 
 instance Encodable Bool where
   type Encode Bool = () :+ ()
-  encode = bool (Left ()) (Right ())
-  decode = const False ||| const True
+  encode False = Left ()
+  encode True  = Right ()
+  decode (Left  ()) = False
+  decode (Right ()) = True
+
+-- instance Encodable Bool where
+--   type Encode Bool = () :+ ()
+--   encode = bool (Left ()) (Right ())
+--   decode = const False ||| const True
 
 bool :: a -> a -> Bool -> a
 bool t e i = if i then t else e
