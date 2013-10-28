@@ -40,7 +40,6 @@ type Unit  = ()
 type (:*)  = (,)
 type (:+)  = Either
 
-
 infixr 1 -->
 -- | Add pre- and post processing
 (-->) :: (a' -> a) -> (b -> b') -> ((a -> b) -> (a' -> b'))
