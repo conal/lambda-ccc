@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeFamilies, TypeOperators, DataKinds, GADTs #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
-{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts, EmptyDataDecls #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -Wall #-}
@@ -153,7 +153,7 @@ infixr 2 ||*
 
 -- instance Encodable a => Encodable [a] where
 --   -- type Encode [a] = Encode (() :+ a :* [a])
---   type Encode [a] = () :+ a :* Encode [a]
+--   type Encode [a] = () :+ Encode a :* Encode [a]
 --   encode []     = Left  ()
 --   encode (a:as) = Right (encode (a,as))
 --   decode (Left  ()    ) = []    
