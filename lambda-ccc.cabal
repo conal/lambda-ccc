@@ -28,7 +28,7 @@ Library
                   , hermit >= 0.2.0.0
                   , template-haskell
                   , containers
-                  , ty >= 0.1.4
+                  , ty >= 0.1.5
                   , circat >= 0.2.0
   Exposed-Modules:  LambdaCCC.Misc
                     LambdaCCC.ShowUtils
