@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeOperators, GADTs, KindSignatures, ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts, PatternGuards, ViewPatterns, ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -60,6 +61,8 @@ cccToCircuit k@(Prim CondP)           | (PSource, PSource) <- cccPS k
 
 cccToCircuit k@(Const (LitP b))       | (PSource, PSource) <- cccPS k
                                       = constC b
+cccToCircuit (Const p)                = constS (primToSource p)
+-- TODO: How to combine Const cases?
 -- Product
 cccToCircuit Exl                      = exl
 cccToCircuit Exr                      = exr
@@ -80,9 +83,9 @@ cccToCircuit k@(f :||| g)             | (a :+ b, c) <- cccTys k
                                       , PSource <- tyPSource c
                                       = cccToCircuit f |||* cccToCircuit g
 -- Exponential
--- cccToCircuit Apply                    = apply
--- cccToCircuit (Curry h)                = curry (cccToCircuit h)
--- cccToCircuit (Uncurry h)              = uncurry (cccToCircuit h)
+cccToCircuit Apply                    = apply
+cccToCircuit (Curry h)                = curry (cccToCircuit h)
+cccToCircuit (Uncurry h)              = uncurry (cccToCircuit h)
 
 cccToCircuit ccc = error $ "cccToCircuit: not yet handled: " ++ show ccc
 
@@ -108,6 +111,29 @@ expand _ = Nothing
 -- Prove that IsSource (Pins a), IsSource (Pins b)
 cccPS :: (a :-> b) -> (PSourceJt a, PSourceJt b)
 cccPS = tyPSource2 . cccTys
+
+{--------------------------------------------------------------------
+    Prim conversion
+--------------------------------------------------------------------}
+
+#define TYPS (tyPSource -> PSource)
+
+primToSource :: forall t. HasTy t => Prim t -> Pins t
+primToSource = flip toS typ
+ where
+   toS :: Prim t -> Ty t -> Pins t
+   toS NotP  _                    = not
+   toS AndP  _                    = curry and
+   toS OrP   _                    = curry or
+   toS XorP  _                    = curry xor
+   toS ExlP  _                    = exl
+   toS ExrP  _                    = exr
+   toS PairP _                    = curry id
+   toS InlP  (_ :=> TYPS :+ TYPS) = inlC
+   toS InrP  (_ :=> TYPS :+ TYPS) = inrC
+   toS AddP  (_ :=> _ :=> TYPS)   = curry (namedC "add")
+   toS CondP (_ :=> TYPS)         = namedC "mux"
+   toS p _                        = error $ "primToSource: not yet handled: " ++ show p
 
 {--------------------------------------------------------------------
     Proofs
