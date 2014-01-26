@@ -116,24 +116,24 @@ cccPS = tyPSource2 . cccTys
     Prim conversion
 --------------------------------------------------------------------}
 
-#define TYPS (tyPSource -> PSource)
+#define TS (tyPSource -> PSource)
 
 primToSource :: forall t. HasTy t => Prim t -> Pins t
 primToSource = flip toS typ
  where
    toS :: Prim t -> Ty t -> Pins t
-   toS NotP  _                    = not
-   toS AndP  _                    = curry and
-   toS OrP   _                    = curry or
-   toS XorP  _                    = curry xor
-   toS ExlP  _                    = exl
-   toS ExrP  _                    = exr
-   toS PairP _                    = curry id
-   toS InlP  (_ :=> TYPS :+ TYPS) = inlC
-   toS InrP  (_ :=> TYPS :+ TYPS) = inrC
-   toS AddP  (_ :=> _ :=> TYPS)   = curry (namedC "add")
-   toS CondP (_ :=> TYPS)         = namedC "mux"
-   toS p _                        = error $ "primToSource: not yet handled: " ++ show p
+   toS NotP  _                = not
+   toS AndP  _                = curry and
+   toS OrP   _                = curry or
+   toS XorP  _                = curry xor
+   toS ExlP  _                = exl
+   toS ExrP  _                = exr
+   toS PairP _                = curry id
+   toS InlP  (_ :=> TS :+ TS) = inlC
+   toS InrP  (_ :=> TS :+ TS) = inrC
+   toS AddP  (_ :=> _ :=> TS) = curry (namedC "add")
+   toS CondP (_ :=> TS)       = namedC "mux"
+   toS p _                    = error $ "primToSource: not yet handled: " ++ show p
 
 {--------------------------------------------------------------------
     Proofs
@@ -151,15 +151,15 @@ data PSourceJt :: * -> * where
 
 -- | Proof of @'IsSource' ('Pins' a)@ from @'Ty' a@
 tyPSource :: Ty a -> PSourceJt a
-tyPSource Unit = PSource
-tyPSource Bool = PSource
-tyPSource (a :* b) | (PSource,PSource) <- tyPSource2 (a,b) = PSource
-tyPSource (a :+ b) | (PSource,PSource) <- tyPSource2 (a,b) = PSource
-tyPSource ty = error $ "tyPSource: Oops -- not yet handling " ++ show ty
+tyPSource Unit       = PSource
+tyPSource Bool       = PSource
+tyPSource (TS :* TS) = PSource
+tyPSource (TS :+ TS) = PSource
+tyPSource ty         = error $ "tyPSource: Oops -- not yet handling " ++ show ty
 
 -- TODO: a :=> b
--- 
--- I guess I'll use some sort of memoization and/or closure for functions.
 
 tyPSource2 :: (Ty a,Ty b) -> (PSourceJt a, PSourceJt b)
 tyPSource2 (a,b) = (tyPSource a,tyPSource b)
+
+-- tyPSource2 = tyPSource *** tyPSource
