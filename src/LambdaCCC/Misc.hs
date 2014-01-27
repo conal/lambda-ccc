@@ -22,12 +22,14 @@ module LambdaCCC.Misc
   , Evalable(..)
   ) where
 
+import Circat.Misc (Unop, (:+), (:*))
+
 {--------------------------------------------------------------------
     Transformations
 --------------------------------------------------------------------}
 
--- | Unary transformation
-type Unop  a = a -> a
+-- -- | Unary transformation
+-- type Unop  a = a -> a
 
 -- | Binary transformation
 type Binop a = a -> Unop a
@@ -41,8 +43,8 @@ compose = foldr (.) id
 --------------------------------------------------------------------}
 
 infixr 1 :=>
-infixl 6 :+
-infixl 7 :*
+-- infixl 6 :+
+-- infixl 7 :*
 
 -- TODO: Perhaps replace these definitions with a GADT to emphasize the
 -- distinction between standard Haskell unit, cartesian product, and function
@@ -50,8 +52,8 @@ infixl 7 :*
 -- products, and coproducts).
 
 type Unit  = ()
-type (:*)  = (,)
-type (:+)  = Either
+-- type (:*)  = (,)
+-- type (:+)  = Either
 type (:=>) = (->)
 
 {--------------------------------------------------------------------
