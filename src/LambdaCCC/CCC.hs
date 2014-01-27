@@ -23,7 +23,7 @@ module LambdaCCC.CCC
   ( module LambdaCCC.Misc
   , (:->)(..)
   , (@.), applyE, curryE, uncurryE      -- TODO: "E" --> "C"
-  , prim, condC, condPair               -- TODO: use condC instead
+  , prim
   , (&&&), (***), (+++), (|||)
   , twiceP, twiceC
   , dup, jam, swapP, swapC
@@ -54,7 +54,7 @@ infixr 2 :|||
 #define Sugared
 
 -- Whether to simplify during construction
-#define Simplify
+-- #define Simplify
 
 -- | CCC combinator expressions. Although we use standard Haskell unit,
 -- cartesian product, sums, and function types here, the intended interpretation
@@ -312,6 +312,7 @@ uncurryE (Prim PairP) = Id
 #endif
 uncurryE x = Uncurry x
 
+{-
 -- Conditional. Breaks down pairs
 condC :: forall a. HasTy a => Bool :* (a :* a) :-> a
 condC = cond' (typ :: Ty a)
@@ -331,6 +332,8 @@ condPair = half Exl &&& half Exr
 -- condPair = condC @. second (twiceP Exl) &&& condC @. second (twiceP Exr)
 
 -- TODO: Rewrite condC,cond',condPair more prettily
+
+-}
 
 {--------------------------------------------------------------------
     Factoring (decomposition)
