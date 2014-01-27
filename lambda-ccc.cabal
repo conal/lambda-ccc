@@ -1,5 +1,5 @@
 Name:               lambda-ccc
-Version:            0.1
+Version:            0.1.1
 Cabal-Version:      >= 1.6
 Synopsis:           Convert lambda expressions to CCC combinators
 Category:           categories
@@ -29,7 +29,7 @@ Library
                   , template-haskell
                   , containers
                   , ty >= 0.1.5
-                  , circat >= 0.2.0
+                  , circat >= 0.2.3
   Exposed-Modules:  LambdaCCC.Misc
                     LambdaCCC.ShowUtils
                     LambdaCCC.Ty
