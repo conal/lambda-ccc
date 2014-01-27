@@ -27,7 +27,7 @@ import Prelude hiding (id,(.),not,and,or,curry,uncurry)
 
 import LambdaCCC.Ty
 import LambdaCCC.Prim hiding (xor)
-import LambdaCCC.CCC hiding ((&&&),(|||))
+import LambdaCCC.CCC hiding ((&&&),(|||),second,(***))
 import LambdaCCC.Lambda (E)
 import LambdaCCC.ToCCC (toCCC)
 
@@ -38,68 +38,38 @@ import Circat.Classes
 expToCircuit :: HasTy2 a b => E (a -> b) -> (a :> b)
 expToCircuit = cccToCircuit . toCCC
 
+#define TS (tyPSource -> PSource)
+#define CP (cccPS -> (PSource, PSource))
+
 cccToCircuit :: (a :-> b) -> (a :> b)
-cccToCircuit k@(Prim CondP) | Just k' <- expand k = cccToCircuit k'
+
 -- Category
-cccToCircuit Id                       = id
-cccToCircuit (g :. f)                 = cccToCircuit g . cccToCircuit f
+cccToCircuit Id                 = id
+cccToCircuit (g :. f)           = cccToCircuit g . cccToCircuit f
 -- Primitives
-cccToCircuit (Prim ExlP)              = exl -- TODO: Drop the redundant Exl/ExlP ??
-cccToCircuit (Prim ExrP)              = exr
-cccToCircuit (Prim NotP)              = not
-cccToCircuit (Uncurry (Prim AndP))    = and
-cccToCircuit (Uncurry (Prim OrP))     = or
-cccToCircuit (Uncurry (Prim XorP))    = xor
-cccToCircuit k@(Uncurry (Prim AddP))  | (PSource, PSource) <- cccPS k
-                                      = namedC "add"
-
--- Useful when CCC optimization is off
-cccToCircuit (Uncurry (Prim PairP))   = id
-
-cccToCircuit k@(Prim CondP)           | (PSource, PSource) <- cccPS k
-                                      = namedC "mux"
-
-cccToCircuit k@(Const (LitP b))       | (PSource, PSource) <- cccPS k
-                                      = constC b
-cccToCircuit (Const p)                = constS (primToSource p)
--- TODO: How to combine Const cases?
+cccToCircuit (Prim p)           = primToSource p
+cccToCircuit k@(Const (LitP b)) | CP <- k
+                                = constC b
+cccToCircuit (Const p)          = constS (primToSource p) -- Combine
 -- Product
-cccToCircuit Exl                      = exl
-cccToCircuit Exr                      = exr
-
-cccToCircuit (f :&&& g)               = cccToCircuit f &&& cccToCircuit g
+cccToCircuit Exl                = exl
+cccToCircuit Exr                = exr
+cccToCircuit (f :&&& g)         = cccToCircuit f &&& cccToCircuit g
 -- Coproduct
-cccToCircuit k@Inl                    | (a, _ :+ b) <- cccTys k
-                                      , PSource <- tyPSource a
-                                      , PSource <- tyPSource b
-                                      = inlC
-cccToCircuit k@Inr                    | (b, a :+ _) <- cccTys k
-                                      , PSource <- tyPSource a
-                                      , PSource <- tyPSource b
-                                      = inrC
-cccToCircuit k@(f :||| g)             | (a :+ b, c) <- cccTys k
-                                      , PSource <- tyPSource a
-                                      , PSource <- tyPSource b
-                                      , PSource <- tyPSource c
-                                      = cccToCircuit f |||* cccToCircuit g
+cccToCircuit k@Inl              | (_, TS :+ TS) <- cccTys k
+                                = inlC
+cccToCircuit k@Inr              | (_, TS :+ TS) <- cccTys k
+                                = inrC
+cccToCircuit k@(f :||| g)       | (TS :+ TS, TS) <- cccTys k
+                                = cccToCircuit f |||* cccToCircuit g
 -- Exponential
-cccToCircuit Apply                    = apply
-cccToCircuit (Curry h)                = curry (cccToCircuit h)
-cccToCircuit (Uncurry h)              = uncurry (cccToCircuit h)
+cccToCircuit Apply              = apply
+cccToCircuit (Curry h)          = curry (cccToCircuit h)
+cccToCircuit (Uncurry h)        = uncurry (cccToCircuit h)
 
 cccToCircuit ccc = error $ "cccToCircuit: not yet handled: " ++ show ccc
 
-expand :: HasTy2 a b => (a :-> b) -> Maybe (a :-> b)
-expand k@(Prim CondP) | (_,u :* v) <- cccTys k
-                      , HasTy <- tyHasTy u, HasTy <- tyHasTy v
-                      = Just condPair
-expand _ = Nothing
-
--- TODO: tweak condPair to expand one step at a time.
--- Remove condC if I can't find a way to use it.
-
---     (_,u :* v) -> cccToCircuit condPair
---     _          -> namedC "cond"
+#define TH (tyHasTy -> HasTy)
 
 -- TODO: I don't know whether to keep add. We'll probably want to build it from
 -- simpler pieces.
@@ -116,8 +86,6 @@ cccPS = tyPSource2 . cccTys
     Prim conversion
 --------------------------------------------------------------------}
 
-#define TS (tyPSource -> PSource)
-
 primToSource :: forall t. HasTy t => Prim t -> Pins t
 primToSource = flip toS typ
  where
@@ -132,8 +100,21 @@ primToSource = flip toS typ
    toS InlP  (_ :=> TS :+ TS) = inlC
    toS InrP  (_ :=> TS :+ TS) = inrC
    toS AddP  (_ :=> _ :=> TS) = curry (namedC "add")
-   toS CondP (_ :=> TS)       = namedC "mux"
+   toS CondP (_ :=> t)        = condC t
    toS p _                    = error $ "primToSource: not yet handled: " ++ show p
+
+condC :: Ty a -> (Bool :* (a :* a) :> a)
+condC (u :* v) = condPair u v
+condC TS       = muxC
+
+condPair :: Ty a -> Ty b -> Bool :* ((a :* b) :* (a :* b)) :> (a :* b)
+condPair a b = half a exl &&& half b exr
+ where
+   half :: Ty c -> (u :> c) -> (Bool :* (u :* u) :> c)
+   half t f = condC t . second (f *** f)
+
+-- condPair a b =
+--   condC a . second (exl *** exl) &&& condC b . second (exr *** exr)
 
 {--------------------------------------------------------------------
     Proofs
