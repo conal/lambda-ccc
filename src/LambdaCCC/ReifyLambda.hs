@@ -398,9 +398,9 @@ anybuER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) 
            Rewrite c m CoreExpr -> Rewrite c m g
 anybuER r = anybuR (promoteExprR r)
 
-anytdER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) =>
-           Rewrite c m CoreExpr -> Rewrite c m g
-anytdER r = anytdR (promoteExprR r)
+-- anytdER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) =>
+--            Rewrite c m CoreExpr -> Rewrite c m g
+-- anytdER r = anytdR (promoteExprR r)
 
 tryRulesBU :: [String] -> RewriteH Core
 tryRulesBU = tryR . anybuER . rules
