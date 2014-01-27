@@ -319,8 +319,8 @@ instance Show (E a) where
     showParen (p > 0) $
     showString "let " . showsPrec 0 q . showString " = " . showsPrec 0 rhs
     . showString " in " . showsPrec 0 body
-#endif
   showsPrec p (ConstE PairP _ :^ u :^ v) = showsPair p u v
+#endif
   showsPrec p (ConstE prim _ :^ u :^ v) | Just (OpInfo op fixity) <- opInfo prim =
     showsOp2' op fixity p u v
   showsPrec _ (Var (V n _)) = showString n
