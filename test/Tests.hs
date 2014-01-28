@@ -189,6 +189,7 @@ main = do print e
    e = reifyE step4cK "step4cK"
    c = toCCC e
 
+-- Diagram and Verilog
 outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()
 outGV s c = do 
             -- outGW ("png","-Gdpi=400")

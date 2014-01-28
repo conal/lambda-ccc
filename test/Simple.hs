@@ -51,6 +51,7 @@ main = do print e
    e = reifyE halfAdd "halfAdd"
    c = toCCC e
 
+-- Diagram and Verilog
 outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()
 outGV s c = do outGWith ("pdf","") s c
                outV                s c
