@@ -51,6 +51,7 @@ cccToCircuit (Prim p)           = primToSource p
 cccToCircuit k@(Const (LitP b)) | CP <- k
                                 = constC b
 cccToCircuit (Const p)          = constS (primToSource p) -- Combine
+-- cccToCircuit (Const p)          = primToConst p
 -- Product
 cccToCircuit Exl                = exl
 cccToCircuit Exr                = exr
@@ -115,6 +116,76 @@ condPair a b = half a exl &&& half b exr
 
 -- condPair a b =
 --   condC a . second (exl *** exl) &&& condC b . second (exr *** exr)
+
+-- Here's a variation
+#if 0
+#if 0
+
+primToConst :: forall a b. HasTy b => Prim b -> (a :> b)
+primToConst p = toS p typ
+ where
+   toS :: Prim b -> Ty b -> (a :> b)
+   toS (LitP b) TS            = constC    b
+   toS NotP  _                = constFun  not
+   toS AndP  _                = constFun2 and
+   toS OrP   _                = constFun2 or
+   toS XorP  _                = constFun2 xor
+   toS ExlP  _                = constFun  exl
+   toS ExrP  _                = constFun  exr
+   toS PairP _                = constFun2 id
+   toS InlP  (_ :=> TS :+ TS) = constFun  inlC
+   toS InrP  (_ :=> TS :+ TS) = constFun  inrC
+   toS AddP  (_ :=> _ :=> TS) = constFun2 (namedC "add")
+   toS CondP (_ :=> t)        = constFun  (condC t)
+   -- The rest are unreachable, but GHC doesn't know.
+   toS InlP  _                = oops
+   toS InrP  _                = oops
+   toS AddP  _                = oops
+   toS CondP _                = oops
+   oops :: a :> b
+   oops = error $ "primToSource: bad op/type: " ++ show (p, typ :: Ty b)
+
+#else
+
+primToConst :: forall a b. HasTy b => Prim b -> (a :> b)
+primToConst p = toS p
+ where
+   tb = typ :: Ty b
+   toS :: Prim b -> (a :> b)
+   toS (LitP b) | TS <- tb            = constC    b
+   toS NotP                           = constFun  not
+   toS AndP                           = constFun2 and
+   toS OrP                            = constFun2 or
+   toS XorP                           = constFun2 xor
+   toS ExlP                           = constFun  exl
+   toS ExrP                           = constFun  exr
+   toS PairP                          = constFun2 id
+   toS InlP  | (_ :=> TS :+ TS) <- tb = constFun  inlC
+   toS InrP  | (_ :=> TS :+ TS) <- tb = constFun  inrC
+   toS AddP  | (_ :=> _ :=> TS) <- tb = constFun2 (namedC "add")
+   toS CondP | (_ :=> t)        <- tb = constFun  (condC t)
+   -- The rest are unreachable, but GHC doesn't know.
+   toS InlP  = oops
+   toS InrP  = oops
+   toS AddP  = oops
+   toS CondP = oops
+   oops :: a :> b
+   oops = error $ "primToSource: bad op/type: " ++ show (p,tb)
+
+#endif
+
+-- Yet another go
+
+primToConst :: forall a b. HasTy b => Prim b -> (a :> b)
+primToConst = flip toS typ
+ where
+   toS :: Prim b -> Ty b -> (a :> b)
+   toS (LitP b) TS = constC b
+   toS p (_ :=> _) = constFun (primToSource p)
+   toS p t         = error $ "primToConst: bad (prim/type) combo: " ++ show (p,t)
+
+#endif
+
 
 {--------------------------------------------------------------------
     Proofs
