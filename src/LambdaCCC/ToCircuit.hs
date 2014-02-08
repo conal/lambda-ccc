@@ -58,12 +58,8 @@ cccToCircuit Exl                = exl
 cccToCircuit Exr                = exr
 cccToCircuit (f :&&& g)         = cccToCircuit f &&& cccToCircuit g
 -- Coproduct
-cccToCircuit k@Inl              | (_, TS :+ TS) <- cccTys k
-                                = inl
-cccToCircuit k@Inr              | (_, TS :+ TS) <- cccTys k
-                                = inr
--- cccToCircuit k@(f :||| g)       | (TS :+ TS, TS) <- cccTys k
---                                 = cccToCircuit f |||* cccToCircuit g
+cccToCircuit Inl                = inl
+cccToCircuit Inr                = inr
 cccToCircuit k@(f :||| g)       | (_, TC) <- cccTys k
                                 = cccToCircuit f |||* cccToCircuit g
 -- Exponential
@@ -90,12 +86,9 @@ tyHasCond :: Ty t -> Dict (HasCond t)
 tyHasCond Unit = Dict
 tyHasCond Bool = Dict
 tyHasCond Int  = error "tyHasCond: Int not yet handled."
-tyHasCond (a :*  b) | (Dict,Dict) <- tyHasCond2 a b = Dict
-tyHasCond (a :+  b) | (Dict,Dict) <- tyHasCond2 a b = Dict
-tyHasCond (_ :=> b) | Dict <- tyHasCond b = Dict
-
-tyHasCond2 :: Ty s -> Ty t -> (Dict (HasCond s),Dict (HasCond t))
-tyHasCond2 s t = (tyHasCond s, tyHasCond t)
+tyHasCond (TC :* TC) = Dict
+tyHasCond (TC :+ TC) = Dict
+tyHasCond (_ :=> TC) = Dict
 
 {--------------------------------------------------------------------
     Prim conversion
