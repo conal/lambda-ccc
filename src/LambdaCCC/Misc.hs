@@ -22,7 +22,7 @@ module LambdaCCC.Misc
   , Evalable(..)
   ) where
 
-import Circat.Misc (Unop, (:+), (:*))
+import Circat.Misc (Unop, Unit,(:+),(:*),(:=>))
 
 {--------------------------------------------------------------------
     Transformations
@@ -42,7 +42,7 @@ compose = foldr (.) id
     Types
 --------------------------------------------------------------------}
 
-infixr 1 :=>
+-- infixr 1 :=>
 -- infixl 6 :+
 -- infixl 7 :*
 
@@ -51,10 +51,10 @@ infixr 1 :=>
 -- types, vs the categorical counterparts (terminal object, categorical
 -- products, and coproducts).
 
-type Unit  = ()
+-- type Unit  = ()
 -- type (:*)  = (,)
 -- type (:+)  = Either
-type (:=>) = (->)
+-- type (:=>) = (->)
 
 {--------------------------------------------------------------------
     Evaluation

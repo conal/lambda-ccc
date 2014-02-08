@@ -114,6 +114,8 @@ e9 = Lam p ((a `xorE` b) # (a &&* b))   -- half-adder
  where
    (p,(a,b)) = vars2 ("a","b")
 
+-- e10 :: Bool :* ((Int :=> Bool) :* (Int :=> Bool)) -> (Int :=> Bool)
+-- e10 = \ (p,(f,g)) a -> cond (p,(f a,g a))
 
 {- Evaluations:
 
@@ -134,7 +136,7 @@ False
 
 -}
 
-{- toCCC apd to examples e3 through e9:
+{- toCCC applied to examples e3 through e9:
 
 Without Simplify and without ShowFolded:
 

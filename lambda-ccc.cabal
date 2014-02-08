@@ -25,9 +25,10 @@ Library
   Build-Depends:    base < 5
                   , ghc >= 7.6
                   , ghc-prim
-                  , hermit >= 0.2.0.0
                   , template-haskell
                   , containers
+                  , constraints
+                  , hermit >= 0.2.0.0
                   , ty >= 0.1.5
                   , circat >= 0.2.3
   Exposed-Modules:  LambdaCCC.Misc

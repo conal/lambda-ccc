@@ -24,6 +24,7 @@ module LambdaCCC.ToCircuit
   ) where
 
 import Prelude hiding (id,(.),not,and,or,curry,uncurry)
+import Data.Constraint (Dict(..))       -- TODO: replace PSourceJt with Dict or eliminate
 
 import LambdaCCC.Ty
 import LambdaCCC.Prim hiding (xor)
@@ -40,6 +41,7 @@ expToCircuit = cccToCircuit . toCCC
 
 #define TS (tyPSource -> PSource)
 #define CP (cccPS -> (PSource, PSource))
+#define TC (tyHasCond -> Dict)
 
 cccToCircuit :: (a :-> b) -> (a :> b)
 
@@ -57,10 +59,12 @@ cccToCircuit Exr                = exr
 cccToCircuit (f :&&& g)         = cccToCircuit f &&& cccToCircuit g
 -- Coproduct
 cccToCircuit k@Inl              | (_, TS :+ TS) <- cccTys k
-                                = inlC
+                                = inl
 cccToCircuit k@Inr              | (_, TS :+ TS) <- cccTys k
-                                = inrC
-cccToCircuit k@(f :||| g)       | (TS :+ TS, TS) <- cccTys k
+                                = inr
+-- cccToCircuit k@(f :||| g)       | (TS :+ TS, TS) <- cccTys k
+--                                 = cccToCircuit f |||* cccToCircuit g
+cccToCircuit k@(f :||| g)       | (_, TC) <- cccTys k
                                 = cccToCircuit f |||* cccToCircuit g
 -- Exponential
 cccToCircuit Apply              = apply
@@ -82,6 +86,17 @@ cccToCircuit ccc = error $ "cccToCircuit: not yet handled: " ++ show ccc
 cccPS :: (a :-> b) -> (PSourceJt a, PSourceJt b)
 cccPS = tyPSource2 . cccTys
 
+tyHasCond :: Ty t -> Dict (HasCond t)
+tyHasCond Unit = Dict
+tyHasCond Bool = Dict
+tyHasCond Int  = error "tyHasCond: Int not yet handled."
+tyHasCond (a :*  b) | (Dict,Dict) <- tyHasCond2 a b = Dict
+tyHasCond (a :+  b) | (Dict,Dict) <- tyHasCond2 a b = Dict
+tyHasCond (_ :=> b) | Dict <- tyHasCond b = Dict
+
+tyHasCond2 :: Ty s -> Ty t -> (Dict (HasCond s),Dict (HasCond t))
+tyHasCond2 s t = (tyHasCond s, tyHasCond t)
+
 {--------------------------------------------------------------------
     Prim conversion
 --------------------------------------------------------------------}
@@ -97,12 +112,14 @@ primToSource = flip toS typ
    toS ExlP  _                = exl
    toS ExrP  _                = exr
    toS PairP _                = curry id
-   toS InlP  (_ :=> TS :+ TS) = inlC
-   toS InrP  (_ :=> TS :+ TS) = inrC
+   toS InlP  (_ :=> TS :+ TS) = inl
+   toS InrP  (_ :=> TS :+ TS) = inr
    toS AddP  (_ :=> _ :=> TS) = curry (namedC "add")
-   toS CondP (_ :=> t)        = condC t
+--    toS CondP (_ :=> t)        = condC t
+   toS CondP (_ :=> TC)       = condC
    toS p _                    = error $ "primToSource: not yet handled: " ++ show p
 
+{-
 condC :: Ty a -> (Bool :* (a :* a) :> a)
 condC (u :* v) = condPair u v
 condC TS       = muxC
@@ -115,7 +132,7 @@ condPair a b = half a exl &&& half b exr
 
 -- condPair a b =
 --   condC a . second (exl *** exl) &&& condC b . second (exr *** exr)
-
+-}
 
 {--------------------------------------------------------------------
     Proofs
@@ -136,7 +153,7 @@ tyPSource :: Ty a -> PSourceJt a
 tyPSource Unit       = PSource
 tyPSource Bool       = PSource
 tyPSource (TS :* TS) = PSource
-tyPSource (TS :+ TS) = PSource
+-- tyPSource (TS :+ TS) = PSource
 tyPSource ty         = error $ "tyPSource: Oops -- not yet handling " ++ show ty
 
 -- TODO: a :=> b
