@@ -339,7 +339,7 @@ condPair = half Exl &&& half Exr
     Factoring (decomposition)
 --------------------------------------------------------------------}
 
-#ifdef Simplify
+#if defined Simplify || defined Sugared
 
 -- | Decompose into @g . f@, where @g@ is as small as possible, but not 'Id'.
 decompL :: HasTy2 a c => Unop (a :-> c)
@@ -363,22 +363,20 @@ decompR f                          = Id :. f
 
 instance Show (a :-> b) where
 #ifdef Sugared
-  -- showsPrec p (f :. Exl :&&& g :. Exr) = showsOp2'  "***" (3,AssocRight) p f g
-  showsPrec p (f :. Exl :&&& g :. Exr)
+  showsPrec _ (Id  :&&& Id )   = showString "dup"
+  showsPrec _ (Exr :&&& Exl)   = showString "swapP"
+  showsPrec p ((decompR -> f :. Exl) :&&& (decompR -> g :. Exr))
+    | Id        <- g           = showsApp1 "first"  p f
+    | Id        <- f           = showsApp1 "second" p g
     | Just Refl <- f `tyEq2` g = showsApp1 "twiceP" p f
     | otherwise                = showsOp2'  "***" (3,AssocRight) p f g
-  -- showsPrec p (Inl :. f :||| Inr :. g) = showsOp2'  "+++" (2,AssocRight) p f g
+  showsPrec _ (Id  :||| Id )   = showString "jam"
+  showsPrec _ (Inr :||| Inl)   = showString "swapC"
   showsPrec p (f :. Exl :||| g :. Exr)
+    | Id        <- g           = showsApp1 "left"  p f
+    | Id        <- f           = showsApp1 "right" p g
     | Just Refl <- f `tyEq2` g = showsApp1 "twiceC" p f
     | otherwise                = showsOp2'  "+++" (2,AssocRight) p f g
-  showsPrec _ (Id :&&& Id)             = showString "dup"
-  showsPrec _ (Id :||| Id)             = showString "jam"
-  showsPrec _ (Exr :&&& Exl)           = showString "swapP"
-  showsPrec _ (Inr :&&& Inl)           = showString "swapC"
-  showsPrec p (f :. Exl :&&& Exr)      = showsApp1  "first"  p f
-  showsPrec p (Exl :&&& g :. Exr)      = showsApp1  "second" p g
-  showsPrec p (Inl :. f :||| Inr)      = showsApp1  "left"   p f
-  showsPrec p (Inl :||| Inr :. g)      = showsApp1  "right"  p g
 #endif
   showsPrec _ Id          = showString "id"
   showsPrec p (g :. f)    = showsOp2'  "."  (9,AssocRight) p g f
