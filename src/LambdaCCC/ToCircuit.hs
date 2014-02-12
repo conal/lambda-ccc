@@ -20,11 +20,10 @@
 
 module LambdaCCC.ToCircuit
   ( expToCircuit, cccToCircuit
-  -- , PSourceJt(..), tyPSource, tyPSource2
   ) where
 
 import Prelude hiding (id,(.),not,and,or,curry,uncurry)
-import Data.Constraint (Dict(..))       -- TODO: replace PSourceJt with Dict or eliminate
+import Data.Constraint (Dict(..))
 
 import LambdaCCC.Ty
 import LambdaCCC.Prim hiding (xor)
@@ -39,8 +38,8 @@ import Circat.Classes
 expToCircuit :: HasTy2 a b => E (a -> b) -> (a :> b)
 expToCircuit = cccToCircuit . toCCC
 
-#define TS (tyPSource -> PSource)
-#define CP (cccPS -> (PSource, PSource))
+#define TS (tyPSource -> Dict)
+#define CP (cccPS -> (Dict, Dict))
 #define TC (tyHasCond -> Dict)
 
 cccToCircuit :: (a :-> b) -> (a :> b)
@@ -82,14 +81,6 @@ cccToCircuit ccc = error $ "cccToCircuit: not yet handled: " ++ show ccc
 cccPS :: (a :-> b) -> (PSourceJt a, PSourceJt b)
 cccPS = tyPSource2 . cccTys
 
-tyHasCond :: Ty t -> Dict (HasCond t)
-tyHasCond Unit = Dict
-tyHasCond Bool = Dict
-tyHasCond Int  = error "tyHasCond: Int not yet handled."
-tyHasCond (TC :* TC) = Dict
-tyHasCond (TC :+ TC) = Dict
-tyHasCond (_ :=> TC) = Dict
-
 {--------------------------------------------------------------------
     Prim conversion
 --------------------------------------------------------------------}
@@ -112,41 +103,17 @@ primToSource = flip toS typ
    toS CondP (_ :=> TC)       = condC
    toS p _                    = error $ "primToSource: not yet handled: " ++ show p
 
-{-
-condC :: Ty a -> (Bool :* (a :* a) :> a)
-condC (u :* v) = condPair u v
-condC TS       = muxC
-
-condPair :: Ty a -> Ty b -> Bool :* ((a :* b) :* (a :* b)) :> (a :* b)
-condPair a b = half a exl &&& half b exr
- where
-   half :: Ty c -> (u :> c) -> (Bool :* (u :* u) :> c)
-   half t f = condC t . second (f *** f)
-
--- condPair a b =
---   condC a . second (exl *** exl) &&& condC b . second (exr *** exr)
--}
-
 {--------------------------------------------------------------------
     Proofs
 --------------------------------------------------------------------}
 
--- | Judgment (proof) that @'IsSource' ('Pins' a)@
-data PSourceJt :: * -> * where
-  PSource :: IsSourceP a => PSourceJt a
-
--- TODO: shorter descriptive name
-
--- TODO: Consider a generic replacement for types like this one. Try the generic
--- Dict type from Edward K's "constraints" package. Replace PSourceJt t
--- with Dict (Pins t).
+type PSourceJt a = Dict (IsSourceP a)
 
 -- | Proof of @'IsSource' ('Pins' a)@ from @'Ty' a@
 tyPSource :: Ty a -> PSourceJt a
-tyPSource Unit       = PSource
-tyPSource Bool       = PSource
-tyPSource (TS :* TS) = PSource
--- tyPSource (TS :+ TS) = PSource
+tyPSource Unit       = Dict
+tyPSource Bool       = Dict
+-- tyPSource (TS :* TS) = Dict  -- unneeded
 tyPSource ty         = error $ "tyPSource: Oops -- not yet handling " ++ show ty
 
 -- TODO: a :=> b
@@ -155,3 +122,12 @@ tyPSource2 :: (Ty a,Ty b) -> (PSourceJt a, PSourceJt b)
 tyPSource2 (a,b) = (tyPSource a,tyPSource b)
 
 -- tyPSource2 = tyPSource *** tyPSource
+
+-- | Proof of @'HasCond t@ from @'Ty' t@
+tyHasCond :: Ty t -> Dict (HasCond t)
+tyHasCond Unit       = Dict
+tyHasCond Bool       = Dict
+tyHasCond (TC :* TC) = Dict
+tyHasCond (TC :+ TC) = Dict
+tyHasCond (_ :=> TC) = Dict
+tyHasCond Int  = error "tyHasCond: Int not yet handled."
