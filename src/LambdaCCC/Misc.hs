@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, TypeFamilies #-}
+{-# LANGUAGE TypeOperators, TypeFamilies, CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -28,11 +28,15 @@ import Circat.Misc (Unop,Binop, Unit,(:+),(:*),(:=>))
     Transformations
 --------------------------------------------------------------------}
 
--- -- | Unary transformation
--- type Unop  a = a -> a
+#if 0
 
--- -- | Binary transformation
--- type Binop a = a -> Unop a
+-- | Unary transformation
+type Unop  a = a -> a
+
+-- | Binary transformation
+type Binop a = a -> Unop a
+
+#endif
 
 -- | Compose list of unary transformations
 compose :: [Unop a] -> Unop a
@@ -42,19 +46,23 @@ compose = foldr (.) id
     Types
 --------------------------------------------------------------------}
 
--- infixr 1 :=>
--- infixl 6 :+
--- infixl 7 :*
+#if 0
 
--- TODO: Perhaps replace these definitions with a GADT to emphasize the
--- distinction between standard Haskell unit, cartesian product, and function
--- types, vs the categorical counterparts (terminal object, categorical
--- products, and coproducts).
+infixr 1 :=>
+infixl 6 :+
+infixl 7 :*
 
--- type Unit  = ()
--- type (:*)  = (,)
--- type (:+)  = Either
--- type (:=>) = (->)
+TODO: Perhaps replace these definitions with a GADT to emphasize the
+distinction between standard Haskell unit, cartesian product, and function
+types, vs the categorical counterparts (terminal object, categorical
+products, and coproducts).
+
+type Unit  = ()
+type (:*)  = (,)
+type (:+)  = Either
+type (:=>) = (->)
+
+#endif
 
 {--------------------------------------------------------------------
     Evaluation
