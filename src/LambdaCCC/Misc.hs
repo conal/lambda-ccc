@@ -22,7 +22,7 @@ module LambdaCCC.Misc
   , Evalable(..)
   ) where
 
-import Circat.Misc (Unop, Unit,(:+),(:*),(:=>))
+import Circat.Misc (Unop,Binop, Unit,(:+),(:*),(:=>))
 
 {--------------------------------------------------------------------
     Transformations
@@ -31,8 +31,8 @@ import Circat.Misc (Unop, Unit,(:+),(:*),(:=>))
 -- -- | Unary transformation
 -- type Unop  a = a -> a
 
--- | Binary transformation
-type Binop a = a -> Unop a
+-- -- | Binary transformation
+-- type Binop a = a -> Unop a
 
 -- | Compose list of unary transformations
 compose :: [Unop a] -> Unop a
