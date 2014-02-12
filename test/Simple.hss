@@ -1,7 +1,7 @@
 -- HERMIT script for Tests.hs
 
--- { rhs-of 'halfAdd ; bash }
+-- { rhs-of 'halfAddH ; bash }
 
-reify-named 'halfAdd
+reify-named 'halfAddH
 
--- consider 'halfAdd
+-- consider 'halfAddH

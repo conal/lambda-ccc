@@ -43,12 +43,21 @@ swap2 (a,b) = (not b, not a)
 halfAdd :: (Bool,Bool) -> (Bool,Bool)
 halfAdd (a,b) = (a && b, a `xor` b)
 
+-- Version with HOFs
+halfAddH :: (Bool,Bool) -> (Bool,Bool)
+halfAddH (a,b) = (foo (&&), foo xor)
+ where
+   foo :: (Bool -> Bool -> Bool) -> Bool
+   foo f = f a b
+
+-- Without the type signature on foo, I get an unhandled polymorphic type.
+
 main :: IO ()
 main = do print e
           print c
-          outGV "halfAdd" (cccToCircuit c)
+          outGV "halfAddH" (cccToCircuit c)
  where
-   e = reifyE halfAdd "halfAdd"
+   e = reifyE halfAddH "halfAddH"
    c = toCCC e
 
 -- Diagram and Verilog
