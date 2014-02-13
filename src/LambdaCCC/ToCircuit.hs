@@ -96,11 +96,10 @@ primToSource = flip toS typ
    toS ExlP  _                = exl
    toS ExrP  _                = exr
    toS PairP _                = curry id
-   toS InlP  (_ :=> TS :+ TS) = inl
-   toS InrP  (_ :=> TS :+ TS) = inr
-   toS AddP  (_ :=> _ :=> TS) = curry (namedC "add")
---    toS CondP (_ :=> t)        = condC t
+   toS InlP  _                = inl
+   toS InrP  _                = inr
    toS CondP (_ :=> TC)       = condC
+   toS AddP  (_ :=> _ :=> TS) = curry (namedC "add")
    toS p _                    = error $ "primToSource: not yet handled: " ++ show p
 
 {--------------------------------------------------------------------
@@ -128,6 +127,6 @@ tyHasCond :: Ty t -> Dict (HasCond t)
 tyHasCond Unit       = Dict
 tyHasCond Bool       = Dict
 tyHasCond (TC :* TC) = Dict
-tyHasCond (TC :+ TC) = Dict
+tyHasCond (_  :+ _ ) = Dict
 tyHasCond (_ :=> TC) = Dict
 tyHasCond Int  = error "tyHasCond: Int not yet handled."
