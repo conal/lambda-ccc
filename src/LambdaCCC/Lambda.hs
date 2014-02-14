@@ -23,7 +23,7 @@
 module LambdaCCC.Lambda
   ( xor, ifThenElse  -- From Prim
   , Name
-  , V, Pat(..), E(..)
+  , V(..), Pat(..), E(..)
   , occursVP, occursVE, occursPE
   , (@^), lam, lett
   , (#), caseEither
