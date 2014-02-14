@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures, CPP #-}
 {-# LANGUAGE PatternGuards, ViewPatterns, ConstraintKinds #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wall #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -36,7 +36,7 @@ import qualified Control.Arrow as A
 import Data.IsTy
 import Data.Proof.EQ
 
-import LambdaCCC.Misc (Unop,Evalable(..),(:*),(:+),(:=>),Eq1'(..),Eq2'(..),unsafeEq2)
+import LambdaCCC.Misc (Unop,Evalable(..),(:*),(:+),(:=>),Eq'(..),(==?))
 import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 -- import LambdaCCC.Ty
 import LambdaCCC.Prim (Prim(..)) -- ,cond,ifThenElse
@@ -84,24 +84,24 @@ data (:->) :: * -> * -> * where
 -- TODO: Try to make instances for the Category subclasses, so we don't need
 -- separate terminology. Then eliminate dup, jam, etc.
 
-instance Eq2' (:->) where
-  Id         ==== Id           = True
-  (g :. f)   ==== (g' :. f')   = g ==== g' && f ==== f'
-  Exl        ==== Exl          = True
-  Exr        ==== Exr          = True
-  (f :&&& g) ==== (f' :&&& g') = f ==== f' && g ==== g'
-  Inl        ==== Inl          = True
-  Inr        ==== Inr          = True
-  (f :||| g) ==== (f' :||| g') = f ==== f' && g ==== g'
-  DistL      ==== DistL        = True
-  Apply      ==== Apply        = True
-  Curry h    ==== Curry h'     = h ==== h'
-  Uncurry k  ==== Uncurry k'   = k ==== k'
-  Prim  p    ==== Prim  p'     = p === p'
-  Const p    ==== Const p'     = p === p'
-  _          ==== _            = False
+instance Eq' (a :-> b) (c :-> d) where
+  Id         === Id           = True
+  (g :. f)   === (g' :. f')   = g === g' && f === f'
+  Exl        === Exl          = True
+  Exr        === Exr          = True
+  (f :&&& g) === (f' :&&& g') = f === f' && g === g'
+  Inl        === Inl          = True
+  Inr        === Inr          = True
+  (f :||| g) === (f' :||| g') = f === f' && g === g'
+  DistL      === DistL        = True
+  Apply      === Apply        = True
+  Curry h    === Curry h'     = h === h'
+  Uncurry k  === Uncurry k'   = k === k'
+  Prim  p    === Prim  p'     = p === p'
+  Const p    === Const p'     = p === p'
+  _          === _            = False
 
-instance Eq (a :-> b) where (==) = (====)
+instance Eq (a :-> b) where (==) = (===)
 
 
 -- WARNING: take care with the (==) definition above. When we add constructors
@@ -219,7 +219,7 @@ swapC = Inr ||| Inl
 -- Prim (ConstP (LitP a)) &&& Prim (ConstP (LitP b)) = Prim (ConstP (LitP (a,b)))
 Exl &&& Exr = Id
 -- f . r &&& g . r == (f &&& g) . r
-(decompR -> f :. r) &&& (decompR -> g :. r') | Just Refl <- r `unsafeEq2` r'
+(decompR -> f :. r) &&& (decompR -> g :. r') | Just Refl <- r ==? r'
                                              = (f &&& g) @. r
 #endif
 f &&& g = f :&&& g
@@ -320,14 +320,14 @@ instance Show (a :-> b) where
   showsPrec p ((decompR -> f :. Exl) :&&& (decompR -> g :. Exr))
     | Id        <- g           = showsApp1 "first"  p f
     | Id        <- f           = showsApp1 "second" p g
-    | f ==== g                 = showsApp1 "twiceP" p f
+    | f === g                 = showsApp1 "twiceP" p f
     | otherwise                = showsOp2'  "***" (3,AssocRight) p f g
   showsPrec _ (Id  :||| Id )   = showString "jam"
   showsPrec _ (Inr :||| Inl)   = showString "swapC"
   showsPrec p (f :. Exl :||| g :. Exr)
     | Id        <- g           = showsApp1 "left"  p f
     | Id        <- f           = showsApp1 "right" p g
-    | f ==== g                 = showsApp1 "twiceC" p f
+    | f === g                  = showsApp1 "twiceC" p f
     | otherwise                = showsOp2'  "+++" (2,AssocRight) p f g
 #endif
   showsPrec _ Id          = showString "id"

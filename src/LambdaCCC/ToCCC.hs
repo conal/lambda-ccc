@@ -69,8 +69,8 @@ convertVar :: forall b a. V b -> Pat a -> Maybe (a :-> b)
 convertVar u = conv
  where
    conv :: forall c. Pat c -> Maybe (c :-> b)
-   conv (VarPat v) | Just Refl <- v `unsafeEq1` u = Just Id
-                   | otherwise                    = Nothing
+   conv (VarPat v) | Just Refl <- v ==? u = Just Id
+                   | otherwise            = Nothing
    conv UnitPat  = Nothing
    conv (p :# q) = ((@. Exr) <$> conv q) `mplus` ((@. Exl) <$> conv p)
    conv (p :@ q) = conv q `mplus` conv p

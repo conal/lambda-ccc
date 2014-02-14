@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, TypeFamilies, CPP #-}
+{-# LANGUAGE TypeOperators, TypeFamilies, MultiParamTypeClasses, CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -19,7 +19,7 @@
 module LambdaCCC.Misc
   ( Unop, Binop, compose
   , (:=>), (:+), (:*), Unit
-  , Eq1'(..), Eq2'(..), unsafeEq1, unsafeEq2
+  , Eq'(..), (==?)
   -- , Untyped(..)
   , Evalable(..)
   ) where
@@ -74,23 +74,22 @@ type (:=>) = (->)
     Equality
 --------------------------------------------------------------------}
 
-infix 4 ===, ====
+infix 4 ===, ==?
 
--- | Equality when we don't know that the types match
-class Eq1' f where
-  (===) :: f a -> f b -> Bool
+-- | Equality when we don't know that the types match. Important requirement:
+-- when the result is True, then it must be that a and b are the same type.
+-- See '(==?)'.
+class Eq' a b where
+  (===) :: a -> b -> Bool
 
--- | Equality when we don't know that the types match
-class Eq2' k where
-  (====) :: k a b -> k c d -> Bool
+(==?) :: Eq' a b => a -> b -> Maybe (a :=: b)
+a ==? b | a === b   = unsafeCoerce (Just Refl)
+        | otherwise = Nothing
 
-unsafeEq1 :: Eq1' f => f a -> f b -> Maybe (a :=: b)
-fa `unsafeEq1` fb | fa === fb = unsafeCoerce (Just Refl)
-                  | otherwise = Nothing
-
-unsafeEq2 :: Eq2' k => k a b -> k c d -> Maybe ((a,c) :=: (b,d))
-kab `unsafeEq2` kcd | kab ==== kcd = unsafeCoerce (Just Refl)
-                    | otherwise    = Nothing
+-- TODO: Maybe make (==?) the method and drop (===), moving the type proofs into
+-- the instances and using unsafeCoerce only where necessary. Experiment in a
+-- new branch. Alternatively, make (===) and (==?) *both* be methods, with
+-- defaults defined in terms of each other.
 
 -- newtype Untyped f = Untyped (forall a. f a)
 

@@ -1,4 +1,5 @@
-{-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
+{-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures
+           , MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -39,7 +40,7 @@ data Lit :: * -> * where
   FalseL :: Lit Bool
   TrueL  :: Lit Bool
 
-instance Eq1' Lit where
+instance Eq' (Lit a) (Lit b) where
   UnitL  === UnitL  = True
   FalseL === FalseL = True
   TrueL  === TrueL  = True
@@ -47,7 +48,7 @@ instance Eq1' Lit where
 
 instance Eq (Lit a) where (==) = (===)
 
-instance Eq1' Prim where
+instance Eq' (Prim a) (Prim b) where
   LitP a === LitP b = a === b
   NotP   === NotP   = True
   AndP   === AndP   = True

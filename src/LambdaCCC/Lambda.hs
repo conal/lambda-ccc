@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, PatternGuards #-}
-{-# LANGUAGE MagicHash, ConstraintKinds, ViewPatterns #-}
+{-# LANGUAGE MagicHash, ConstraintKinds, ViewPatterns, MultiParamTypeClasses #-}
 {-# LANGUAGE CPP #-}
 
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
@@ -72,7 +72,7 @@ varName (V name) = name
 
 instance Eq (V a) where (==) = (===)
 
-instance Eq1' V where
+instance Eq' (V a) (V b) where
   V a === V b = a == b
 
 infixr 1 :#
@@ -89,7 +89,7 @@ data Pat :: * -> * where
 
 -- TODO: Rename UnitPat and VarPat to PUnit and PVar
 
-instance Eq1' Pat where
+instance Eq' (Pat a) (Pat b) where
   UnitPat  === UnitPat    = True
   VarPat v === VarPat v'  = v === v'
   (a :# b) === (a' :# b') = a === a' && b === b'
@@ -128,10 +128,10 @@ substVP :: V a -> Pat a -> Unop (Pat b)
 substVP v p = substIn
  where
    substIn :: Unop (Pat c)
-   substIn (VarPat (unsafeEq1 v -> Just Refl)) = p
-   substIn (a :# b)                      = substIn a :# substIn b
-   substIn (a :@ b)                      = substIn a :@ substIn b
-   substIn q                             = q
+   substIn (VarPat ((v ==?) -> Just Refl)) = p
+   substIn (a :# b)                        = substIn a :# substIn b
+   substIn (a :@ b)                        = substIn a :@ substIn b
+   substIn q                               = q
 #endif
 
 infixl 9 :^
@@ -165,7 +165,7 @@ occursPE (p :@ q)   = liftA2 (||) (occursPE p) (occursPE q)
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
 -- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
 
-instance Eq1' E where
+instance Eq' (E a) (E b) where
   Var v    === Var v'     = v === v'
   ConstE x === ConstE x'  = x === x'
   (f :^ a) === (f' :^ a') = a === a' && f === f'
@@ -232,7 +232,7 @@ lam :: Pat a -> E b -> E (a -> b)
 --                , not (p `occursPE` f)
 --                = f
 
-lam p (f :^ u) | Refl : _ <- catMaybes (unsafeEq1 u <$> patToEs p)
+lam p (f :^ u) | Refl : _ <- catMaybes ((u ==?) <$> patToEs p)
                , not (p `occursPE` f)
                = f
 
@@ -360,8 +360,8 @@ lookupVar :: forall a. V a -> Env -> Maybe a
 lookupVar va = listToMaybe . catMaybes . map check
  where
    check :: Bind -> Maybe a
-   check (Bind vb b) | Just Refl <- va `unsafeEq1` vb = Just b
-                     | otherwise                      = Nothing
+   check (Bind vb b) | Just Refl <- va ==? vb = Just b
+                     | otherwise              = Nothing
 
 -- Oh, hm. I'm using a difference (Hughes) list representation. extendEnv maps
 -- UnitPat, VarPat, and PairPat to mempty, singleton, and mappend, respectively.
