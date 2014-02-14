@@ -112,10 +112,11 @@ type PSourceJt a = Dict (IsSourceP a)
 tyPSource :: Ty a -> PSourceJt a
 tyPSource Unit       = Dict
 tyPSource Bool       = Dict
--- tyPSource (TS :* TS) = Dict  -- unneeded
+tyPSource (TS :* TS) = Dict  -- still needed?
 tyPSource ty         = error $ "tyPSource: Oops -- not yet handling " ++ show ty
 
--- TODO: a :=> b
+-- That product case gets used for my CRC example when I turn off the
+-- xor/constant rewrite rules.
 
 tyPSource2 :: (Ty a,Ty b) -> (PSourceJt a, PSourceJt b)
 tyPSource2 (a,b) = (tyPSource a,tyPSource b)
