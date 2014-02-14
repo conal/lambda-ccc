@@ -82,6 +82,9 @@ data (:->) :: * -> * -> * where
 
 -- TODO: Do we really need both Prim and Const?
 
+-- TODO: Try to make instances for the Category subclasses, so we don't need
+-- separate terminology. Then eliminate dup, jam, etc.
+
 instance IsTy2 (:->) where
   type IsTy2Constraint (:->) u v = HasTy2 u v
   tyEq2 = tyEq2'
