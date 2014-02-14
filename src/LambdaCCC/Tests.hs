@@ -20,6 +20,7 @@ module LambdaCCC.Tests where
 import LambdaCCC.Misc
 import LambdaCCC.Prim
 import LambdaCCC.Lambda
+import LambdaCCC.CCC
 import LambdaCCC.ToCCC
 
 {--------------------------------------------------------------------
