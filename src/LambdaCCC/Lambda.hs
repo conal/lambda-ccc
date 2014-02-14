@@ -268,9 +268,6 @@ eitherE = Either  -- for now
 caseEither :: forall a b c . Pat a -> E c -> Pat b -> E c -> E (a :+ b) -> E c
 caseEither p u q v ab = (lam p u `eitherE` lam q v) @^ ab
 
--- casev# :: forall a b c. Addr# -> Ty a -> E c -> Addr# -> Ty b -> E c -> E (a :+ b) -> E c
--- casev# a ta q b tb r = caseEither (varPat# a ta) q (varPat# b tb) r
-
 instance Show (E a) where
 #ifdef Sugared
   showsPrec p (Either (Lam q a) (Lam r b) :^ ab) =
@@ -463,3 +460,6 @@ asPat# addr pat = varPat# addr :@ pat
 
 lamv# :: forall a b. Addr# -> E b -> E (a -> b)
 lamv# addr body = lam (VarPat (V (unpackCString# addr))) body
+
+casev# :: forall a b c. Addr# -> E c -> Addr# -> E c -> E (a :+ b) -> E c
+casev# a q b = caseEither (varPat# a) q (varPat# b)

@@ -296,9 +296,7 @@ reifyExpr =
                      varT $
                        do v <- idR
                           if local v then
-                            do let ty = varType v
-                               tye <- applyInContextT reifyType ty
-                               return $ apps varId# [ty] [varLitE v,tye]
+                            return $ apps varId# [varType v] [varLitE v]
                            else
                             fail "rVar: not a lambda-bound variable"
          -- Reify non-local variables and their polymorphic instantiations.
@@ -314,9 +312,8 @@ reifyExpr =
          rLamT = do Lam (isTyVar -> True) _ <- idR
                     lamT idR rew (arr Lam)
          rLam# = do Lam (varType -> vty) (exprType -> bodyTy) <- idR
-                    vtye <- applyInContextT reifyType vty
                     lamT idR rew $ arr $ \ v e' ->
-                      apps lamvId# [vty, bodyTy] [varLitE v,vtye,e']
+                      apps lamvId# [vty, bodyTy] [varLitE v,e']
          rLet  = do -- only NonRec for now
                     Let (NonRec (varType -> patTy) _) (exprType -> bodyTy) <- idR
                     letT reifyBind rew $ \ (patE,rhs') body' ->
@@ -347,9 +344,7 @@ reifyExpr =
                   (pat', rhs')
          varPatT# :: TranslateH Var CoreExpr
          varPatT# = do v <- idR
-                       let ty = varType v
-                       tye <- applyInContextT reifyType ty
-                       return $ apps varPatId# [ty] [varLitE v,tye]
+                       return $ apps varPatId# [varType v] [varLitE v]
          -- Reify a Core binding into a reified pattern and expression.
          -- Only handle NonRec bindings for now.
          reifyBind :: TranslateH CoreBind (CoreExpr,CoreExpr)
