@@ -25,9 +25,9 @@ module LambdaCCC.Lambda
   , Name
   , V, Pat(..), E(..)
   , occursVP, occursVE, occursPE
-  , var#, varPat#, asPat#, (@^), lam, lamv#, lett
-  , varT, constT
-  , (#), caseEither, casev#
+  , (@^), lam, lett
+  , (#), caseEither
+  , var#, lamv#, varPat#, asPat#, casev#
   , reifyE, reifyE', evalE
   , vars, vars2
   ) 
