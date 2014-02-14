@@ -21,20 +21,16 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.Lambda
-{-
   ( xor, ifThenElse  -- From Prim
   , Name
   , V, Pat(..), E(..)
   , occursVP, occursVE, occursPE
-  , varTy, patTy, expTy
-  , varHasTy, patHasTy, expHasTy
   , var#, varPat#, asPat#, (@^), lam, lamv#, lett
   , varT, constT
   , (#), caseEither, casev#
   , reifyE, reifyE', evalE
   , vars, vars2
   ) 
--}
     where
 
 import Data.Functor ((<$>))
@@ -451,3 +447,19 @@ condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))
   #-}
 
 #endif
+
+{--------------------------------------------------------------------
+    Constructors that take Addr#, for ReifyLambda
+--------------------------------------------------------------------}
+
+var# :: forall a. Addr# -> E a
+var# addr = Var (V (unpackCString# addr))
+
+varPat# :: forall a. Addr# -> Pat a
+varPat# addr = VarPat (V (unpackCString# addr))
+
+asPat# :: forall a. Addr# -> Pat a -> Pat a
+asPat# addr pat = varPat# addr :@ pat
+
+lamv# :: forall a b. Addr# -> E b -> E (a -> b)
+lamv# addr body = lam (VarPat (V (unpackCString# addr))) body
