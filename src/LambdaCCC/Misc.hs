@@ -19,10 +19,14 @@
 module LambdaCCC.Misc
   ( Unop, Binop, compose
   , (:=>), (:+), (:*), Unit
-  , Eq'(..)
+  , Eq1'(..), Eq2'(..), unsafeEq1, unsafeEq2
   -- , Untyped(..)
   , Evalable(..)
   ) where
+
+import Unsafe.Coerce (unsafeCoerce)     -- see below
+
+import Data.Proof.EQ ((:=:)(..))
 
 import Circat.Misc (Unop,Binop, Unit,(:+),(:*),(:=>))
 
@@ -70,11 +74,23 @@ type (:=>) = (->)
     Equality
 --------------------------------------------------------------------}
 
-infix 4 ===
+infix 4 ===, ====
 
 -- | Equality when we don't know that the types match
-class Eq' f where
+class Eq1' f where
   (===) :: f a -> f b -> Bool
+
+-- | Equality when we don't know that the types match
+class Eq2' k where
+  (====) :: k a b -> k c d -> Bool
+
+unsafeEq1 :: Eq1' f => f a -> f b -> Maybe (a :=: b)
+fa `unsafeEq1` fb | fa === fb = unsafeCoerce (Just Refl)
+                  | otherwise = Nothing
+
+unsafeEq2 :: Eq2' k => k a b -> k c d -> Maybe ((a,c) :=: (b,d))
+kab `unsafeEq2` kcd | kab ==== kcd = unsafeCoerce (Just Refl)
+                    | otherwise    = Nothing
 
 -- newtype Untyped f = Untyped (forall a. f a)
 

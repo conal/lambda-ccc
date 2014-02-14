@@ -16,16 +16,13 @@
 -- Primitives
 ----------------------------------------------------------------------
 
-module LambdaCCC.Prim (Prim(..),xor,ifThenElse,cond) where
-
-import Data.IsTy
+module LambdaCCC.Prim (Prim(..),Lit(..),xor,ifThenElse,cond) where
 
 import LambdaCCC.Misc
-import LambdaCCC.Ty
 
 -- | Primitives
 data Prim :: * -> * where
-  LitP          :: (Eq a, Show a) => a -> Prim a
+  LitP          :: Lit a -> Prim a
   NotP          :: Prim (Bool -> Bool)
   AndP,OrP,XorP :: Prim (Bool -> Bool -> Bool)
   AddP          :: Num  a => Prim (a -> a -> a)
@@ -37,22 +34,41 @@ data Prim :: * -> * where
   InrP          :: Prim (b -> a :+ b)
   -- More here
 
-instance Eq (Prim a) where
-  LitP a == LitP b = a == b
-  NotP   == NotP   = True
-  AndP   == AndP   = True
-  OrP    == OrP    = True
-  XorP   == XorP   = True
-  AddP   == AddP   = True
-  ExlP   == ExlP   = True
-  ExrP   == ExrP   = True
-  PairP  == PairP  = True
-  CondP  == CondP  = True
-  _      == _      = False
+data Lit :: * -> * where
+  UnitL  :: Lit ()
+  FalseL :: Lit Bool
+  TrueL  :: Lit Bool
 
-instance IsTy Prim where
-  type IsTyConstraint Prim z = HasTy z
-  tyEq = tyEq'
+instance Eq1' Lit where
+  UnitL  === UnitL  = True
+  FalseL === FalseL = True
+  TrueL  === TrueL  = True
+  _      === _      = False
+
+instance Eq (Lit a) where (==) = (===)
+
+instance Eq1' Prim where
+  LitP a === LitP b = a === b
+  NotP   === NotP   = True
+  AndP   === AndP   = True
+  OrP    === OrP    = True
+  XorP   === XorP   = True
+  AddP   === AddP   = True
+  ExlP   === ExlP   = True
+  ExrP   === ExrP   = True
+  PairP  === PairP  = True
+  CondP  === CondP  = True
+  _      === _      = False
+
+instance Eq (Prim a) where (==) = (===)
+
+instance Show (Lit a) where
+  showsPrec p UnitL  = showsPrec p ()
+  showsPrec p FalseL = showsPrec p False
+  showsPrec p TrueL  = showsPrec p True
+
+-- TODO: showsPrec p l = showsPrec p . eval
+-- I'll need to construct a proof of Show a using the constraints/Dict trick.
 
 instance Show (Prim a) where
   showsPrec p (LitP a)   = showsPrec p a
@@ -70,7 +86,7 @@ instance Show (Prim a) where
 
 instance Evalable (Prim a) where
   type ValT (Prim a) = a
-  eval (LitP x)      = x
+  eval (LitP l)      = eval l
   eval NotP          = not
   eval AndP          = (&&)
   eval OrP           = (||)
@@ -82,6 +98,12 @@ instance Evalable (Prim a) where
   eval InlP          = Left
   eval InrP          = Right
   eval CondP         = cond
+
+instance Evalable (Lit a) where
+  type ValT (Lit a) = a
+  eval UnitL  = ()
+  eval FalseL = False
+  eval TrueL  = True
 
 infixr 3 `xor`
 

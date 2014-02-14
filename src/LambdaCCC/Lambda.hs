@@ -46,8 +46,6 @@ import Data.Maybe (isJust,fromMaybe,catMaybes,listToMaybe)
 import Text.Printf (printf)
 import Debug.Trace (trace)
 
-import Unsafe.Coerce (unsafeCoerce)     -- see below
-
 import GHC.Pack (unpackCString#)
 import GHC.Prim (Addr#)
 
@@ -76,16 +74,9 @@ instance Show (V a) where
 varName :: V a -> Name
 varName (V name) = name
 
--- If two variables have the same name (in the same lexical context), then
--- assert that they have the same type. I don't know how to do this part safely
--- without introducing typed type representations (as previously).
-vEq :: V a -> V b -> Maybe (a :=: b)
-V a `vEq` V b | a == b    = unsafeCoerce (Just Refl)
-              | otherwise = Nothing
-
 instance Eq (V a) where (==) = (===)
 
-instance Eq' V where
+instance Eq1' V where
   V a === V b = a == b
 
 infixr 1 :#
@@ -102,7 +93,7 @@ data Pat :: * -> * where
 
 -- TODO: Rename UnitPat and VarPat to PUnit and PVar
 
-instance Eq' Pat where
+instance Eq1' Pat where
   UnitPat  === UnitPat    = True
   VarPat v === VarPat v'  = v === v'
   (a :# b) === (a' :# b') = a === a' && b === b'
@@ -141,7 +132,7 @@ substVP :: V a -> Pat a -> Unop (Pat b)
 substVP v p = substIn
  where
    substIn :: Unop (Pat c)
-   substIn (VarPat (vEq v -> Just Refl)) = p
+   substIn (VarPat (unsafeEq1 v -> Just Refl)) = p
    substIn (a :# b)                      = substIn a :# substIn b
    substIn (a :@ b)                      = substIn a :@ substIn b
    substIn q                             = q
@@ -178,21 +169,12 @@ occursPE (p :@ q)   = liftA2 (||) (occursPE p) (occursPE q)
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
 -- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
 
-instance Eq' E where
+instance Eq1' E where
   Var v    === Var v'     = v === v'
   ConstE x === ConstE x'  = x === x'
   (f :^ a) === (f' :^ a') = a === a' && f === f'
   Lam p e  === Lam p' e'  = p === p' && e === e'
   _        === _          = False
-
--- If two variables have the same name (in the same lexical context), then
--- assert that they have the same type. I don't know how to do this part safely
--- without introducing typed type representations (as previously).
-eEq :: E a -> E b -> Maybe (a :=: b)
-a `eEq` b | a === b   = unsafeCoerce (Just Refl)
-          | otherwise = Nothing
-
-instance Eq' Prim where (===) = error "(===) on Prim: not yet defined" -- TODO: FIX!
 
 instance Eq (E a) where (==) = (===)
 
@@ -236,7 +218,7 @@ patToE (AndPat  _ _) = error "patToE: AndPat not yet handled"
 -- Instead, generate *all* expressions for a pattern, forking at an AndPat.
 
 patToEs :: Pat a -> [E a]
-patToEs UnitPat    = pure $ ConstE (LitP ())
+patToEs UnitPat    = pure $ ConstE (LitP UnitL)
 patToEs (VarPat v) = pure $ Var v
 patToEs (p :# q)   = liftA2 (#) (patToEs p) (patToEs q)
 patToEs (p :@ q)   = patToEs p ++ patToEs q
@@ -254,7 +236,7 @@ lam :: Pat a -> E b -> E (a -> b)
 --                , not (p `occursPE` f)
 --                = f
 
-lam p (f :^ u) | Refl : _ <- catMaybes (eEq u <$> patToEs p)
+lam p (f :^ u) | Refl : _ <- catMaybes (unsafeEq1 u <$> patToEs p)
                , not (p `occursPE` f)
                = f
 
@@ -385,8 +367,8 @@ lookupVar :: forall a. V a -> Env -> Maybe a
 lookupVar va = listToMaybe . catMaybes . map check
  where
    check :: Bind -> Maybe a
-   check (Bind vb b) | Just Refl <- va `vEq` vb = Just b
-                     | otherwise                = Nothing
+   check (Bind vb b) | Just Refl <- va `unsafeEq1` vb = Just b
+                     | otherwise                      = Nothing
 
 -- Oh, hm. I'm using a difference (Hughes) list representation. extendEnv maps
 -- UnitPat, VarPat, and PairPat to mempty, singleton, and mappend, respectively.
@@ -412,7 +394,7 @@ vars2 (na,nb) = (ap :# bp, (ae,be))
 kConst :: Prim a -> String -> E a
 kConst p _msg = ConstE p
 
-kLit :: (Show a, Eq a) => a -> String -> E a
+kLit :: Lit a -> String -> E a
 kLit = kConst . LitP
 
 {-# RULES
@@ -428,14 +410,12 @@ kLit = kConst . LitP
 "reify/inl"   reifyE' Left  = kConst InlP
 "reify/inr"   reifyE' Right = kConst InrP
 "reify/if"    reifyE' cond  = kConst CondP
-"reify/false" reifyE' False = kLit False
-"reify/true"  reifyE' True  = kLit True
+
+"reify/()"    reifyE' ()    = kLit UnitL
+"reify/false" reifyE' False = kLit FalseL
+"reify/true"  reifyE' True  = kLit TrueL
  
   #-}
-
--- TODO: Generalize the false & true rules. I think I'll need to do via an
--- explicit Core transformation. I'll have to be able to find out whether the
--- type is Showable. I suppose I could handle a few known type constructors.
 
 {-# RULES
 
