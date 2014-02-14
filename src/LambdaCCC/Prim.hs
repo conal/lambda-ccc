@@ -22,7 +22,7 @@ module LambdaCCC.Prim
   , Prim(..),xor,ifThenElse,cond
   ) where
 
-import Control.Arrow ((&&&))
+-- import Control.Arrow ((&&&))
 import Data.Constraint (Dict(..))
 
 import LambdaCCC.Misc
@@ -66,10 +66,10 @@ litIsSourceP (BoolL _) = Dict
 
 #define LSo (litIsSourceP -> Dict)
 
-litSS :: Lit a -> (Dict (Show a), Dict (IsSourceP a))
-litSS = litHasShow &&& litIsSourceP
+litSS :: Lit a -> (Dict (Show a, IsSourceP a))
+litSS l | (Dict,Dict) <- (litHasShow l,litIsSourceP l) = Dict
 
-#define LS (litSS -> (Dict,Dict))
+#define LS (litSS -> Dict)
 
 instance Evalable (Lit a) where
   type ValT (Lit a) = a
