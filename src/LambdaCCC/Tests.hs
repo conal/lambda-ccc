@@ -32,13 +32,13 @@ import LambdaCCC.ToCCC
 -- for tests.
 
 notE :: Unop (E Bool)
-notE b = constT NotP :^ b
+notE b = ConstE NotP :^ b
 
 infixr 2 ||*, `xorE`
 infixr 3 &&*
 
 binop :: HasTy3 a b c => Prim (a -> b -> c) -> E a -> E b -> E c
-binop op a b = constT op :^ a :^ b
+binop op a b = ConstE op :^ a :^ b
 
 (&&*), (||*), xorE :: Binop (E Bool)
 (&&*) = binop AndP
@@ -56,10 +56,13 @@ infixl 6 +@
     Examples
 --------------------------------------------------------------------}
 
+var :: Name -> E a
+var = Var . V
+
 va,vb,vc :: E Int
-va = varT "a"
-vb = varT "b"
-vc = varT "c"
+va = var "a"
+vb = var "b"
+vc = var "c"
 
 ty1 :: Ty (Int -> Int)
 ty1 = Int :=> Int
@@ -68,7 +71,7 @@ ty2 :: Ty ((Int -> Int) :* Bool)
 ty2 = (Int :=> Int) :* Bool
 
 e1 :: E Bool
-e1 = constT (LitP False)
+e1 = ConstE (LitP (BoolL False))
 
 e2 :: E Bool
 e2 = notE e1
@@ -78,7 +81,7 @@ type a :+> b = E (a -> b)
 
 -- \ x -> not
 e3 :: Bool :+> Bool
-e3 = constT NotP
+e3 = ConstE NotP
 
 -- \ x -> x
 e4 :: Int :+> Int
