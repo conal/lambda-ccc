@@ -64,10 +64,10 @@ litIsSourceP :: Lit a -> Dict (IsSourceP a)
 litIsSourceP UnitL     = Dict
 litIsSourceP (BoolL _) = Dict
 
-litSS :: Lit a -> (Dict (Show a),Dict (IsSourceP a))
-litSS = litHasShow &&& litIsSourceP
-
 #define LSo (litIsSourceP -> Dict)
+
+litSS :: Lit a -> (Dict (Show a), Dict (IsSourceP a))
+litSS = litHasShow &&& litIsSourceP
 
 #define LS (litSS -> (Dict,Dict))
 
