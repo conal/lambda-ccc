@@ -173,6 +173,8 @@ expTy (Either f g)  = a :+ b :=> c
 expHasTy :: E a -> HasTyJt a
 expHasTy = tyHasTy . expTy
 
+#define ET (expHasTy -> HasTy)
+
 -- | A variable occurs freely in an expression
 occursVE :: V a -> E b -> Bool
 occursVE v = occ
@@ -192,7 +194,10 @@ occursPE (p :# q)   = liftA2 (||) (occursPE p) (occursPE q)
 occursPE (p :@ q)   = liftA2 (||) (occursPE p) (occursPE q)
 
 sameTyE :: E a -> E b -> Maybe (a :=: b)
-sameTyE ea eb = expTy ea `tyEq` expTy eb
+sameTyE a b = expTy a `tyEq` expTy b
+
+-- sameTyPat :: Pat a -> Pat b -> Maybe (a :=: b)
+-- sameTyPat a b = patTy a `tyEq` patTy b
 
 -- I've placed the quantifiers explicitly to reflect what I learned from GHCi
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
@@ -249,15 +254,13 @@ patToE (PairPat p q) | HasTy <- patHasTy p, HasTy <- patHasTy q
 patToE (AndPat  _ _) = error "patToE: AndPat not yet handled"
 -}
 
--- Try this instead:
+-- Instead, generate *all* expressions for a pattern, forking at an AndPat.
 
 patToEs :: Pat a -> [E a]
 patToEs UnitPat    = pure $ ConstE (LitP ()) Unit
 patToEs (VarPat v) = pure $ Var v
-patToEs (p :# q)   | HasTy <- patHasTy p, HasTy <- patHasTy q
-                   = liftA2 (#) (patToEs p) (patToEs q)
-patToEs (p :@ q)   | HasTy <- patHasTy p, HasTy <- patHasTy q
-                   = patToEs p ++ patToEs q
+patToEs (p :# q)   = liftA2 (#) (patToEs p) (patToEs q)
+patToEs (p :@ q)   = patToEs p ++ patToEs q
 
 #endif
 
@@ -277,6 +280,9 @@ lam p (f :^ u) | Just Refl <- patTy p `tyEq` expTy u
                , not (p `occursPE` f)
                = f
 
+-- TODO: Look for more efficient implementation rather than generate expressions
+-- and test for equality.
+
 -- Re-nest lambda patterns
 lam p (Lam q w :^ Var v) | occursVP v p && not (occursVE v w) =
   lam (substVP v q p) w
@@ -293,8 +299,7 @@ lett pat e body = lam pat body @^ e
 infixr 1 #
 (#) :: E a -> E b -> E (a :* b)
 -- (ConstE Exl :^ p) # (ConstE Exr :^ p') | ... = ...
-a # b | HasTy <- expHasTy a, HasTy <- expHasTy b
-      = constT PairP @^ a @^ b
+a@ET # b@ET = constT PairP @^ a @^ b
 
 -- Handle surjectivity in @^ rather than here.
 
@@ -462,6 +467,14 @@ kLit = kConst . LitP
 
  #-}
 
+#if 0
+
+condPair :: (Bool,((a,b),(a,b))) -> (a,b)
+condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))
+
+-- TODO: if-splitting has gone through a few incarnations. Re-examine, and
+-- prune away unused code.
+
 {-# RULES
  
 "if/pair" forall a b c b' c'.
@@ -478,8 +491,4 @@ kLit = kConst . LitP
 
   #-}
 
-condPair :: (Bool,((a,b),(a,b))) -> (a,b)
-condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))
-
--- TODO: if-splitting has gone through a few incarnations. Re-examine, and
--- prune away unused code.
+#endif

@@ -312,29 +312,6 @@ uncurryE (Prim PairP) = Id
 #endif
 uncurryE x = Uncurry x
 
-{-
--- Conditional. Breaks down pairs
-condC :: forall a. HasTy a => Bool :* (a :* a) :-> a
-condC = cond' (typ :: Ty a)
- where
-   cond' (u :* v) | HasTy <- tyHasTy u, HasTy <- tyHasTy v
-           = condPair
-   cond' _ = Prim CondP
-
--- TODO: Move this smarts into the smart prim constructor.
-
-condPair :: HasTy2 a b =>
-            Bool :* ((a :* b) :* (a :* b)) :-> (a :* b)
-condPair = half Exl &&& half Exr
- where
-   half f = condC @. second (twiceP f)
-
--- condPair = condC @. second (twiceP Exl) &&& condC @. second (twiceP Exr)
-
--- TODO: Rewrite condC,cond',condPair more prettily
-
--}
-
 {--------------------------------------------------------------------
     Factoring (decomposition)
 --------------------------------------------------------------------}
