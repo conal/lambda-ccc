@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiParamTypeClasses, ViewPatterns, CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -17,9 +17,68 @@
 -- Primitives
 ----------------------------------------------------------------------
 
-module LambdaCCC.Prim (Prim(..),Lit(..),xor,ifThenElse,cond) where
+module LambdaCCC.Prim
+  ( Lit(..), litSS
+  , Prim(..),xor,ifThenElse,cond
+  ) where
+
+import Control.Arrow ((&&&))
+import Data.Constraint (Dict(..))
 
 import LambdaCCC.Misc
+
+import Circat.Circuit (IsSourceP) -- :( . Disentangle!
+
+{--------------------------------------------------------------------
+    Literals
+--------------------------------------------------------------------}
+
+-- | Literals
+data Lit :: * -> * where
+  UnitL  :: Lit ()
+  BoolL  :: Bool -> Lit Bool
+
+instance Eq' (Lit a) (Lit b) where
+  UnitL   === UnitL   = True
+  BoolL x === BoolL y = x == y
+  _       === _       = False
+
+instance Eq (Lit a) where (==) = (===)
+
+litHasShow :: Lit a -> Dict (Show a)
+litHasShow UnitL     = Dict
+litHasShow (BoolL _) = Dict
+
+#define LSh (litHasShow -> Dict)
+
+-- instance Show (Lit a) where
+--   showsPrec p UnitL     = showsPrec p ()
+--   showsPrec p (BoolL b) = showsPrec p b
+
+-- instance Show (Lit a) where
+--   showsPrec p l | Dict <- litHasShow l = showsPrec p l
+
+instance Show (Lit a) where showsPrec p l@LSh = showsPrec p l
+
+litIsSourceP :: Lit a -> Dict (IsSourceP a)
+litIsSourceP UnitL     = Dict
+litIsSourceP (BoolL _) = Dict
+
+litSS :: Lit a -> (Dict (Show a),Dict (IsSourceP a))
+litSS = litHasShow &&& litIsSourceP
+
+#define LSo (litIsSourceP -> Dict)
+
+#define LS (litSS -> (Dict,Dict))
+
+instance Evalable (Lit a) where
+  type ValT (Lit a) = a
+  eval UnitL  = ()
+  eval (BoolL b) = b
+
+{--------------------------------------------------------------------
+    Primitives
+--------------------------------------------------------------------}
 
 -- | Primitives
 data Prim :: * -> * where
@@ -35,17 +94,6 @@ data Prim :: * -> * where
   InrP          :: Prim (b -> a :+ b)
   -- More here
 
-data Lit :: * -> * where
-  UnitL  :: Lit ()
-  BoolL  :: Bool -> Lit Bool
-
-instance Eq' (Lit a) (Lit b) where
-  UnitL   === UnitL   = True
-  BoolL x === BoolL y = x == y
-  _       === _       = False
-
-instance Eq (Lit a) where (==) = (===)
-
 instance Eq' (Prim a) (Prim b) where
   LitP a === LitP b = a === b
   NotP   === NotP   = True
@@ -60,13 +108,6 @@ instance Eq' (Prim a) (Prim b) where
   _      === _      = False
 
 instance Eq (Prim a) where (==) = (===)
-
-instance Show (Lit a) where
-  showsPrec p UnitL     = showsPrec p ()
-  showsPrec p (BoolL b) = showsPrec p b
-
--- TODO: showsPrec p l = showsPrec p . eval
--- I'll need to construct a proof of Show a using the constraints/Dict trick.
 
 instance Show (Prim a) where
   showsPrec p (LitP a)   = showsPrec p a
@@ -96,11 +137,6 @@ instance Evalable (Prim a) where
   eval InlP          = Left
   eval InrP          = Right
   eval CondP         = cond
-
-instance Evalable (Lit a) where
-  type ValT (Lit a) = a
-  eval UnitL  = ()
-  eval (BoolL b) = b
 
 infixr 3 `xor`
 

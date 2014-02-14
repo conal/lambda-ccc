@@ -41,6 +41,8 @@ expToCircuit = cccToCircuit . toCCC
 #define CP (cccPS -> (Dict, Dict))
 #define TC (tyHasCond -> Dict)
 
+#define LS (litSS -> (Dict,Dict))
+
 cccToCircuit :: (a :-> b) -> (a :> b)
 
 -- Category
@@ -48,8 +50,7 @@ cccToCircuit Id                 = id
 cccToCircuit (g :. f)           = cccToCircuit g . cccToCircuit f
 -- Primitives
 cccToCircuit (Prim p)           = primToSource p
-cccToCircuit k@(Const (LitP b)) -- | CP <- k
-                                = constC (eval b)
+cccToCircuit k@(Const (LitP b@LS)) = constC (eval b)
 cccToCircuit (Const p)          = constS (primToSource p) -- Combine
 -- Product
 cccToCircuit Exl                = exl
@@ -90,7 +91,7 @@ primToSource PairP = curry id
 primToSource InlP  = inl
 primToSource InrP  = inr
 primToSource CondP = condC
-primToSource AddP  = curry (namedC "add")
+-- primToSource AddP  = curry (namedC "add")
 primToSource p     = error $ "primToSource: not yet handled: " ++ show p
 
 #if 0
