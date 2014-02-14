@@ -11,7 +11,8 @@
 -- Maintainer  :  conal@tabula.com
 -- Stability   :  experimental
 -- 
--- Translate Haskell source code to CCC form
+-- Translate Haskell source code to CCC form:
+-- 
 --   hermit Translate.hs -v0 -opt=LambdaCCC.ReifyLambda +Main Translate.hss resume && ./Translate
 ----------------------------------------------------------------------
 
