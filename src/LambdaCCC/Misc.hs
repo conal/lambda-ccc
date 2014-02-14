@@ -19,6 +19,8 @@
 module LambdaCCC.Misc
   ( Unop, Binop, compose
   , (:=>), (:+), (:*), Unit
+  , Eq'(..)
+  -- , Untyped(..)
   , Evalable(..)
   ) where
 
@@ -63,6 +65,21 @@ type (:+)  = Either
 type (:=>) = (->)
 
 #endif
+
+{--------------------------------------------------------------------
+    Equality
+--------------------------------------------------------------------}
+
+infix 4 ===
+
+-- | Equality when we don't know that the types match
+class Eq' f where
+  (===) :: f a -> f b -> Bool
+
+-- newtype Untyped f = Untyped (forall a. f a)
+
+-- instance Eq' f => Eq (Untyped f) where
+--   Untyped fa == Untyped fb = fa === fb
 
 {--------------------------------------------------------------------
     Evaluation

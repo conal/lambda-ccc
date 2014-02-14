@@ -5,7 +5,7 @@
 
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -21,6 +21,7 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.Lambda
+{-
   ( xor, ifThenElse  -- From Prim
   , Name
   , V, Pat(..), E(..)
@@ -32,14 +33,20 @@ module LambdaCCC.Lambda
   , (#), caseEither, casev#
   , reifyE, reifyE', evalE
   , vars, vars2
-  ) where
+  ) 
+-}
+    where
 
+import Data.Functor ((<$>))
 import Control.Applicative (pure,liftA2)
 import Control.Monad (guard)
 import Control.Arrow ((&&&))
+import Data.Function (on)
 import Data.Maybe (isJust,fromMaybe,catMaybes,listToMaybe)
 import Text.Printf (printf)
 import Debug.Trace (trace)
+
+import Unsafe.Coerce (unsafeCoerce)     -- see below
 
 import GHC.Pack (unpackCString#)
 import GHC.Prim (Addr#)
@@ -50,7 +57,6 @@ import Data.Proof.EQ
 import LambdaCCC.Misc
 import LambdaCCC.ShowUtils
 import LambdaCCC.Prim
-import LambdaCCC.Ty
 
 -- Whether to sugar during show, including 'let'
 #define Sugared
@@ -61,24 +67,26 @@ import LambdaCCC.Ty
 -- | Variable names
 type Name = String
 
--- | Typed variable
-data V a = V Name (Ty a)
+-- | Typed variable. Phantom
+data V a = V Name
 
 instance Show (V a) where
-  -- showsPrec p (V n ty) = showString n . showString " :: " . showsPrec p ty
-  showsPrec _ (V n _) = showString n
+  showsPrec _ (V n) = showString n
 
-instance IsTy V where
-  V na tya `tyEq` V nb tyb = guard (na == nb) >> tya `tyEq` tyb
+varName :: V a -> Name
+varName (V name) = name
 
-instance Eq (V a) where
-  V na _ == V nb _ = nb == na
+-- If two variables have the same name (in the same lexical context), then
+-- assert that they have the same type. I don't know how to do this part safely
+-- without introducing typed type representations (as previously).
+vEq :: V a -> V b -> Maybe (a :=: b)
+V a `vEq` V b | a == b    = unsafeCoerce (Just Refl)
+              | otherwise = Nothing
 
-varTy :: V a -> Ty a
-varTy (V _ ty) = ty
+instance Eq (V a) where (==) = (===)
 
-varHasTy :: V a -> HasTyJt a
-varHasTy = tyHasTy . varTy
+instance Eq' V where
+  V a === V b = a == b
 
 infixr 1 :#
 infixr 8 :@
@@ -94,12 +102,14 @@ data Pat :: * -> * where
 
 -- TODO: Rename UnitPat and VarPat to PUnit and PVar
 
-instance Eq (Pat a) where
-  UnitPat  == UnitPat    = True
-  VarPat v == VarPat v'  = v == v'
-  (a :# b) == (a' :# b') = a == a' && b == b'
-  (a :@ b) == (a' :@ b') = a == a' && b == b'
-  _        == _          = False
+instance Eq' Pat where
+  UnitPat  === UnitPat    = True
+  VarPat v === VarPat v'  = v === v'
+  (a :# b) === (a' :# b') = a === a' && b === b'
+  (a :@ b) === (a' :@ b') = a === a' && b === b'
+  _        === _          = False
+
+instance Eq (Pat a) where (==) = (===)
 
 instance Show (Pat a) where
   showsPrec _ UnitPat    = showString "()"
@@ -107,19 +117,10 @@ instance Show (Pat a) where
   showsPrec p (a :# b)   = showsPair p a b
   showsPrec p (a :@ b)   = showsOp2' "@" (8,AssocRight) p a b
 
-patTy :: Pat a -> Ty a
-patTy UnitPat    = Unit
-patTy (VarPat v) = varTy v
-patTy (a :# b)   = patTy a :* patTy b
-patTy (a :@ _)   = patTy a
-
-patHasTy :: Pat a -> HasTyJt a
-patHasTy = tyHasTy . patTy
-
 -- | Does a variable occur in a pattern?
 occursVP :: V a -> Pat b -> Bool
 occursVP _ UnitPat     = False
-occursVP v (VarPat v') = isJust (v `tyEq` v')
+occursVP v (VarPat v') = varName v == varName v'
 occursVP v (a :# b)    = occursVP v a || occursVP v b
 occursVP v (a :@ b)    = occursVP v a || occursVP v b
 
@@ -140,51 +141,31 @@ substVP :: V a -> Pat a -> Unop (Pat b)
 substVP v p = substIn
  where
    substIn :: Unop (Pat c)
-   substIn (VarPat (tyEq v -> Just Refl)) = p
-   substIn (a :# b)                       = substIn a :# substIn b
-   substIn (a :@ b)                       = substIn a :@ substIn b
-   substIn q                              = q
+   substIn (VarPat (vEq v -> Just Refl)) = p
+   substIn (a :# b)                      = substIn a :# substIn b
+   substIn (a :@ b)                      = substIn a :@ substIn b
+   substIn q                             = q
 #endif
 
 infixl 9 :^
 -- | Lambda expressions
 data E :: * -> * where
   Var    :: forall a     . V a -> E a
-  ConstE :: forall a     . Prim a -> Ty a -> E a
+  ConstE :: forall a     . Prim a -> E a
   (:^)   :: forall b a   . E (a :=> b) -> E a -> E b
   Lam    :: forall a b   . Pat a -> E b -> E (a :=> b)
   Either :: forall a b c . E (a -> c) -> E (b -> c) -> E (a :+ b -> c)
 
--- | The type of an expression
-expTy :: E a -> Ty a
-expTy (Var v)       = varTy v
-expTy (ConstE _ ty) = ty
-expTy (f :^ _)      = case expTy f of _ :=> b -> b
-expTy (Lam p e)     = patTy p :=> expTy e
-expTy (Either f g)  = a :+ b :=> c
-  where
-    (a,c) = splitFunTy (expTy f)
-    (b,_) = splitFunTy (expTy g)
-
--- expTy (Either f g)  =
---   case (expTy f, expTy g) of
---     (a :=> b, _ :=> c) -> a :+ b :=> c
-
-expHasTy :: E a -> HasTyJt a
-expHasTy = tyHasTy . expTy
-
-#define ET (expHasTy -> HasTy)
-
 -- | A variable occurs freely in an expression
 occursVE :: V a -> E b -> Bool
-occursVE v = occ
+occursVE v@(V name) = occ
  where
    occ :: E c -> Bool
-   occ (Var v')     = isJust (v `tyEq` v')
-   occ (ConstE {})  = False
-   occ (f :^ e)     = occ f || occ e
-   occ (Lam p e)    = not (occursVP v p) && occ e
-   occ (Either f g) = occ f || occ g
+   occ (Var (V name')) = name == name'
+   occ (ConstE {})     = False
+   occ (f :^ e)        = occ f || occ e
+   occ (Lam p e)       = not (occursVP v p) && occ e
+   occ (Either f g)    = occ f || occ g
 
 -- | Some variable in a pattern occurs freely in an expression
 occursPE :: Pat a -> E b -> Bool
@@ -193,32 +174,29 @@ occursPE (VarPat v) = occursVE v
 occursPE (p :# q)   = liftA2 (||) (occursPE p) (occursPE q)
 occursPE (p :@ q)   = liftA2 (||) (occursPE p) (occursPE q)
 
-sameTyE :: E a -> E b -> Maybe (a :=: b)
-sameTyE a b = expTy a `tyEq` expTy b
-
--- sameTyPat :: Pat a -> Pat b -> Maybe (a :=: b)
--- sameTyPat a b = patTy a `tyEq` patTy b
-
 -- I've placed the quantifiers explicitly to reflect what I learned from GHCi
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
 -- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
 
-instance IsTy E where
-  type IsTyConstraint E z = HasTy z
-  tyEq = tyEq'
+instance Eq' E where
+  Var v    === Var v'     = v === v'
+  ConstE x === ConstE x'  = x === x'
+  (f :^ a) === (f' :^ a') = a === a' && f === f'
+  Lam p e  === Lam p' e'  = p === p' && e === e'
+  _        === _          = False
 
-instance Eq (E a) where
-  Var v      == Var v'                                   = v == v'
-  ConstE x _ == ConstE x' _                              = x == x'
-  (f :^ a)   == (f' :^ a') | Just Refl <- a `sameTyE` a' = a == a' && f == f'
-  Lam p e    == Lam p' e'                                = p == p' && e == e'
-  _          == _                                        = False
+-- If two variables have the same name (in the same lexical context), then
+-- assert that they have the same type. I don't know how to do this part safely
+-- without introducing typed type representations (as previously).
+eEq :: E a -> E b -> Maybe (a :=: b)
+a `eEq` b | a === b   = unsafeCoerce (Just Refl)
+          | otherwise = Nothing
 
--- TODO: Replace the ConstE Ty argument with a HasTy constraint for ease of use.
--- I'm waiting until I know how to construct the required dictionaries in Core.
--- 
--- Meanwhile,
+instance Eq' Prim where (===) = error "(===) on Prim: not yet defined" -- TODO: FIX!
 
+instance Eq (E a) where (==) = (===)
+
+{-
 varT :: HasTy a => Name -> E a
 varT nm = Var (V nm typ)
 
@@ -233,6 +211,7 @@ varPat# addr ty = VarPat (V (unpackCString# addr) ty)
 
 asPat# :: forall a. Addr# -> Pat a -> Pat a
 asPat# addr pat = varPat# addr (patTy pat) :@ pat
+-}
 
 infixl 9 @^
 
@@ -257,7 +236,7 @@ patToE (AndPat  _ _) = error "patToE: AndPat not yet handled"
 -- Instead, generate *all* expressions for a pattern, forking at an AndPat.
 
 patToEs :: Pat a -> [E a]
-patToEs UnitPat    = pure $ ConstE (LitP ()) Unit
+patToEs UnitPat    = pure $ ConstE (LitP ())
 patToEs (VarPat v) = pure $ Var v
 patToEs (p :# q)   = liftA2 (#) (patToEs p) (patToEs q)
 patToEs (p :@ q)   = patToEs p ++ patToEs q
@@ -275,8 +254,7 @@ lam :: Pat a -> E b -> E (a -> b)
 --                , not (p `occursPE` f)
 --                = f
 
-lam p (f :^ u) | Just Refl <- patTy p `tyEq` expTy u
-               , u `elem` patToEs p
+lam p (f :^ u) | Refl : _ <- catMaybes (eEq u <$> patToEs p)
                , not (p `occursPE` f)
                = f
 
@@ -289,8 +267,10 @@ lam p (Lam q w :^ Var v) | occursVP v p && not (occursVE v w) =
 #endif
 lam p body = Lam p body
 
+{-
 lamv# :: forall a b. Addr# -> Ty a -> E b -> E (a -> b)
 lamv# addr ty body = lam (VarPat (V (unpackCString# addr) ty)) body
+-}
 
 -- | Let expression (beta redex)
 lett :: forall a b. Pat a -> E a -> E b -> E b
@@ -299,7 +279,7 @@ lett pat e body = lam pat body @^ e
 infixr 1 #
 (#) :: E a -> E b -> E (a :* b)
 -- (ConstE Exl :^ p) # (ConstE Exr :^ p') | ... = ...
-a@ET # b@ET = constT PairP @^ a @^ b
+a # b = ConstE PairP @^ a @^ b
 
 -- Handle surjectivity in @^ rather than here.
 
@@ -310,8 +290,8 @@ eitherE = Either  -- for now
 caseEither :: forall a b c . Pat a -> E c -> Pat b -> E c -> E (a :+ b) -> E c
 caseEither p u q v ab = (lam p u `eitherE` lam q v) @^ ab
 
-casev# :: forall a b c. Addr# -> Ty a -> E c -> Addr# -> Ty b -> E c -> E (a :+ b) -> E c
-casev# a ta q b tb r = caseEither (varPat# a ta) q (varPat# b tb) r
+-- casev# :: forall a b c. Addr# -> Ty a -> E c -> Addr# -> Ty b -> E c -> E (a :+ b) -> E c
+-- casev# a ta q b tb r = caseEither (varPat# a ta) q (varPat# b tb) r
 
 instance Show (E a) where
 #ifdef Sugared
@@ -324,12 +304,12 @@ instance Show (E a) where
     showParen (p > 0) $
     showString "let " . showsPrec 0 q . showString " = " . showsPrec 0 rhs
     . showString " in " . showsPrec 0 body
-  showsPrec p (ConstE PairP _ :^ u :^ v) = showsPair p u v
+  showsPrec p (ConstE PairP :^ u :^ v) = showsPair p u v
 #endif
-  showsPrec p (ConstE prim _ :^ u :^ v) | Just (OpInfo op fixity) <- opInfo prim =
+  showsPrec p (ConstE prim :^ u :^ v) | Just (OpInfo op fixity) <- opInfo prim =
     showsOp2' op fixity p u v
-  showsPrec _ (Var (V n _)) = showString n
-  showsPrec p (ConstE c _)  = showsPrec p c
+  showsPrec _ (Var (V n)) = showString n
+  showsPrec p (ConstE c)  = showsPrec p c
   showsPrec p (u :^ v)      = showsApp p u v
   showsPrec p (Lam q e)     =
     showParen (p > 0) $
@@ -353,11 +333,11 @@ data Bind = forall a. Bind (V a) a
 -- | Variable environment
 type Env = [Bind]
 
-reifyE :: HasTy a => a -> String -> E a
-reifyE a msg = reifyE' a msg typ
+reifyE :: a -> String -> E a
+reifyE = reifyE'                        -- eliminate later
 
-reifyE' :: a -> String -> Ty a -> E a
-reifyE' _ msg _ = error (printf "Oops -- reifyE' %s was not eliminated" msg)
+reifyE' :: a -> String -> E a
+reifyE' _ msg = error (printf "Oops -- reifyE' %s was not eliminated" msg)
 {-# NOINLINE reifyE' #-}
 
 -- The artificially strange definition of reifyE' prevents it from getting
@@ -367,8 +347,8 @@ reifyE' _ msg _ = error (printf "Oops -- reifyE' %s was not eliminated" msg)
 
 {-# RULES
 
-"reify'/eval" forall e msg t. reifyE' (evalE e) msg t = e
-"eval/reify'" forall x msg t. evalE (reifyE' x msg t) = x
+"reify'/eval" forall e msg. reifyE' (evalE e) msg = e
+"eval/reify'" forall x msg. evalE (reifyE' x msg) = x
 
   #-}
 
@@ -390,7 +370,7 @@ evalE e = trace ("evalE: " ++ show e) $
 eval' :: E a -> Env -> a
 eval' (Var v)   env    = fromMaybe (error $ "eval': unbound variable: " ++ show v) $
                          lookupVar v env
-eval' (ConstE p _) _   = eval p
+eval' (ConstE p) _   = eval p
 eval' (u :^ v)  env    = (eval' u env) (eval' v env)
 eval' (Lam p e) env    = \ x -> eval' e (extendEnv p x env)
 eval' (Either f g) env = eval' f env `either` eval' g env
@@ -405,8 +385,8 @@ lookupVar :: forall a. V a -> Env -> Maybe a
 lookupVar va = listToMaybe . catMaybes . map check
  where
    check :: Bind -> Maybe a
-   check (Bind vb b) | Just Refl <- va `tyEq` vb = Just b
-                     | otherwise                 = Nothing
+   check (Bind vb b) | Just Refl <- va `vEq` vb = Just b
+                     | otherwise                = Nothing
 
 -- Oh, hm. I'm using a difference (Hughes) list representation. extendEnv maps
 -- UnitPat, VarPat, and PairPat to mempty, singleton, and mappend, respectively.
@@ -414,13 +394,12 @@ lookupVar va = listToMaybe . catMaybes . map check
 -- TODO: adopt another representation, such as Seq. Replace the explicit
 -- recursion in lookupVar with a fold or something. It's almost a mconcat.
 
-vars :: HasTy a => Name -> (Pat a, E a)
-vars = (VarPat &&& Var) . flip V typ
+vars :: Name -> (Pat a, E a)
+vars = (VarPat &&& Var) . V
 
 -- vars n = (VarPat v, Var v) where v = V n typ
 
-vars2 :: HasTy2 a b =>
-         (Name,Name) -> (Pat (a,b), (E a,E b))
+vars2 :: (Name,Name) -> (Pat (a,b), (E a,E b))
 vars2 (na,nb) = (ap :# bp, (ae,be))
  where
    (ap,ae) = vars na
@@ -430,10 +409,10 @@ vars2 (na,nb) = (ap :# bp, (ae,be))
     Rules
 --------------------------------------------------------------------}
 
-kConst :: Prim a -> String -> Ty a -> E a
-kConst p _msg ty = ConstE p ty
+kConst :: Prim a -> String -> E a
+kConst p _msg = ConstE p
 
-kLit :: (Show a, Eq a) => a -> String -> Ty a -> E a
+kLit :: (Show a, Eq a) => a -> String -> E a
 kLit = kConst . LitP
 
 {-# RULES
