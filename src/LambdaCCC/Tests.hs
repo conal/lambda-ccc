@@ -133,36 +133,57 @@ False
 
 -}
 
-{- toCCC applied to examples e3 through e9:
+{- 
 
-Without Simplify and without ShowFolded:
+Without Simplify and without Sugared:
 
-> apply . (konst not &&& id)
-> id
-> apply . (apply . (konst add &&& id) &&& id)
-> id &&& id
-> apply . (konst not &&& apply . (apply . (konst (&&) &&& apply . (konst not &&& id . exl)) &&& apply . (konst not &&& id . exr)))
-> id . exr &&& id . exl
-> apply . (apply . (konst xor &&& id . exl) &&& id . exr) &&& apply . (apply . (konst (&&) &&& id . exl) &&& id . exr)
+> toCCC e3
+apply . (const not &&& id)
+> toCCC e4
+id
+> toCCC e5
+apply . (apply . (const add &&& id) &&& id)
+> toCCC e6
+apply . (apply . (const (,) &&& id) &&& id)
+> toCCC e7
+apply . (const not &&& apply . (apply . (const (&&) &&& apply . (const not &&& id . exl)) &&& apply . (const not &&& id . exr)))
+> toCCC e8
+apply . (apply . (const (,) &&& id . exr) &&& id . exl)
+> toCCC e9
+apply . (apply . (const (,) &&& apply . (apply . (const xor &&& id . exl) &&& id . exr)) &&& apply . (apply . (const (&&) &&& id . exl) &&& id . exr))
 
 With Simplify:
 
-> not
-> id
-> apply . (add &&& id)
-> id &&& id
-> not . uncurry (&&) . (not . exl &&& not . exr)
-> exr &&& exl
-> uncurry xor &&& uncurry (&&)
+> toCCC e3
+not
+> toCCC e4
+id
+> toCCC e5
+uncurry add . (id &&& id)
+> toCCC e6
+id &&& id
+> toCCC e7
+not . uncurry (&&) . (not . exl &&& not . exr)
+> toCCC e8
+exr &&& exl
+> toCCC e9
+uncurry xor &&& uncurry (&&)
 
-With Simplify and ShowFolded:
+With Simplify and Sugared:
 
-> not
-> id
-> uncurry add . dup
-> dup
-> not . uncurry (&&) . (not *** not)
-> swapP
-> uncurry xor &&& uncurry (&&)
+> toCCC e3
+not
+> toCCC e4
+id
+> toCCC e5
+uncurry add . dup
+> toCCC e6
+dup
+> toCCC e7
+not . uncurry (&&) . twiceP not
+> toCCC e8
+swapP
+> toCCC e9
+uncurry xor &&& uncurry (&&)
 
 -}
