@@ -405,8 +405,8 @@ kLit = kConst . LitP
 "reify/if"    reifyE' cond  = kConst CondP
 
 "reify/()"    reifyE' ()    = kLit UnitL
-"reify/false" reifyE' False = kLit FalseL
-"reify/true"  reifyE' True  = kLit TrueL
+"reify/false" reifyE' False = kLit (BoolL False)
+"reify/true"  reifyE' True  = kLit (BoolL True )
  
   #-}
 

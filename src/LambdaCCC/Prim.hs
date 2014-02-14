@@ -1,5 +1,5 @@
-{-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures
-           , MultiParamTypeClasses #-}
+{-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -37,14 +37,12 @@ data Prim :: * -> * where
 
 data Lit :: * -> * where
   UnitL  :: Lit ()
-  FalseL :: Lit Bool
-  TrueL  :: Lit Bool
+  BoolL  :: Bool -> Lit Bool
 
 instance Eq' (Lit a) (Lit b) where
-  UnitL  === UnitL  = True
-  FalseL === FalseL = True
-  TrueL  === TrueL  = True
-  _      === _      = False
+  UnitL   === UnitL   = True
+  BoolL x === BoolL y = x == y
+  _       === _       = False
 
 instance Eq (Lit a) where (==) = (===)
 
@@ -64,9 +62,8 @@ instance Eq' (Prim a) (Prim b) where
 instance Eq (Prim a) where (==) = (===)
 
 instance Show (Lit a) where
-  showsPrec p UnitL  = showsPrec p ()
-  showsPrec p FalseL = showsPrec p False
-  showsPrec p TrueL  = showsPrec p True
+  showsPrec p UnitL     = showsPrec p ()
+  showsPrec p (BoolL b) = showsPrec p b
 
 -- TODO: showsPrec p l = showsPrec p . eval
 -- I'll need to construct a proof of Show a using the constraints/Dict trick.
@@ -103,8 +100,7 @@ instance Evalable (Prim a) where
 instance Evalable (Lit a) where
   type ValT (Lit a) = a
   eval UnitL  = ()
-  eval FalseL = False
-  eval TrueL  = True
+  eval (BoolL b) = b
 
 infixr 3 `xor`
 
