@@ -136,6 +136,7 @@ cccTys Const   {} = typ2
 -- Maybe parametrize this GADT by a constraint. Sadly, I'd lose the pretty infix
 -- syntax ("a :-> b").
 
+-- Homomorphic evaluation
 instance Evalable (a :-> b) where
   type ValT (a :-> b) = a :=> b
   eval Id           = id
