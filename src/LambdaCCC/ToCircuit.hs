@@ -59,7 +59,7 @@ cccToCircuit (f :&&& g)            = cccToCircuit f &&& cccToCircuit g
 -- Coproduct
 cccToCircuit Inl                   = inl
 cccToCircuit Inr                   = inr
-cccToCircuit k@(f :||| g)          = cccToCircuit f |||* cccToCircuit g
+-- cccToCircuit k@(f :||| g)          = cccToCircuit f |||* cccToCircuit g
 -- Exponential
 cccToCircuit Apply       = apply
 cccToCircuit (Curry h)   = curry (cccToCircuit h)
@@ -90,7 +90,7 @@ primToSource ExrP  = exr
 primToSource PairP = curry id
 primToSource InlP  = inl
 primToSource InrP  = inr
-primToSource CondP = condC
+-- primToSource CondP = condC
 -- primToSource AddP  = curry (namedC "add")
 primToSource p     = error $ "primToSource: not yet handled: " ++ show p
 
