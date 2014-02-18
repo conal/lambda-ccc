@@ -9,6 +9,8 @@ tarballs
 out/
 
 test/Tests
+test/Simple
+test/Translate
 
 # Mac OS generates
 .DS_Store

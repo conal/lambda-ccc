@@ -1,0 +1,11 @@
+-- HERMIT script for Tests.hs
+
+{ rhs-of 'step4dK
+; inline-names-td ['curry,'shiftL4d,'xor4,'liftA2_4,'step4d]
+; bash
+; let-unfloat ; bash  -- for the curry. sigh.
+; any-bu (apply-rules ["True/xor","xor/True","False/xor","xor/False"]) ; bash
+}
+reify-named 'step4dK
+-- consider 'step4dK_reified
+resume
