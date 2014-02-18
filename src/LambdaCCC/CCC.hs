@@ -34,6 +34,7 @@ import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 import LambdaCCC.Prim (Prim(..)) -- ,cond,ifThenElse
 
 import Circat.Category
+import Circat.Classes
 
 infix  0 :->
 
@@ -202,14 +203,13 @@ instance ProductCat (:->) where
   f &&& g = f :&&& g
 
 instance CoproductCat (:->) where
-  inl = Inl
-  inr = Inr
-  (|||) = (:|||)  -- no rewrites?
-  ldistribS = DistL                     -- TODO: rename ctor
+  inl       = Inl
+  inr       = Inr
+  (|||)     = (:|||)                                -- no rewrites?
+  ldistribS = DistL                                 -- TODO: rename ctor
   rdistribS = (swapP +++ swapP) . ldistribS . swapP -- maybe move to default.
 
 instance ClosedCat (:->) where
-  type Exp (:->) u v = u :=> v
   apply = Apply
 # ifdef Simplify
   curry (Uncurry h) = h
@@ -296,3 +296,21 @@ instance Show (a :-> b) where
   showsPrec p (Prim x)    = showsPrec p x
                             -- or: showsApp1 "prim" p x
   showsPrec p (Const w)   = showsApp1 "const" p w
+
+
+-- -- | Category with boolean operations.
+-- class ProductCat k => BoolCat k where
+--   not :: Bool `k` Bool
+--   and, or, xor :: (Bool :* Bool) `k` Bool
+
+-- prim :: Prim (a -> b) -> (a :-> b)
+
+instance BoolCat (:->) where
+  not = prim NotP
+  xor = uncurry (prim XorP)
+  and = uncurry (prim AndP)
+  or  = uncurry (prim OrP)
+
+-- etc.
+
+-- TODO: reconcile curried vs uncurried, eliminating the conversions here.
