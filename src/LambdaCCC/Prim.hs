@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
-{-# LANGUAGE MultiParamTypeClasses, ViewPatterns, CPP #-}
+{-# LANGUAGE MultiParamTypeClasses, ViewPatterns, PatternGuards, CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -73,7 +73,7 @@ litSS l | (Dict,Dict) <- (litHasShow l,litIsSourceP l) = Dict
 
 instance Evalable (Lit a) where
   type ValT (Lit a) = a
-  eval UnitL  = ()
+  eval UnitL     = ()
   eval (BoolL b) = b
 
 {--------------------------------------------------------------------
