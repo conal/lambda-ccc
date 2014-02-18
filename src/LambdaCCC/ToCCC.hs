@@ -28,8 +28,8 @@ import Data.Maybe (fromMaybe)
 import Data.Proof.EQ
 
 import LambdaCCC.Misc
-import LambdaCCC.CCC
 import LambdaCCC.Lambda
+import LambdaCCC.CCC ((:->)(Const))     -- Remaining dependency
 
 import Circat.Category
 
@@ -48,30 +48,30 @@ toCCC e = toCCC (Lam vp (e :^ ve))
    (vp,ve) = vars "ETA"
 
 -- | Convert @\ p -> e@ to CCC combinators
-convert :: forall a b. Pat a -> E b -> (a :-> b)
-convert _ (ConstE o) = Const o
-convert k (Var v) = fromMaybe (error $ "convert: unbound variable: " ++ show v) $
-                    convertVar v k
-convert k (u :^ v) = apply . (convert k u &&& convert k v)
-convert k (Lam p e) = curry (convert (k :# p) e)
+convert :: forall a b k. (CCCC k, k ~ (:->))  =>
+           Pat a -> E b -> (a `k` b)
+convert _ (ConstE o)   = Const o
+convert k (Var v)      = convertVar v k
+convert k (u :^ v)     = apply . (convert k u &&& convert k v)
+convert k (Lam p e)    = curry (convert (k :# p) e)
+convert k (Either f g) = curry ((convert' f ||| convert' g) . ldistribS)
+ where
+   convert' :: E (p :=> q) -> ((a :* p) `k` q)
+   convert' h = uncurry (convert k h)
+
+-- TODO: Handle constants in a generic manner, so we can drop the constraint that k ~ (:->).
+
 -- convert k (Case (a,p) (b,q) ab) =
 --   (convert (k :# a) p ||| convert (k :# b) q) . ldistribS . (Id &&& convert k ab)
 
--- convert k (Either f g)
---   | (HasTy,HasTy) <- funTyHasTy (expTy f), HasTy <- tyHasTy (domTy (expTy g))
---   = curry ((uncurry (convert k f) ||| uncurry (convert k g)) @. distl)
-
-convert k (Either f g) = curry ((convert' f ||| convert' g) . ldistribS)
- where
-   convert' :: E (p :=> q) -> (a :* p :-> q)
-   convert' h = uncurry (convert k h)
-
 -- Convert a variable in context
-convertVar :: forall b a. V b -> Pat a -> Maybe (a :-> b)
-convertVar u = conv
+convertVar :: forall b a k. ProductCat k =>
+              V b -> Pat a -> (a `k` b)
+convertVar u = fromMaybe (error $ "convert: unbound variable: " ++ show u) .
+               conv
  where
-   conv :: forall c. Pat c -> Maybe (c :-> b)
-   conv (VarPat v) | Just Refl <- v ==? u = Just Id
+   conv :: forall c. Pat c -> Maybe (c `k` b)
+   conv (VarPat v) | Just Refl <- v ==? u = Just id
                    | otherwise            = Nothing
    conv UnitPat  = Nothing
    conv (p :# q) = ((. exr) <$> conv q) `mplus` ((. exl) <$> conv p)
@@ -81,7 +81,7 @@ convertVar u = conv
 -- 
 --    conv (p :# q) = descend Exr q `mplus` descend Exl p
 --     where
---       descend :: (c :-> d) -> Pat d -> Maybe (c :-> b)
+--       descend :: (c `k` d) -> Pat d -> Maybe (c `k` b)
 --       descend sel r = (@. sel) <$> conv r
 
 -- Note that we try q before p. This choice cooperates with uncurrying and
