@@ -19,6 +19,8 @@
 
 module LambdaCCC.ToCCC (toCCC) where
 
+import Prelude hiding (id,(.),curry,uncurry,const)
+
 import Data.Functor ((<$>))
 import Control.Monad (mplus)
 import Data.Maybe (fromMaybe)
@@ -28,6 +30,8 @@ import Data.Proof.EQ
 import LambdaCCC.Misc
 import LambdaCCC.CCC
 import LambdaCCC.Lambda
+
+import Circat.Category
 
 {--------------------------------------------------------------------
     Conversion
@@ -48,21 +52,19 @@ convert :: forall a b. Pat a -> E b -> (a :-> b)
 convert _ (ConstE o) = Const o
 convert k (Var v) = fromMaybe (error $ "convert: unbound variable: " ++ show v) $
                     convertVar v k
-convert k (u :^ v)
-  = applyE @. (convert k u &&& convert k v)
-convert k (Lam p e)
-                     = curryE (convert (k :# p) e)
+convert k (u :^ v) = apply . (convert k u &&& convert k v)
+convert k (Lam p e) = curry (convert (k :# p) e)
 -- convert k (Case (a,p) (b,q) ab) =
---   (convert (k :# a) p ||| convert (k :# b) q) . distl . (Id &&& convert k ab)
+--   (convert (k :# a) p ||| convert (k :# b) q) . ldistribS . (Id &&& convert k ab)
 
 -- convert k (Either f g)
 --   | (HasTy,HasTy) <- funTyHasTy (expTy f), HasTy <- tyHasTy (domTy (expTy g))
---   = curryE ((uncurryE (convert k f) ||| uncurryE (convert k g)) @. distl)
+--   = curry ((uncurry (convert k f) ||| uncurry (convert k g)) @. distl)
 
-convert k (Either f g) = curryE ((convert' f ||| convert' g) @. distl)
+convert k (Either f g) = curry ((convert' f ||| convert' g) . ldistribS)
  where
    convert' :: E (p :=> q) -> (a :* p :-> q)
-   convert' h = uncurryE (convert k h)
+   convert' h = uncurry (convert k h)
 
 -- Convert a variable in context
 convertVar :: forall b a. V b -> Pat a -> Maybe (a :-> b)
@@ -72,7 +74,7 @@ convertVar u = conv
    conv (VarPat v) | Just Refl <- v ==? u = Just Id
                    | otherwise            = Nothing
    conv UnitPat  = Nothing
-   conv (p :# q) = ((@. Exr) <$> conv q) `mplus` ((@. Exl) <$> conv p)
+   conv (p :# q) = ((. exr) <$> conv q) `mplus` ((. exl) <$> conv p)
    conv (p :@ q) = conv q `mplus` conv p
 
 -- Alternatively,

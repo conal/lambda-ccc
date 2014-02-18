@@ -26,7 +26,7 @@ import Prelude hiding (id,(.),not,and,or,curry,uncurry)
 import Data.Constraint (Dict(..))
 
 import LambdaCCC.Prim hiding (xor)
-import LambdaCCC.CCC hiding ((&&&),(|||),second,(***))
+import LambdaCCC.CCC
 import LambdaCCC.Lambda (E)
 import LambdaCCC.ToCCC (toCCC)
 
@@ -46,24 +46,24 @@ expToCircuit = cccToCircuit . toCCC
 cccToCircuit :: (a :-> b) -> (a :> b)
 
 -- Category
-cccToCircuit Id                    = id
-cccToCircuit (g :. f)              = cccToCircuit g . cccToCircuit f
+cccToCircuit Id                  = id
+cccToCircuit (g :. f)            = cccToCircuit g . cccToCircuit f
 -- Primitives
-cccToCircuit (Prim p)              = primToSource p
+cccToCircuit (Prim p)            = primToSource p
 cccToCircuit (Const (LitP b@LS)) = constC (eval b)
-cccToCircuit (Const p)             = constS (primToSource p) -- Combine
+cccToCircuit (Const p)           = constS (primToSource p) -- Combine
 -- Product
-cccToCircuit Exl                   = exl
-cccToCircuit Exr                   = exr
-cccToCircuit (f :&&& g)            = cccToCircuit f &&& cccToCircuit g
+cccToCircuit Exl                 = exl
+cccToCircuit Exr                 = exr
+cccToCircuit (f :&&& g)          = cccToCircuit f &&& cccToCircuit g
 -- Coproduct
-cccToCircuit Inl                   = inl
-cccToCircuit Inr                   = inr
--- cccToCircuit k@(f :||| g)          = cccToCircuit f |||* cccToCircuit g
+cccToCircuit Inl                 = inl
+cccToCircuit Inr                 = inr
+-- cccToCircuit k@(f :||| g)     = cccToCircuit f |||* cccToCircuit g
 -- Exponential
-cccToCircuit Apply       = apply
-cccToCircuit (Curry h)   = curry (cccToCircuit h)
-cccToCircuit (Uncurry h) = uncurry (cccToCircuit h)
+cccToCircuit Apply               = apply
+cccToCircuit (Curry h)           = curry (cccToCircuit h)
+cccToCircuit (Uncurry h)         = uncurry (cccToCircuit h)
 
 cccToCircuit ccc = error $ "cccToCircuit: not yet handled: " ++ show ccc
 

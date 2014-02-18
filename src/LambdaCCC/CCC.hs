@@ -19,17 +19,9 @@
 -- GADT of CCC combinators
 ----------------------------------------------------------------------
 
-module LambdaCCC.CCC
-  ( module LambdaCCC.Misc
-  , (:->)(..)
-  , (@.), applyE, curryE, uncurryE      -- TODO: "E" --> "C"
-  , prim
-  , (&&&), (***), (+++), (|||)
-  , twiceP, twiceC
-  , dup, jam, swapP, swapC
-  , first, second, left, right, distl
-  ) where
+module LambdaCCC.CCC (module LambdaCCC.Misc, (:->)(..), prim) where
 
+import Prelude hiding (id,(.),curry,uncurry,const)
 import qualified Control.Arrow as A
 -- import Control.Applicative (liftA3)
 
@@ -41,10 +33,9 @@ import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 -- import LambdaCCC.Ty
 import LambdaCCC.Prim (Prim(..)) -- ,cond,ifThenElse
 
+import Circat.Category
+
 infix  0 :->
-infixr 3 &&&, ***
-infixr 2 |||, +++
-infixr 9 :.
 
 infixr 3 :&&&
 infixr 2 :|||
@@ -149,37 +140,35 @@ prim InlP = Inl
 prim InrP = Inr
 prim p    = Prim p
 
-infixr 9 @.
--- | Optimizing morphism composition
-(@.) :: (b :-> c) -> (a :-> b) -> (a :-> c)
-#ifdef Simplify
-Id         @. f                   = f
-g          @. Id                  = g
-(h :. g)   @. f                   = h @. (g @. f)
-Exl        @. (f :&&& _)          = f
-Exr        @. (_ :&&& g)          = g
-(f :||| _) @. Inl                 = f
-(_ :||| g) @. Inr                 = g
-Const p    @. _                   = Const p
-Apply      @. (decompL -> g :. f) = composeApply g @. f
-#endif
-g          @. f                   = g :. f
-
---  Apply    :: ((a :=> b) :* a) :-> b
+instance Category (:->) where
+  id  = Id
+  -- | Optimizing morphism composition
+# ifdef Simplify
+  Id         . f                   = f
+  g          . Id                  = g
+  (h :. g)   . f                   = h . (g . f)
+  Exl        . (f :&&& _)          = f
+  Exr        . (_ :&&& g)          = g
+  (f :||| _) . Inl                 = f
+  (_ :||| g) . Inr                 = g
+  Const p    . _                   = Const p
+  Apply      . (decompL -> g :. f) = composeApply g . f
+# endif
+  g          . f                   = g :. f
 
 #ifdef Simplify
 
 -- | @'composeApply' h == 'apply' . h@
 composeApply :: (z :-> (a :=> b) :* a) -> (z :-> b)
-composeApply (Const p :&&& f) = prim p @. f
+composeApply (Const p :&&& f) = prim p . f
 -- apply . (curry h . f &&& g) == h . (f &&& g)
-composeApply ((decompL -> (Curry h :. f)) :&&& g) = h @. (f &&& g)
-composeApply (h@Prim{} :. f    :&&& g) = uncurryE h @. (f  &&& g)
-composeApply (h@Prim{}         :&&& g) = uncurryE h @. (Id &&& g)
+composeApply ((decompL -> (Curry h :. f)) :&&& g) = h . (f &&& g)
+composeApply (h@Prim{} :. f    :&&& g) = uncurry h . (f  &&& g)
+composeApply (h@Prim{}         :&&& g) = uncurry h . (Id &&& g)
 -- apply . (curry (g . exr) &&& f) == g . f
-composeApply (Curry (decompR -> g :. Exr) :&&& f) = g @. f
+composeApply (Curry (decompR -> g :. Exr) :&&& f) = g . f
 -- apply . first f == uncurry f  -- see proof below
-composeApply (f :. Exl :&&& Exr) = uncurryE f
+composeApply (f :. Exl :&&& Exr) = uncurry f
 composeApply h = Apply :. h
 
 #endif
@@ -199,72 +188,41 @@ composeApply h = Apply :. h
 -- Note: the second Uncurry specializes the first one, but is needed for
 -- syntactic matching.
 
-dup :: a :-> a :* a
-dup = Id &&& Id
+instance ProductCat (:->) where
+  exl = Exl
+  exr = Exr
+# ifdef Simplify
+  -- Experimental: const a &&& const b == const (a,b)
+  -- Prim (ConstP (LitP a)) &&& Prim (ConstP (LitP b)) = Prim (ConstP (LitP (a,b)))
+  Exl &&& Exr = Id
+  -- f . r &&& g . r == (f &&& g) . r
+  (decompR -> f :. r) &&& (decompR -> g :. r') | Just Refl <- r ==? r'
+                                               = (f &&& g) . r
+# endif
+  f &&& g = f :&&& g
 
-jam :: a :+ a :-> a
-jam = Id ||| Id
+instance CoproductCat (:->) where
+  inl = Inl
+  inr = Inr
+  (|||) = (:|||)  -- no rewrites?
+  ldistribS = DistL                     -- TODO: rename ctor
+  rdistribS = (swapP +++ swapP) . ldistribS . swapP -- maybe move to default.
 
--- | Product swap
-swapP :: a :* b :-> b :* a
-swapP = Exr &&& Exl
-
--- | Coproduct swap
-swapC :: a :+ b :-> b :+ a
-swapC = Inr ||| Inl
-
-(&&&) :: (a :-> c) -> (a :-> d) -> (a :-> c :* d)
-#ifdef Simplify
--- Experimental: const a &&& const b == const (a,b)
--- Prim (ConstP (LitP a)) &&& Prim (ConstP (LitP b)) = Prim (ConstP (LitP (a,b)))
-Exl &&& Exr = Id
--- f . r &&& g . r == (f &&& g) . r
-(decompR -> f :. r) &&& (decompR -> g :. r') | Just Refl <- r ==? r'
-                                             = (f &&& g) @. r
-#endif
-f &&& g = f :&&& g
-
-(***) :: (a :-> c) -> (b :-> d) -> (a :* b :-> c :* d)
-f *** g = f @. Exl &&& g @. Exr
-
-twiceP :: (a :-> c)              -> (a :* a :-> c :* c)
-twiceP f = f *** f
-
-first :: (a :-> c) -> (a :* b :-> c :* b)
-first f = f *** Id
-
-second :: (b :-> d) -> (a :* b :-> a :* d)
-second g = Id *** g
-
-(|||) :: (a :-> c) -> (b :-> c) -> (a :+ b :-> c)
-(|||) = (:|||)
-
-(+++) :: (a :-> c) -> (b :-> d) -> (a :+ b :-> c :+ d)
-f +++ g = Inl @. f ||| Inr @. g
-
-twiceC :: (a :-> c)              -> (a :+ a :-> c :+ c)
-twiceC f = f +++ f
-
-left :: (a :-> c) -> (a :+ b :-> c :+ b)
-left f = f +++ Id
-
-right :: (b :-> d) -> (a :+ b :-> a :+ d)
-right g = Id +++ g
-
-distl :: a :* (b :+ c) :-> a :* b :+ a :* c
-distl = DistL
-
-applyE :: ((a :=> b) :* a) :-> b
-applyE = Apply
-
-curryE :: (a :* b :-> c) -> (a :-> (b :=> c))
-#ifdef Simplify
-curryE (Uncurry h) = h
-curryE (Prim p :. Exr) = Const p   -- FIX: not general enough
--- curry (apply . (f . exl &&& exr)) == f  -- Proof below
--- curryE (Apply :. (f :. Exl :&&& Exr)) = f
-#endif
-curryE h = Curry h
+instance ClosedCat (:->) where
+  type Exp (:->) u v = u :=> v
+  apply = Apply
+# ifdef Simplify
+  curry (Uncurry h) = h
+  curry (Prim p :. Exr) = Const p   -- FIX: not general enough
+  -- curry (apply . (f . exl &&& exr)) == f  -- Proof below
+  -- curry (Apply :. (f :. Exl :&&& Exr)) = f
+# endif
+  curry h = Curry h
+# ifdef Simplify
+  uncurry (Curry f)    = f
+  uncurry (Prim PairP) = Id
+# endif
+  uncurry x = Uncurry x
 
 -- curry/apply proof:
 -- 
@@ -280,13 +238,6 @@ curryE h = Curry h
 -- I commented out this rule. I don't think it'll ever fire, considering
 -- composeApply.
 
-uncurryE :: (a :-> (b :=> c)) -> (a :* b :-> c)
-#ifdef Simplify
-uncurryE (Curry f)    = f
-uncurryE (Prim PairP) = Id
-#endif
-uncurryE x = Uncurry x
-
 {--------------------------------------------------------------------
     Factoring (decomposition)
 --------------------------------------------------------------------}
@@ -296,14 +247,14 @@ uncurryE x = Uncurry x
 -- | Decompose into @g . f@, where @g@ is as small as possible, but not 'Id'.
 decompL :: Unop (a :-> c)
 decompL Id                         = Id
-decompL ((decompL -> h :. g) :. f) = h :. (g @. f)
+decompL ((decompL -> h :. g) :. f) = h :. (g . f)
 decompL comp@(_ :. _)              = comp
 decompL f                          = f :. Id
 
 -- | Decompose into @g . f@, where @f@ is as small as possible, but not 'Id'.
 decompR :: Unop (a :-> c)
 decompR Id                         = Id
-decompR (h :. (decompR -> g :. f)) = (h @. g) :. f
+decompR (h :. (decompR -> g :. f)) = (h . g) :. f
 decompR comp@(_ :. _)              = comp
 decompR f                          = Id :. f
 
