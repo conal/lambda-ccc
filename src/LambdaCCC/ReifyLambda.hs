@@ -1,10 +1,10 @@
 {-# LANGUAGE TemplateHaskell, TypeOperators, GADTs, KindSignatures #-}
 {-# LANGUAGE ViewPatterns, PatternGuards, LambdaCase #-}
 {-# LANGUAGE FlexibleContexts, ConstraintKinds #-}
-{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE MagicHash, CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -30,14 +30,13 @@ import Control.Arrow (arr,(>>>),(&&&))
 import qualified Data.Map as M
 import Text.Printf (printf)
 
-import qualified Language.Haskell.TH as TH (Name,mkName)
+import qualified Language.Haskell.TH as TH (Name) -- ,mkName
 import qualified Language.Haskell.TH.Syntax as TH (showName)
 
 -- GHC API
-import PrelNames (unitTyConKey,boolTyConKey,intTyConKey)
+-- import PrelNames (unitTyConKey,boolTyConKey,intTyConKey)
 
-import HERMIT.Context
-  (ReadBindings,AddBindings,HermitBindingSite(..),hermitBindings)
+import HERMIT.Context (ReadBindings(..),hermitBindings) -- ,AddBindings,HermitBindingSite
 import HERMIT.Core (Crumb(..),localFreeIdsExpr)
 import HERMIT.External
 import HERMIT.GHC hiding (mkStringExpr)
@@ -50,15 +49,15 @@ import HERMIT.Dictionary.AlphaConversion (unshadowR)
 import HERMIT.Dictionary.Common
 import HERMIT.Dictionary.Composite (simplifyR)
 import HERMIT.Dictionary.Debug (observeR)
-import HERMIT.Dictionary.GHC (rule,rules)
-import HERMIT.Dictionary.Inline (inlineNameR, inlineNamesR)
+import HERMIT.Dictionary.GHC (rules) -- rule,
+import HERMIT.Dictionary.Inline (inlineNameR) -- , inlineNamesR
 import HERMIT.Dictionary.Local (letIntroR,letFloatArgR,letFloatTopR)
 import HERMIT.Dictionary.Navigation (rhsOfT,parentOfT,bindingGroupOfT)
-import HERMIT.Dictionary.Composite (simplifyR)
+-- import HERMIT.Dictionary.Composite (simplifyR)
 import HERMIT.Dictionary.Unfold (cleanupUnfoldR) -- unfoldNameR,
 
-import LambdaCCC.Misc (Unop,Binop)
-import qualified LambdaCCC.Ty     as T
+import LambdaCCC.Misc (Unop) -- ,Binop
+-- import qualified LambdaCCC.Ty     as T
 import qualified LambdaCCC.Lambda as E
 import LambdaCCC.MkStringExpr (mkStringExpr)
 
@@ -118,6 +117,8 @@ collectTypeArgs expr = go expr []
     go (App f (Type t)) ts = go f (t:ts)
     go e 	        ts = (e, ts)
 
+#if 0
+
 unTupleTy :: Type -> Maybe [Type]
 unTupleTy (TyConApp tc tys)
   | isTupleTyCon tc && tyConArity tc == length tys = Just tys
@@ -131,6 +132,8 @@ unTupleTy _ = Nothing
 dropTyApp1 :: TH.Name -> Type -> Type
 dropTyApp1 _ (TyConApp _ [t]) = t
 dropTyApp1 _ _ = error "dropTyApp1: not a unary TyConApp"
+
+#endif
 
 {--------------------------------------------------------------------
     KURE utilities
@@ -151,7 +154,7 @@ snocPathIn mkP r = mkP >>= flip localPathR r
     HERMIT utilities
 --------------------------------------------------------------------}
 
-{-
+#if 0
 -- | Translate a pair expression.
 pairT :: (Monad m, ExtendPath c Crumb) =>
          Translate c m CoreExpr a -> Translate c m CoreExpr b
@@ -174,7 +177,7 @@ appVTysT tv h = translate $ \c ->
   where
     applyN :: Int -> (a -> a) -> a -> a
     applyN n f a = foldr ($) a (replicate n f)
--}
+#endif
 
 defR :: RewriteH Id -> RewriteH CoreExpr -> RewriteH Core
 defR rewI rewE = prunetdR (  promoteDefR (defAllR rewI rewE)
@@ -226,6 +229,8 @@ labeled label = (>>> observeR' label)
     Reification
 --------------------------------------------------------------------}
 
+#if 0
+
 type ReType = TranslateH Type CoreExpr
 
 -- | Translate a Core type t into a core expression that evaluates to a Ty t.
@@ -269,6 +274,8 @@ reifyType =
 tyTy :: CoreExpr -> Type
 tyTy = dropTyApp1 ''T.Ty . exprType
 
+#endif
+
 type ReExpr = RewriteH CoreExpr
 
 reifyExpr :: ReExpr
@@ -303,8 +310,7 @@ reifyExpr =
          rReify = do e@(collectTypeArgs -> (Var v, _)) <- idR
                      let t = exprType e
                      (str,_) <- applyInContextT mkVarName v
-                     te <- applyInContextT reifyType t
-                     return $ apps reifyId [t] [e,str,te]
+                     return $ apps reifyId [t] [e,str]
          rApp  = do App (exprType -> funTy) _ <- idR
                     appT  rew rew $ arr $ \ u' v' ->
                       let (a,b) = splitFunTy funTy in
