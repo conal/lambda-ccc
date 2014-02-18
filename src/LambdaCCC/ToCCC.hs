@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeOperators, GADTs, PatternGuards, ScopedTypeVariables #-}
-{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE ConstraintKinds, Rank2Types, CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -28,6 +28,7 @@ import Data.Maybe (fromMaybe)
 import Data.Proof.EQ
 
 import LambdaCCC.Misc
+import LambdaCCC.Prim (Prim)
 import LambdaCCC.Lambda
 import LambdaCCC.CCC ((:->)(Const))     -- Remaining dependency
 
@@ -42,22 +43,55 @@ import Circat.Category
 
 -- | Rewrite a lambda expression via CCC combinators
 toCCC :: E (a :=> b) -> (a :-> b)
-toCCC (Lam p e) = convert p e
+toCCC (Lam p e) = convert e p
 toCCC e = toCCC (Lam vp (e :^ ve))
  where
    (vp,ve) = vars "ETA"
 
+#if 0
+
 -- | Convert @\ p -> e@ to CCC combinators
-convert :: forall a b k. (CCCC k, k ~ (:->))  =>
-           Pat a -> E b -> (a `k` b)
-convert _ (ConstE o)   = Const o
-convert k (Var v)      = convertVar v k
-convert k (u :^ v)     = apply . (convert k u &&& convert k v)
-convert k (Lam p e)    = curry (convert (k :# p) e)
-convert k (Either f g) = curry ((convert' f ||| convert' g) . ldistribS)
+convert :: forall a b k. (BiCCC k, k ~ (:->))  =>
+           E b -> Pat a -> (a `k` b)
+convert (ConstE o)   _ = Const o
+convert (Var v)      k = convertVar v k
+convert (u :^ v)     k = apply . (convert u k &&& convert v k)
+convert (Lam p e)    k = curry (convert e (k :# p))
+convert (Either f g) k = curry ((convert' f ||| convert' g) . ldistribS)
  where
    convert' :: E (p :=> q) -> ((a :* p) `k` q)
-   convert' h = uncurry (convert k h)
+   convert' h = uncurry (convert h k)
+
+#else
+
+-- | Generation of CCC terms in a binding context
+type Ex b = forall a. Pat a -> (a :-> b)
+
+-- TODO:
+-- 
+--   type Ex b = forall a k. BiCCC k => Pat a -> (a `k` b)
+
+constEx  :: Prim a -> Ex a
+varEx    :: V a -> Ex a
+appEx    :: Ex (a :=> b) -> Ex a -> Ex b
+lamEx    :: Pat a -> Ex b -> Ex (a :=> b)
+eitherEx :: Ex (a -> c) -> Ex (b -> c) -> Ex (a :+ b -> c)
+
+constEx o    _ = Const o
+varEx x      k = convertVar x k
+appEx u v    k = apply . (u k &&& v k)
+lamEx p e    k = curry (e (k :# p))
+eitherEx f g k = curry ((uncurry (f k) ||| uncurry (g k)) . ldistribS)
+
+-- | Convert @\ p -> e@ to CCC combinators
+convert :: E b -> Ex b
+convert (ConstE o)   = constEx o
+convert (Var v)      = varEx v
+convert (s :^ t)     = convert s `appEx` convert t
+convert (Lam p e)    = lamEx p (convert e)
+convert (Either f g) = convert f `eitherEx` convert g
+
+#endif
 
 -- TODO: Handle constants in a generic manner, so we can drop the constraint that k ~ (:->).
 
