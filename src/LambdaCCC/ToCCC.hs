@@ -104,11 +104,22 @@ newtype Ex b = Ex { unEx :: forall a. Pat a -> (a :-> b) }
 --   type Ex b = forall a k. BiCCC k => Pat a -> (a `k` b)
 
 instance HasLambda Ex where
-  constE o    = Ex $ \ _ -> Const o
-  varE x      = Ex $ \ k -> convertVar x k
-  appE u v    = Ex $ \ k -> apply . (unEx u k &&& unEx v k)
-  lamE p u    = Ex $ \ k -> curry (unEx u (k :# p))
-  eitherE f g = Ex $ \ k -> curry ((uncurry (unEx f k) ||| uncurry (unEx g k)) . ldistribS)
+  constE o              = Ex (\ _ -> Const o)
+  varE x                = Ex (\ k -> convertVar x k)
+  appE (Ex u) (Ex v)    = Ex (\ k -> apply . (u k &&& v k))
+  lamE p (Ex u)         = Ex (\ k -> curry (u (k :# p)))
+  eitherE (Ex f) (Ex g) = Ex (\ k -> curry ((uncurry (f k) ||| uncurry (g k)) . ldistribS))
+
+-- Experiment: a universal instance
+
+newtype Lambda a = L (forall f . HasLambda f => f a)
+
+instance HasLambda Lambda where
+  constE o            = L (constE o)
+  varE x              = L (varE x)
+  appE (L u) (L v)    = L (appE u v)
+  lamE p (L u)        = L (lamE p u)
+  eitherE (L f) (L g) = L (eitherE f g)
 
 #endif
 
