@@ -17,10 +17,8 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.Misc
-  ( Unop, Binop, compose
-  , (:=>), (:+), (:*), Unit
+  ( module Circat.Misc
   , Eq'(..), (==?)
-  -- , Untyped(..)
   , Evalable(..)
   ) where
 
@@ -28,7 +26,7 @@ import Unsafe.Coerce (unsafeCoerce)     -- see below
 
 import Data.Proof.EQ ((:=:)(..))
 
-import Circat.Misc (Unop,Binop, Unit,(:+),(:*),(:=>))
+import Circat.Misc
 
 {--------------------------------------------------------------------
     Transformations
@@ -42,11 +40,11 @@ type Unop  a = a -> a
 -- | Binary transformation
 type Binop a = a -> Unop a
 
-#endif
-
 -- | Compose list of unary transformations
 compose :: [Unop a] -> Unop a
 compose = foldr (.) id
+
+#endif
 
 {--------------------------------------------------------------------
     Types
@@ -93,11 +91,6 @@ a ==? b | a === b   = unsafeCoerce (Just Refl)
 -- the instances and using unsafeCoerce only where necessary. Experiment in a
 -- new branch. Alternatively, make (===) and (==?) *both* be methods, with
 -- defaults defined in terms of each other.
-
--- newtype Untyped f = Untyped (forall a. f a)
-
--- instance Eq' f => Eq (Untyped f) where
---   Untyped fa == Untyped fb = fa === fb
 
 {--------------------------------------------------------------------
     Evaluation
