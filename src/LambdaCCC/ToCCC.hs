@@ -116,6 +116,9 @@ instance HasLambda E where
   lamE    = Lam
   eitherE = Either
 
+-- TODO: toLam :: E a -> forall expr. HasLambda expr => expr a
+-- Then convert = toLam
+
 -- TODO: Handle constants in a generic manner, so we can drop the constraint that k ~ (:->).
 
 -- convert k (Case (a,p) (b,q) ab) =
