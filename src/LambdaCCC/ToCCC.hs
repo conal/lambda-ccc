@@ -1,8 +1,9 @@
 {-# LANGUAGE TypeOperators, GADTs, PatternGuards, ScopedTypeVariables #-}
-{-# LANGUAGE ConstraintKinds, Rank2Types, CPP #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds, RankNTypes, CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -25,6 +26,8 @@ import Data.Functor ((<$>))
 import Control.Monad (mplus)
 import Data.Maybe (fromMaybe)
 
+import Control.Newtype (Newtype(..))
+
 import Data.Proof.EQ
 
 import LambdaCCC.Misc
@@ -41,13 +44,6 @@ import Circat.Category
 -- toCCC' :: E a -> (Unit :-> a)
 -- toCCC' = convert UnitPat
 
--- | Rewrite a lambda expression via CCC combinators
-toCCC :: E (a :=> b) -> (a :-> b)
-toCCC (Lam p e) = convert e p
-toCCC e = toCCC (Lam vp (e :^ ve))
- where
-   (vp,ve) = vars "ETA"
-
 #if 0
 
 -- | Convert @\ p -> e@ to CCC combinators
@@ -63,6 +59,106 @@ convert (Either f g) k = curry ((convert' f ||| convert' g) . ldistribS)
    convert' h = uncurry (convert h k)
 
 #else
+
+class HasLambda expr where
+  constE  :: Prim a -> expr a
+  varE    :: V a -> expr a
+  appE    :: expr (a :=> b) -> expr a -> expr b
+  lamE    :: Pat a -> expr b -> expr (a :=> b)
+  eitherE :: expr (a -> c) -> expr (b -> c) -> expr (a :+ b -> c)
+
+instance HasLambda E where
+  constE  = ConstE
+  varE    = Var
+  appE    = (:^)
+  lamE    = Lam
+  eitherE = Either
+
+#define WrappedEx
+
+#ifdef WrappedEx
+
+-- | Rewrite a lambda expression via CCC combinators
+toCCC :: E (a :=> b) -> (a :-> b)
+toCCC (Lam p e) = unEx (convert e) p
+toCCC e = toCCC (Lam vp (e :^ ve))
+ where
+   (vp,ve) = vars "ETA"
+
+-- | Convert @\ p -> e@ to CCC combinators
+convert :: E b -> Ex b
+convert (ConstE o)   = constE o
+convert (Var v)      = varE v
+convert (s :^ t)     = convert s `appE` convert t
+convert (Lam p e)    = lamE p (convert e)
+convert (Either f g) = convert f `eitherE` convert g
+
+constEx  :: Prim a -> Ex a
+varEx    :: V a -> Ex a
+appEx    :: Ex (a :=> b) -> Ex a -> Ex b
+lamEx    :: Pat a -> Ex b -> Ex (a :=> b)
+eitherEx :: Ex (a -> c) -> Ex (b -> c) -> Ex (a :+ b -> c)
+
+#if 0
+
+-- | Inner representation for 'Ex'
+type Ex' b = forall a. Pat a -> (a :-> b)
+
+-- | Generation of CCC terms in a binding context
+newtype Ex b = Ex { unEx :: Ex' b }
+
+inEx :: (Ex' b -> Ex' c) -> (Ex b -> Ex c)
+inEx f' b = Ex (f' (unEx b))
+
+inEx2 :: (Ex' b -> Ex' c -> Ex' d) -> (Ex b -> Ex c -> Ex d)
+inEx2 f' b c = Ex (f' (unEx b) (unEx c))
+
+-- Note: the universal in Ex' prevents the following standard definitions from type-checking:
+--
+--   inEx  =   Ex <~ unEx
+--   inEx2 = inEx <~ unEx
+
+constEx o =   Ex  $          \ _ -> Const o
+varEx x   =   Ex  $          \ k -> convertVar x k
+appEx     = inEx2 $ \ u v -> \ k -> apply . (u k &&& v k)
+lamEx p   = inEx  $ \ u   -> \ k -> curry (u (k :# p))
+eitherEx  = inEx2 $ \ f g -> \ k -> curry ((uncurry (f k) ||| uncurry (g k)) . ldistribS)
+
+#else
+
+-- | Generation of CCC terms in a binding context
+newtype Ex b = Ex { unEx :: forall a. Pat a -> (a :-> b) }
+
+-- TODO:
+-- 
+--   type Ex b = forall a k. BiCCC k => Pat a -> (a `k` b)
+
+constEx o    = Ex $ \ _ -> Const o
+varEx x      = Ex $ \ k -> convertVar x k
+appEx u v    = Ex $ \ k -> apply . (unEx u k &&& unEx v k)
+lamEx p u    = Ex $ \ k -> curry (unEx u (k :# p))
+eitherEx f g = Ex $ \ k -> curry ((uncurry (unEx f k) ||| uncurry (unEx g k)) . ldistribS)
+
+#endif
+
+instance HasLambda Ex where
+  constE  = constEx
+  varE    = varEx
+  appE    = appEx
+  lamE    = lamEx
+  eitherE = eitherEx
+
+#else
+
+-- toCCC' :: E a -> (Unit :-> a)
+-- toCCC' = convert UnitPat
+
+-- | Rewrite a lambda expression via CCC combinators
+toCCC :: E (a :=> b) -> (a :-> b)
+toCCC (Lam p e) = convert e p
+toCCC e = toCCC (Lam vp (e :^ ve))
+ where
+   (vp,ve) = vars "ETA"
 
 -- | Generation of CCC terms in a binding context
 type Ex b = forall a. Pat a -> (a :-> b)
@@ -102,19 +198,7 @@ convert (Either f g) = convert f `eitherEx` convert g
 
 #endif
 
-class HasLambda expr where
-  constE  :: Prim a -> expr a
-  varE    :: V a -> expr a
-  appE    :: expr (a :=> b) -> expr a -> expr b
-  lamE    :: Pat a -> expr b -> expr (a :=> b)
-  eitherE :: expr (a -> c) -> expr (b -> c) -> expr (a :+ b -> c)
-
-instance HasLambda E where
-  constE  = ConstE
-  varE    = Var
-  appE    = (:^)
-  lamE    = Lam
-  eitherE = Either
+#endif
 
 -- TODO: toLam :: E a -> forall expr. HasLambda expr => expr a
 -- Then convert = toLam
