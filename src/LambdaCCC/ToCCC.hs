@@ -17,7 +17,7 @@
 -- Convert lambda expressions to CCC combinators
 ----------------------------------------------------------------------
 
-module LambdaCCC.ToCCC (toCCC) where
+module LambdaCCC.ToCCC (toCCC, HasLambda(..)) where
 
 import Prelude hiding (id,(.),curry,uncurry,const)
 
@@ -91,7 +91,30 @@ convert (s :^ t)     = convert s `appEx` convert t
 convert (Lam p e)    = lamEx p (convert e)
 convert (Either f g) = convert f `eitherEx` convert g
 
+-- instance HasLambda Ex where
+--   constE  = constEx
+--   varE    = varEx
+--   appE    = appEx
+--   lamE    = lamEx
+--   eitherE = eitherEx
+
+-- Oops. Ex is a type synonym, not a constructor. I'd have to use a newtype.
+
 #endif
+
+class HasLambda expr where
+  constE  :: Prim a -> expr a
+  varE    :: V a -> expr a
+  appE    :: expr (a :=> b) -> expr a -> expr b
+  lamE    :: Pat a -> expr b -> expr (a :=> b)
+  eitherE :: expr (a -> c) -> expr (b -> c) -> expr (a :+ b -> c)
+
+instance HasLambda E where
+  constE  = ConstE
+  varE    = Var
+  appE    = (:^)
+  lamE    = Lam
+  eitherE = Either
 
 -- TODO: Handle constants in a generic manner, so we can drop the constraint that k ~ (:->).
 
