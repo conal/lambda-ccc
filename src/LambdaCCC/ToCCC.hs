@@ -67,27 +67,30 @@ convert (Either f g) k = curry ((convert' f ||| convert' g) . ldistribS)
 
 #else
 
-class HasLambda expr where
-  constE  :: Prim a -> expr a
-  varE    :: V a -> expr a
-  appE    :: expr (a :=> b) -> expr a -> expr b
-  lamE    :: Pat a -> expr b -> expr (a :=> b)
-  eitherE :: expr (a -> c) -> expr (b -> c) -> expr (a :+ b -> c)
+infixl 9 @@
+infixr 2 ||||
+
+class HasLambda e where
+  constL :: Prim a -> e a
+  varL   :: V a -> e a
+  (@@)   :: e (a :=> b) -> e a -> e b
+  lamL   :: Pat a -> e b -> e (a :=> b)
+  (||||) :: e (a -> c) -> e (b -> c) -> e (a :+ b -> c)
 
 instance HasLambda E where
-  constE  = ConstE
-  varE    = Var
-  appE    = (:^)
-  lamE    = Lam
-  eitherE = Either
+  constL = ConstE
+  varL   = Var
+  (@@)   = (:^)
+  lamL   = Lam
+  (||||) = Either
 
 -- | Convert from 'E' to any 'HasLambda'
 convertE :: HasLambda ex => E b -> ex b
-convertE (ConstE o)   = constE o
-convertE (Var v)      = varE v
-convertE (s :^ t)     = convertE s `appE` convertE t
-convertE (Lam p e)    = lamE p (convertE e)
-convertE (Either f g) = convertE f `eitherE` convertE g
+convertE (ConstE o)   = constL o
+convertE (Var v)      = varL v
+convertE (s :^ t)     = convertE s @@ convertE t
+convertE (Lam p e)    = lamL p (convertE e)
+convertE (Either f g) = convertE f |||| convertE g
 
 -- | Rewrite a lambda expression via CCC combinators
 toCCC :: E (a :=> b) -> (a :-> b)
@@ -104,22 +107,22 @@ newtype Ex b = Ex { unEx :: forall a. Pat a -> (a :-> b) }
 --   type Ex b = forall a k. BiCCC k => Pat a -> (a `k` b)
 
 instance HasLambda Ex where
-  constE o              = Ex (\ _ -> Const o)
-  varE x                = Ex (\ k -> convertVar x k)
-  appE (Ex u) (Ex v)    = Ex (\ k -> apply . (u k &&& v k))
-  lamE p (Ex u)         = Ex (\ k -> curry (u (k :# p)))
-  eitherE (Ex f) (Ex g) = Ex (\ k -> curry ((uncurry (f k) ||| uncurry (g k)) . ldistribS))
+  constL o       = Ex (\ _ -> Const o)
+  varL x         = Ex (\ k -> convertVar x k)
+  Ex u @@ Ex v   = Ex (\ k -> apply . (u k &&& v k))
+  lamL p (Ex u)  = Ex (\ k -> curry (u (k :# p)))
+  Ex f |||| Ex g = Ex (\ k -> curry ((uncurry (f k) ||| uncurry (g k)) . ldistribS))
 
 -- Experiment: a universal instance
 
 newtype Lambda a = L (forall f . HasLambda f => f a)
 
 instance HasLambda Lambda where
-  constE o            = L (constE o)
-  varE x              = L (varE x)
-  appE (L u) (L v)    = L (appE u v)
-  lamE p (L u)        = L (lamE p u)
-  eitherE (L f) (L g) = L (eitherE f g)
+  constL o     = L (constL o)
+  varL x       = L (varL x)
+  L u @@ L v   = L (u @@ v)
+  lamL p (L u) = L (lamL p u)
+  L f |||| L g = L (f |||| g)
 
 #endif
 
