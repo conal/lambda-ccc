@@ -18,7 +18,7 @@
 -- Convert lambda expressions to CCC combinators
 ----------------------------------------------------------------------
 
-module LambdaCCC.ToCCC (toCCC, HasLambda(..)) where
+module LambdaCCC.ToCCC (toCCC {-, HasLambda(..) -}) where
 
 import Prelude hiding (id,(.),curry,uncurry,const)
 
@@ -42,7 +42,16 @@ import Circat.Category
 -- toCCC' :: E a -> (Unit :-> a)
 -- toCCC' = convert UnitPat
 
-#if 0
+-- #define PlainConvert
+
+#ifdef PlainConvert
+
+-- | Rewrite a lambda expression via CCC combinators
+toCCC :: E (a :=> b) -> (a :-> b)
+toCCC (Lam p e) = convert e p
+toCCC e = toCCC (Lam vp (e :^ ve))
+ where
+   (vp,ve) = vars "ETA"
 
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: forall a b k. (BiCCC k, k ~ (:->))  =>
@@ -72,57 +81,20 @@ instance HasLambda E where
   lamE    = Lam
   eitherE = Either
 
-#define WrappedEx
-
-#ifdef WrappedEx
+-- | Convert from 'E' to any 'HasLambda'
+toLam :: HasLambda ex => E b -> ex b
+toLam (ConstE o)   = constE o
+toLam (Var v)      = varE v
+toLam (s :^ t)     = toLam s `appE` toLam t
+toLam (Lam p e)    = lamE p (toLam e)
+toLam (Either f g) = toLam f `eitherE` toLam g
 
 -- | Rewrite a lambda expression via CCC combinators
 toCCC :: E (a :=> b) -> (a :-> b)
-toCCC (Lam p e) = unEx (convert e) p
+toCCC (Lam p e) = unEx (toLam e) p
 toCCC e = toCCC (Lam vp (e :^ ve))
  where
    (vp,ve) = vars "ETA"
-
--- | Convert @\ p -> e@ to CCC combinators
-convert :: E b -> Ex b
-convert (ConstE o)   = constE o
-convert (Var v)      = varE v
-convert (s :^ t)     = convert s `appE` convert t
-convert (Lam p e)    = lamE p (convert e)
-convert (Either f g) = convert f `eitherE` convert g
-
-constEx  :: Prim a -> Ex a
-varEx    :: V a -> Ex a
-appEx    :: Ex (a :=> b) -> Ex a -> Ex b
-lamEx    :: Pat a -> Ex b -> Ex (a :=> b)
-eitherEx :: Ex (a -> c) -> Ex (b -> c) -> Ex (a :+ b -> c)
-
-#if 0
-
--- | Inner representation for 'Ex'
-type Ex' b = forall a. Pat a -> (a :-> b)
-
--- | Generation of CCC terms in a binding context
-newtype Ex b = Ex { unEx :: Ex' b }
-
-inEx :: (Ex' b -> Ex' c) -> (Ex b -> Ex c)
-inEx f' b = Ex (f' (unEx b))
-
-inEx2 :: (Ex' b -> Ex' c -> Ex' d) -> (Ex b -> Ex c -> Ex d)
-inEx2 f' b c = Ex (f' (unEx b) (unEx c))
-
--- Note: the universal in Ex' prevents the following standard definitions from type-checking:
---
---   inEx  =   Ex <~ unEx
---   inEx2 = inEx <~ unEx
-
-constEx o =   Ex  $          \ _ -> Const o
-varEx x   =   Ex  $          \ k -> convertVar x k
-appEx     = inEx2 $ \ u v -> \ k -> apply . (u k &&& v k)
-lamEx p   = inEx  $ \ u   -> \ k -> curry (u (k :# p))
-eitherEx  = inEx2 $ \ f g -> \ k -> curry ((uncurry (f k) ||| uncurry (g k)) . ldistribS)
-
-#else
 
 -- | Generation of CCC terms in a binding context
 newtype Ex b = Ex { unEx :: forall a. Pat a -> (a :-> b) }
@@ -131,75 +103,14 @@ newtype Ex b = Ex { unEx :: forall a. Pat a -> (a :-> b) }
 -- 
 --   type Ex b = forall a k. BiCCC k => Pat a -> (a `k` b)
 
-constEx o    = Ex $ \ _ -> Const o
-varEx x      = Ex $ \ k -> convertVar x k
-appEx u v    = Ex $ \ k -> apply . (unEx u k &&& unEx v k)
-lamEx p u    = Ex $ \ k -> curry (unEx u (k :# p))
-eitherEx f g = Ex $ \ k -> curry ((uncurry (unEx f k) ||| uncurry (unEx g k)) . ldistribS)
-
-#endif
-
 instance HasLambda Ex where
-  constE  = constEx
-  varE    = varEx
-  appE    = appEx
-  lamE    = lamEx
-  eitherE = eitherEx
-
-#else
-
--- toCCC' :: E a -> (Unit :-> a)
--- toCCC' = convert UnitPat
-
--- | Rewrite a lambda expression via CCC combinators
-toCCC :: E (a :=> b) -> (a :-> b)
-toCCC (Lam p e) = convert e p
-toCCC e = toCCC (Lam vp (e :^ ve))
- where
-   (vp,ve) = vars "ETA"
-
--- | Generation of CCC terms in a binding context
-type Ex b = forall a. Pat a -> (a :-> b)
-
--- TODO:
--- 
---   type Ex b = forall a k. BiCCC k => Pat a -> (a `k` b)
-
-constEx  :: Prim a -> Ex a
-varEx    :: V a -> Ex a
-appEx    :: Ex (a :=> b) -> Ex a -> Ex b
-lamEx    :: Pat a -> Ex b -> Ex (a :=> b)
-eitherEx :: Ex (a -> c) -> Ex (b -> c) -> Ex (a :+ b -> c)
-
-constEx o    _ = Const o
-varEx x      k = convertVar x k
-appEx u v    k = apply . (u k &&& v k)
-lamEx p e    k = curry (e (k :# p))
-eitherEx f g k = curry ((uncurry (f k) ||| uncurry (g k)) . ldistribS)
-
--- | Convert @\ p -> e@ to CCC combinators
-convert :: E b -> Ex b
-convert (ConstE o)   = constEx o
-convert (Var v)      = varEx v
-convert (s :^ t)     = convert s `appEx` convert t
-convert (Lam p e)    = lamEx p (convert e)
-convert (Either f g) = convert f `eitherEx` convert g
-
--- instance HasLambda Ex where
---   constE  = constEx
---   varE    = varEx
---   appE    = appEx
---   lamE    = lamEx
---   eitherE = eitherEx
-
--- Oops. Ex is a type synonym, not a constructor. I'd have to use a newtype.
+  constE o    = Ex $ \ _ -> Const o
+  varE x      = Ex $ \ k -> convertVar x k
+  appE u v    = Ex $ \ k -> apply . (unEx u k &&& unEx v k)
+  lamE p u    = Ex $ \ k -> curry (unEx u (k :# p))
+  eitherE f g = Ex $ \ k -> curry ((uncurry (unEx f k) ||| uncurry (unEx g k)) . ldistribS)
 
 #endif
-
-#endif
-
--- TODO: toLam :: E a -> forall expr. HasLambda expr => expr a
--- Then convert = toLam
 
 -- TODO: Handle constants in a generic manner, so we can drop the constraint that k ~ (:->).
 
@@ -219,12 +130,12 @@ convertVar u = fromMaybe (error $ "convert: unbound variable: " ++ show u) .
    conv (p :# q) = ((. exr) <$> conv q) `mplus` ((. exl) <$> conv p)
    conv (p :@ q) = conv q `mplus` conv p
 
--- Alternatively,
--- 
---    conv (p :# q) = descend Exr q `mplus` descend Exl p
---     where
---       descend :: (c `k` d) -> Pat d -> Maybe (c `k` b)
---       descend sel r = (@. sel) <$> conv r
-
 -- Note that we try q before p. This choice cooperates with uncurrying and
 -- shadowing.
+
+-- Alternatively,
+-- 
+--    conv (p :# q) = descend exr q `mplus` descend exl p
+--     where
+--       descend :: (c `k` d) -> Pat d -> Maybe (c `k` b)
+--       descend sel r = (. sel) <$> conv r
