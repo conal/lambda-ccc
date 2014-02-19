@@ -381,29 +381,29 @@ vars2 (na,nb) = (ap :# bp, (ae,be))
     Rules
 --------------------------------------------------------------------}
 
-kConst :: Prim a -> String -> E a
-kConst p _msg = ConstE p
+kPrim :: Prim a -> String -> E a
+kPrim p _msg = ConstE p
 
-kLit :: Lit a -> String -> E a
-kLit = kConst . LitP
+kLit :: HasLit a => a -> String -> E a
+kLit = kPrim . litP
 
 {-# RULES
  
-"reify/not"   reifyE not   = kConst NotP
-"reify/(&&)"  reifyE (&&)  = kConst AndP
-"reify/(||)"  reifyE (||)  = kConst OrP
-"reify/xor"   reifyE xor   = kConst XorP
-"reify/(+)"   reifyE (+)   = kConst AddP
-"reify/exl"   reifyE fst   = kConst ExlP
-"reify/exr"   reifyE snd   = kConst ExrP
-"reify/pair"  reifyE (,)   = kConst PairP
-"reify/inl"   reifyE Left  = kConst InlP
-"reify/inr"   reifyE Right = kConst InrP
-"reify/if"    reifyE cond  = kConst CondP
-
-"reify/()"    reifyE ()    = kLit UnitL
-"reify/false" reifyE False = kLit (BoolL False)
-"reify/true"  reifyE True  = kLit (BoolL True )
+"reify/not"   reifyE not   = kPrim NotP
+"reify/(&&)"  reifyE (&&)  = kPrim AndP
+"reify/(||)"  reifyE (||)  = kPrim OrP
+"reify/xor"   reifyE xor   = kPrim XorP
+"reify/(+)"   reifyE (+)   = kPrim AddP
+"reify/exl"   reifyE fst   = kPrim ExlP
+"reify/exr"   reifyE snd   = kPrim ExrP
+"reify/pair"  reifyE (,)   = kPrim PairP
+"reify/inl"   reifyE Left  = kPrim InlP
+"reify/inr"   reifyE Right = kPrim InrP
+"reify/if"    reifyE cond  = kPrim CondP
+ 
+"reify/()"    reifyE ()    = kLit  ()
+"reify/false" reifyE False = kLit  False
+"reify/true"  reifyE True  = kLit  True
  
   #-}
 

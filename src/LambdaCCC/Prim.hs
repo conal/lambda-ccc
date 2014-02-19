@@ -18,8 +18,8 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.Prim
-  ( Lit(..), litSS
-  , Prim(..),xor,ifThenElse,cond
+  ( Lit(..), HasLit(..), litSS
+  , Prim(..),litP,xor,ifThenElse,cond
   ) where
 
 -- import Control.Arrow ((&&&))
@@ -44,6 +44,14 @@ instance Eq' (Lit a) (Lit b) where
   _       === _       = False
 
 instance Eq (Lit a) where (==) = (===)
+
+-- | Convenient 'Lit' construction
+class HasLit a where toLit :: a -> Lit a
+
+instance HasLit ()   where toLit = const UnitL
+instance HasLit Bool where toLit = BoolL
+
+-- Proofs
 
 litHasShow :: Lit a -> Dict (Show a)
 litHasShow UnitL     = Dict
@@ -153,3 +161,6 @@ cond :: (Bool, (a,a)) -> a
 cond (True ,(a,_)) = a
 cond (False,(_,b)) = b
 {-# NOINLINE cond #-}
+
+litP :: HasLit a => a -> Prim a
+litP = LitP . toLit
