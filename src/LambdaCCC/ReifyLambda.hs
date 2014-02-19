@@ -285,7 +285,7 @@ reifyExpr =
      lamvId#   <- findIdT 'E.lamv#
   -- casevId#  <- findIdT 'E.casev#
      evalId    <- findIdT 'E.evalE
-     reifyId   <- findIdT 'E.reifyE'
+     reifyId   <- findIdT 'E.reifyE
      letId     <- findIdT 'E.lett
      varPatId# <- findIdT 'E.varPat#
      pairPatId <- findIdT '(E.:#)
@@ -421,7 +421,7 @@ reifyDef = rhsR reifyExpr
 reifyEval :: ReExpr
 reifyEval = reifyArg >>> evalArg
  where
-   reifyArg = do (_reifyE', [Type _, _str, arg, _ty]) <- callNameT 'E.reifyE'
+   reifyArg = do (_reifyE, [Type _, _str, arg, _ty]) <- callNameT 'E.reifyE
                  return arg
    evalArg  = do (_evalE, [Type _, body])       <- callNameT 'E.evalE
                  return body
@@ -430,7 +430,7 @@ reifyEval = reifyArg >>> evalArg
 
 -- reifyEval =
 
--- rswE = reifyE' ▲ (evalE ▲ swapBI_reified) ($fHasTy(->) ▲ ▲ tup ▹ ■)
+-- rswE = reifyE ▲ (evalE ▲ swapBI_reified) ($fHasTy(->) ▲ ▲ tup ▹ ■)
 
 inlineCleanup :: TH.Name -> RewriteH Core
 inlineCleanup nm = tryR $ anybuER (inlineNameR nm) >>> anybuER cleanupUnfoldR
@@ -460,9 +460,9 @@ reifyNamed nm = snocPathIn (rhsOfT $ cmpTHName2Var nm)
 
 -- I don't know why I need both cleanupUnfoldR and simplifyR.
 
--- Note: I inline reifyE to its reifyE' definition and then simplify
--- reifyE'/evalE, rather than simplifying reifyE/evalE. With this choice, I can
--- also reifyE'/evalE combinations that come from reifyE in source code and ones
+-- Note: I inline reifyE to its reifyE definition and then simplify
+-- reifyE/evalE, rather than simplifying reifyE/evalE. With this choice, I can
+-- also reifyE/evalE combinations that come from reifyE in source code and ones
 -- that reifyExpr inserts.
 
 {--------------------------------------------------------------------
@@ -500,5 +500,5 @@ externals =
 --         ["reify via name"]
     , external "reify-eval"
         (promoteExprR reifyEval :: RewriteH Core)
-        ["simplify reifyE' composed with evalE"]
+        ["simplify reifyE composed with evalE"]
     ]

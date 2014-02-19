@@ -28,7 +28,7 @@ module LambdaCCC.Lambda
   , (@^), lam, lett
   , (#), caseEither
   , var#, lamv#, varPat#, asPat#, casev#
-  , reifyE, reifyE', evalE
+  , reifyE, evalE
   , vars, vars2
   ) 
     where
@@ -309,21 +309,18 @@ data Bind = forall a. Bind (V a) a
 type Env = [Bind]
 
 reifyE :: a -> String -> E a
-reifyE = reifyE'                        -- eliminate later
+reifyE _ msg = error (printf "Oops -- reifyE %s was not eliminated" msg)
+{-# NOINLINE reifyE #-}
 
-reifyE' :: a -> String -> E a
-reifyE' _ msg = error (printf "Oops -- reifyE' %s was not eliminated" msg)
-{-# NOINLINE reifyE' #-}
-
--- The artificially strange definition of reifyE' prevents it from getting
+-- The artificially strange definition of reifyE prevents it from getting
 -- inlined and so allows the reify'/eval rule to fire. The NOINLINE pragma is
 -- somehow insufficient, and the reify/eval rule won't fire. I don't know how to
 -- get rules with dictionaries to work.
 
 {-# RULES
 
-"reify'/eval" forall e msg. reifyE' (evalE e) msg = e
-"eval/reify'" forall x msg. evalE (reifyE' x msg) = x
+"reify'/eval" forall e msg. reifyE (evalE e) msg = e
+"eval/reify'" forall x msg. evalE (reifyE x msg) = x
 
   #-}
 
@@ -392,21 +389,21 @@ kLit = kConst . LitP
 
 {-# RULES
  
-"reify/not"   reifyE' not   = kConst NotP
-"reify/(&&)"  reifyE' (&&)  = kConst AndP
-"reify/(||)"  reifyE' (||)  = kConst OrP
-"reify/xor"   reifyE' xor   = kConst XorP
-"reify/(+)"   reifyE' (+)   = kConst AddP
-"reify/exl"   reifyE' fst   = kConst ExlP
-"reify/exr"   reifyE' snd   = kConst ExrP
-"reify/pair"  reifyE' (,)   = kConst PairP
-"reify/inl"   reifyE' Left  = kConst InlP
-"reify/inr"   reifyE' Right = kConst InrP
-"reify/if"    reifyE' cond  = kConst CondP
+"reify/not"   reifyE not   = kConst NotP
+"reify/(&&)"  reifyE (&&)  = kConst AndP
+"reify/(||)"  reifyE (||)  = kConst OrP
+"reify/xor"   reifyE xor   = kConst XorP
+"reify/(+)"   reifyE (+)   = kConst AddP
+"reify/exl"   reifyE fst   = kConst ExlP
+"reify/exr"   reifyE snd   = kConst ExrP
+"reify/pair"  reifyE (,)   = kConst PairP
+"reify/inl"   reifyE Left  = kConst InlP
+"reify/inr"   reifyE Right = kConst InrP
+"reify/if"    reifyE cond  = kConst CondP
 
-"reify/()"    reifyE' ()    = kLit UnitL
-"reify/false" reifyE' False = kLit (BoolL False)
-"reify/true"  reifyE' True  = kLit (BoolL True )
+"reify/()"    reifyE ()    = kLit UnitL
+"reify/false" reifyE False = kLit (BoolL False)
+"reify/true"  reifyE True  = kLit (BoolL True )
  
   #-}
 
