@@ -3,7 +3,7 @@
 {-# LANGUAGE ConstraintKinds, RankNTypes, CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -25,8 +25,6 @@ import Prelude hiding (id,(.),curry,uncurry,const)
 import Data.Functor ((<$>))
 import Control.Monad (mplus)
 import Data.Maybe (fromMaybe)
-
-import Control.Newtype (Newtype(..))
 
 import Data.Proof.EQ
 
