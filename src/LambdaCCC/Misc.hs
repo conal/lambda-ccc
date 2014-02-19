@@ -82,6 +82,9 @@ infix 4 ===, ==?
 class Eq' a b where
   (===) :: a -> b -> Bool
 
+-- | Test for equality. If equal, generate a type equality proof. The proof
+-- generation is done with @unsafeCoerce@, so it's very important that equal
+-- terms really do have the same type.
 (==?) :: Eq' a b => a -> b -> Maybe (a :=: b)
 a ==? b | a === b   = unsafeCoerce (Just Refl)
         | otherwise = Nothing
