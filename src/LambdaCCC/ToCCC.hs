@@ -82,16 +82,16 @@ instance HasLambda E where
   eitherE = Either
 
 -- | Convert from 'E' to any 'HasLambda'
-toLam :: HasLambda ex => E b -> ex b
-toLam (ConstE o)   = constE o
-toLam (Var v)      = varE v
-toLam (s :^ t)     = toLam s `appE` toLam t
-toLam (Lam p e)    = lamE p (toLam e)
-toLam (Either f g) = toLam f `eitherE` toLam g
+convertE :: HasLambda ex => E b -> ex b
+convertE (ConstE o)   = constE o
+convertE (Var v)      = varE v
+convertE (s :^ t)     = convertE s `appE` convertE t
+convertE (Lam p e)    = lamE p (convertE e)
+convertE (Either f g) = convertE f `eitherE` convertE g
 
 -- | Rewrite a lambda expression via CCC combinators
 toCCC :: E (a :=> b) -> (a :-> b)
-toCCC (Lam p e) = unEx (toLam e) p
+toCCC (Lam p e) = unEx (convertE e) p
 toCCC e = toCCC (Lam vp (e :^ ve))
  where
    (vp,ve) = vars "ETA"
