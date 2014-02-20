@@ -21,14 +21,16 @@ module Main where
 import Prelude
 
 import LambdaCCC.Misc (Unop,Binop)
-import LambdaCCC.Lambda (reifyE,xor,ifThenElse)
+import LambdaCCC.Lambda (EP,reifyEP,xor,ifThenElse)
 import LambdaCCC.ToCCC (toCCC)
-import LambdaCCC.ToCircuit
+import LambdaCCC.CCC ((:->),convertC)
+-- import LambdaCCC.ToCircuit
 
 import Circat.Circuit (IsSourceP2,(:>),outGWith)
 import Circat.Netlist (outV)
 
 -- Needed for resolving names. Bug? Is there an alternative?
+import qualified LambdaCCC.Prim         -- TODO: remove
 import qualified LambdaCCC.Lambda
 import qualified LambdaCCC.Ty
 
@@ -54,11 +56,19 @@ halfAddH (a,b) = (foo (&&), foo xor)
 
 main :: IO ()
 main = do print e
-          print c
-          outGV "halfAddH" (cccToCircuit c)
+          print ccc
+          outGV "halfAddH" circuit
  where
-   e = reifyE halfAddH "halfAddH"
-   c = toCCC e
+   e       = reifyEP halfAddH "halfAddH"
+   -- Both of the following definitions work:
+   -- ccc     = toCCCTerm e
+   -- circuit = toCCC     e
+   ccc     = toCCC e
+   circuit = convertC ccc
+
+-- -- Type-specialized toCCC
+-- toCCCTerm :: EP (a -> b) -> (a :-> b)
+-- toCCCTerm = toCCC
 
 -- Diagram and Verilog
 outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()

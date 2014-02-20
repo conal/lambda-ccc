@@ -20,6 +20,7 @@ module LambdaCCC.ShowUtils
   ( showsApp1, showsApp, showSpaced
   , Prec, Assoc(..), Fixity
   , showsOp2, showsOp2', showsPair
+  , Show'(..)
   ) where
 
 import Data.List (intersperse)
@@ -89,3 +90,10 @@ showsPair _ a b = showParen True $
 -- Simpler, but I don't like the resulting spaces around ",":
 -- 
 -- showsPair = showsOp2 True "," (-1,AssocNone)
+
+-- Show for all type arguments
+class Show' f where
+  show'      ::        f a -> String
+  showsPrec' :: Int -> f a -> ShowS
+  showsPrec' _ x s = show' x ++ s
+  show' x          = showsPrec' 0 x ""

@@ -31,22 +31,22 @@ import LambdaCCC.ToCCC
 -- translating automatically rather than hand-coding. I'm using this vocabulary
 -- for tests.
 
-notE :: Unop (E Bool)
+notE :: Unop (EP Bool)
 notE b = ConstE NotP :^ b
 
 infixr 2 ||*, `xorE`
 infixr 3 &&*
 
-binop :: Prim (a -> b -> c) -> E a -> E b -> E c
+binop :: Prim (a -> b -> c) -> EP a -> EP b -> EP c
 binop op a b = ConstE op :^ a :^ b
 
-(&&*), (||*), xorE :: Binop (E Bool)
+(&&*), (||*), xorE :: Binop (EP Bool)
 (&&*) = binop AndP
 (||*) = binop OrP
 xorE  = binop XorP
 
 infixl 6 +@
-(+@) :: Num a => Binop (E a)
+(+@) :: Num a => Binop (EP a)
 (+@) = binop AddP
 
 -- TODO: Use Num and Boolean classes
@@ -56,22 +56,22 @@ infixl 6 +@
     Examples
 --------------------------------------------------------------------}
 
-var :: Name -> E a
+var :: Name -> EP a
 var = Var . V
 
-va,vb,vc :: E Int
+va,vb,vc :: EP Int
 va = var "a"
 vb = var "b"
 vc = var "c"
 
-e1 :: E Bool
+e1 :: EP Bool
 e1 = ConstE (LitP (BoolL False))
 
-e2 :: E Bool
+e2 :: EP Bool
 e2 = notE e1
 
 infixr 1 :+>
-type a :+> b = E (a -> b)
+type a :+> b = EP (a -> b)
 
 -- \ x -> not
 e3 :: Bool :+> Bool

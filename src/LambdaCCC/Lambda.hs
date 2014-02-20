@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, PatternGuards #-}
 {-# LANGUAGE MagicHash, ConstraintKinds, ViewPatterns, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE CPP #-}
 
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
@@ -30,6 +31,9 @@ module LambdaCCC.Lambda
   , var#, lamv#, varPat#, asPat#, casev#
   , reifyE, evalE
   , vars, vars2
+  -- Temporary less polymorphic variants.
+  -- Remove when I can dig up Prim as a type in Core
+  , EP, appP, lamP, lettP , varP#, lamvP#, casevP#, evalEP, reifyEP
   ) 
     where
 
@@ -48,7 +52,7 @@ import GHC.Prim (Addr#)
 import Data.IsTy
 import Data.Proof.EQ
 
-import LambdaCCC.Misc
+import LambdaCCC.Misc hiding (Eq'(..), (==?))
 import LambdaCCC.ShowUtils
 import LambdaCCC.Prim
 
@@ -57,6 +61,18 @@ import LambdaCCC.Prim
 
 -- Whether to simplify during construction
 #define Simplify
+
+class PrimBasics p where
+  unitP :: p Unit
+  pairP :: p (a :=> b :=> a :* b)
+
+instance PrimBasics Prim where
+  unitP = LitP UnitL
+  pairP = PairP
+
+class EvalableP p where evalP :: p a -> a
+
+instance EvalableP Prim where evalP = eval
 
 -- | Variable names
 type Name = String
@@ -70,10 +86,16 @@ instance Show (V a) where
 varName :: V a -> Name
 varName (V name) = name
 
-instance Eq (V a) where (==) = (===)
+instance Eq (V a) where (==) = (====)
 
-instance Eq' (V a) (V b) where
-  V a === V b = a == b
+-- instance Eq1' V where
+--   (====) = (===)
+
+-- instance Eq' (V a) (V b) where
+--   V a === V b = a == b
+
+instance Eq1' V where
+  V a ==== V b = a == b
 
 infixr 1 :#
 infixr 8 :@
@@ -89,14 +111,14 @@ data Pat :: * -> * where
 
 -- TODO: Rename UnitPat and VarPat to PUnit and PVar
 
-instance Eq' (Pat a) (Pat b) where
-  UnitPat  === UnitPat    = True
-  VarPat v === VarPat v'  = v === v'
-  (a :# b) === (a' :# b') = a === a' && b === b'
-  (a :@ b) === (a' :@ b') = a === a' && b === b'
-  _        === _          = False
+instance Eq1' Pat where
+  UnitPat  ==== UnitPat    = True
+  VarPat v ==== VarPat v'  = v ==== v'
+  (a :# b) ==== (a' :# b') = a ==== a' && b ==== b'
+  (a :@ b) ==== (a' :@ b') = a ==== a' && b ==== b'
+  _        ==== _          = False
 
-instance Eq (Pat a) where (==) = (===)
+instance Eq (Pat a) where (==) = (====)
 
 instance Show (Pat a) where
   showsPrec _ UnitPat    = showString "()"
@@ -128,26 +150,30 @@ substVP :: V a -> Pat a -> Unop (Pat b)
 substVP v p = substIn
  where
    substIn :: Unop (Pat c)
-   substIn (VarPat ((v ==?) -> Just Refl)) = p
-   substIn (a :# b)                        = substIn a :# substIn b
-   substIn (a :@ b)                        = substIn a :@ substIn b
-   substIn q                               = q
+   substIn (VarPat ((v ===?) -> Just Refl)) = p
+   substIn (a :# b)                         = substIn a :# substIn b
+   substIn (a :@ b)                         = substIn a :@ substIn b
+   substIn q                                = q
 #endif
 
 infixl 9 :^
 -- | Lambda expressions
-data E :: * -> * where
-  Var    :: forall a     . V a -> E a
-  ConstE :: forall a     . Prim a -> E a
-  (:^)   :: forall b a   . E (a :=> b) -> E a -> E b
-  Lam    :: forall a b   . Pat a -> E b -> E (a :=> b)
-  Either :: forall a b c . E (a -> c) -> E (b -> c) -> E (a :+ b -> c)
+data E :: (* -> *) -> (* -> *) where
+  Var    :: forall p a    . V a -> E p a
+  ConstE :: forall p a    . p a -> E p a
+  (:^)   :: forall p b a  . E p (a :=> b) -> E p a -> E p b
+  Lam    :: forall p a b  . Pat a -> E p b -> E p (a :=> b)
+  Either :: forall p a b c. E p (a -> c) -> E p (b -> c) -> E p (a :+ b -> c)
+
+-- The explicit universals come from ghci's ":ty" command with ":set
+-- -fprint-explicit-foralls", so that I can get the order right when
+-- constructing Core programmatically.
 
 -- | A variable occurs freely in an expression
-occursVE :: V a -> E b -> Bool
+occursVE :: V a -> E p b -> Bool
 occursVE v@(V name) = occ
  where
-   occ :: E c -> Bool
+   occ :: E p c -> Bool
    occ (Var (V name')) = name == name'
    occ (ConstE {})     = False
    occ (f :^ e)        = occ f || occ e
@@ -155,7 +181,7 @@ occursVE v@(V name) = occ
    occ (Either f g)    = occ f || occ g
 
 -- | Some variable in a pattern occurs freely in an expression
-occursPE :: Pat a -> E b -> Bool
+occursPE :: Pat a -> E p b -> Bool
 occursPE UnitPat    = pure False
 occursPE (VarPat v) = occursVE v
 occursPE (p :# q)   = liftA2 (||) (occursPE p) (occursPE q)
@@ -165,23 +191,26 @@ occursPE (p :@ q)   = liftA2 (||) (occursPE p) (occursPE q)
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
 -- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
 
-instance Eq' (E a) (E b) where
-  Var v    === Var v'     = v === v'
-  ConstE x === ConstE x'  = x === x'
-  (f :^ a) === (f' :^ a') = a === a' && f === f'
-  Lam p e  === Lam p' e'  = p === p' && e === e'
-  _        === _          = False
+instance Eq1' p => Eq1' (E p) where
+  Var v    ==== Var v'     = v ==== v'
+  ConstE x ==== ConstE x'  = x ==== x'
+  (f :^ a) ==== (f' :^ a') = a ==== a' && f ==== f'
+  Lam p e  ==== Lam p' e'  = p ==== p' && e ==== e'
+  _        ==== _          = False
 
-instance Eq (E a) where (==) = (===)
+-- instance Eq1' p => Eq' (E p a) (E p b) where
+--   (===) = (====)
+
+instance Eq1' p => Eq (E p a) where (==) = (====)
 
 {-
-varT :: HasTy a => Name -> E a
+varT :: HasTy a => Name -> E p a
 varT nm = Var (V nm typ)
 
-constT :: HasTy a => Prim a -> E a
+constT :: HasTy a => Prim a -> E p a
 constT p = ConstE p typ
 
-var# :: forall a. Addr# -> Ty a -> E a
+var# :: forall a. Addr# -> Ty a -> E p a
 var# addr ty = Var (V (unpackCString# addr) ty)
 
 varPat# :: forall a. Addr# -> Ty a -> Pat a
@@ -194,7 +223,7 @@ asPat# addr pat = varPat# addr (patTy pat) :@ pat
 infixl 9 @^
 
 -- | Smart application
-(@^) :: forall b a . E (a :=> b) -> E a -> E b
+(@^) :: forall b a p . E p (a :=> b) -> E p a -> E p b
 #ifdef Simplify
 -- ...
 #endif
@@ -203,7 +232,7 @@ f @^ a = f :^ a
 #ifdef Simplify
 
 {-
-patToE :: Pat a -> E a
+patToE :: Pat a -> E p a
 patToE UnitPat       = ConstE (LitP ()) Unit
 patToE (VarPat v)    = Var v
 patToE (PairPat p q) | HasTy <- patHasTy p, HasTy <- patHasTy q
@@ -213,8 +242,8 @@ patToE (AndPat  _ _) = error "patToE: AndPat not yet handled"
 
 -- Instead, generate *all* expressions for a pattern, forking at an AndPat.
 
-patToEs :: Pat a -> [E a]
-patToEs UnitPat    = pure $ ConstE (LitP UnitL)
+patToEs :: PrimBasics p => Pat a -> [E p a]
+patToEs UnitPat    = pure $ ConstE unitP
 patToEs (VarPat v) = pure $ Var v
 patToEs (p :# q)   = liftA2 (#) (patToEs p) (patToEs q)
 patToEs (p :@ q)   = patToEs p ++ patToEs q
@@ -223,7 +252,8 @@ patToEs (p :@ q)   = patToEs p ++ patToEs q
 
 -- TODO: watch out for repeated (++)
 
-lam :: Pat a -> E b -> E (a -> b)
+lam :: (PrimBasics p, Eq1' p) =>
+       Pat a -> E p b -> E p (a -> b)
 #ifdef Simplify
 -- Eta-reduction
 
@@ -232,7 +262,7 @@ lam :: Pat a -> E b -> E (a -> b)
 --                , not (p `occursPE` f)
 --                = f
 
-lam p (f :^ u) | Refl : _ <- catMaybes ((u ==?) <$> patToEs p)
+lam p (f :^ u) | Refl : _ <- catMaybes ((u ===?) <$> patToEs p)
                , not (p `occursPE` f)
                = f
 
@@ -246,29 +276,32 @@ lam p (Lam q w :^ Var v) | occursVP v p && not (occursVE v w) =
 lam p body = Lam p body
 
 {-
-lamv# :: forall a b. Addr# -> Ty a -> E b -> E (a -> b)
+lamv# :: forall a b. Addr# -> Ty a -> E p b -> E p (a -> b)
 lamv# addr ty body = lam (VarPat (V (unpackCString# addr) ty)) body
 -}
 
 -- | Let expression (beta redex)
-lett :: forall a b. Pat a -> E a -> E b -> E b
+lett :: forall a b p. (PrimBasics p, Eq1' p) =>
+                      Pat a -> E p a -> E p b -> E p b
 lett pat e body = lam pat body @^ e
 
 infixr 1 #
-(#) :: E a -> E b -> E (a :* b)
+(#) :: PrimBasics p => E p a -> E p b -> E p (a :* b)
 -- (ConstE Exl :^ p) # (ConstE Exr :^ p') | ... = ...
-a # b = ConstE PairP @^ a @^ b
+a # b = ConstE pairP @^ a @^ b
 
 -- Handle surjectivity in @^ rather than here.
 
-eitherE :: forall a b c . E (a -> c) -> E (b -> c) -> E (a :+ b -> c)
+eitherE :: forall a b c p . E p (a -> c) -> E p (b -> c) -> E p (a :+ b -> c)
 eitherE = Either  -- for now
 
 -- | Encode a case expression on 'Left' & 'Right'.
-caseEither :: forall a b c . Pat a -> E c -> Pat b -> E c -> E (a :+ b) -> E c
+caseEither :: forall a b c p . (PrimBasics p, Eq1' p) =>
+              Pat a -> E p c -> Pat b -> E p c -> E p (a :+ b) -> E p c
 caseEither p u q v ab = (lam p u `eitherE` lam q v) @^ ab
 
-instance Show (E a) where
+instance (HasOpInfo prim, Show' prim, PrimBasics prim, Eq1' prim)
+  => Show (E prim a) where
 #ifdef Sugared
   showsPrec p (Either (Lam q a) (Lam r b) :^ ab) =
     showParen (p > 0) $
@@ -279,12 +312,13 @@ instance Show (E a) where
     showParen (p > 0) $
     showString "let " . showsPrec 0 q . showString " = " . showsPrec 0 rhs
     . showString " in " . showsPrec 0 body
-  showsPrec p (ConstE PairP :^ u :^ v) = showsPair p u v
+  showsPrec p (ConstE ((==== pairP) -> True) :^ u :^ v)
+                          = showsPair p u v
 #endif
   showsPrec p (ConstE prim :^ u :^ v) | Just (OpInfo op fixity) <- opInfo prim =
     showsOp2' op fixity p u v
   showsPrec _ (Var (V n)) = showString n
-  showsPrec p (ConstE c)  = showsPrec p c
+  showsPrec p (ConstE c)  = showsPrec' p c
   showsPrec p (u :^ v)      = showsApp p u v
   showsPrec p (Lam q e)     =
     showParen (p > 0) $
@@ -296,19 +330,24 @@ instance Show (E a) where
 
 data OpInfo = OpInfo String Fixity
 
-opInfo :: Prim a -> Maybe OpInfo
-opInfo AddP = Just $ OpInfo "+"     (6,AssocLeft )
-opInfo AndP = Just $ OpInfo "&&"    (3,AssocRight)
-opInfo OrP  = Just $ OpInfo "||"    (2,AssocRight)
-opInfo XorP = Just $ OpInfo "`xor`" (2,AssocRight)
-opInfo _   = Nothing
+class HasOpInfo p where
+  opInfo :: p a -> Maybe OpInfo
+
+instance HasOpInfo Prim where
+  opInfo AddP = Just $ OpInfo "+"     (6,AssocLeft )
+  opInfo AndP = Just $ OpInfo "&&"    (3,AssocRight)
+  opInfo OrP  = Just $ OpInfo "||"    (2,AssocRight)
+  opInfo XorP = Just $ OpInfo "`xor`" (2,AssocRight)
+  opInfo _   = Nothing
 
 -- | Single variable binding
 data Bind = forall a. Bind (V a) a
 -- | Variable environment
 type Env = [Bind]
 
-reifyE :: a -> String -> E a
+-- TODO: Tinker with generalizing reifyE over primitives
+
+reifyE :: a -> String -> E p a
 reifyE _ msg = error (printf "Oops -- reifyE %s was not eliminated" msg)
 {-# NOINLINE reifyE #-}
 
@@ -319,17 +358,22 @@ reifyE _ msg = error (printf "Oops -- reifyE %s was not eliminated" msg)
 
 {-# RULES
 
-"reify'/eval" forall e msg. reifyE (evalE e) msg = e
-"eval/reify'" forall x msg. evalE (reifyE x msg) = x
+"reify/eval" forall e msg. reifyE (evalE e) msg = e
+"eval/reify" forall x msg. evalE (reifyE x msg) = x
+
+"reify/eval" forall e msg. reifyEP (evalEP e) msg = e
+"eval/reify" forall x msg. evalEP (reifyEP x msg) = x
 
   #-}
 
 -- We evaluate *closed* expressions (no free variables)
-instance Evalable (E a) where
-  type ValT (E a) = a
+instance (HasOpInfo p, Show' p, EvalableP p, Eq1' p, PrimBasics p) =>
+         Evalable (E p a) where
+  type ValT (E p a) = a
   eval = evalE
 
-evalE :: E a -> a
+evalE :: (HasOpInfo p, Show' p, EvalableP p, Eq1' p, PrimBasics p) => 
+         E p a -> a
 evalE e = trace ("evalE: " ++ show e) $
           eval' e []  -- provide empty environment
 
@@ -339,10 +383,11 @@ evalE e = trace ("evalE: " ++ show e) $
 -- Expression evaluation requires a binding environment. In other words,
 -- expressions evaluate to a function from environments.
 
-eval' :: E a -> Env -> a
+eval' :: (HasOpInfo p, Show' p, EvalableP p) => 
+         E p a -> Env -> a
 eval' (Var v)   env    = fromMaybe (error $ "eval': unbound variable: " ++ show v) $
                          lookupVar v env
-eval' (ConstE p) _   = eval p
+eval' (ConstE p) _   = evalP p
 eval' (u :^ v)  env    = (eval' u env) (eval' v env)
 eval' (Lam p e) env    = \ x -> eval' e (extendEnv p x env)
 eval' (Either f g) env = eval' f env `either` eval' g env
@@ -357,8 +402,8 @@ lookupVar :: forall a. V a -> Env -> Maybe a
 lookupVar va = listToMaybe . catMaybes . map check
  where
    check :: Bind -> Maybe a
-   check (Bind vb b) | Just Refl <- va ==? vb = Just b
-                     | otherwise              = Nothing
+   check (Bind vb b) | Just Refl <- va ===? vb = Just b
+                     | otherwise               = Nothing
 
 -- Oh, hm. I'm using a difference (Hughes) list representation. extendEnv maps
 -- UnitPat, VarPat, and PairPat to mempty, singleton, and mappend, respectively.
@@ -366,12 +411,12 @@ lookupVar va = listToMaybe . catMaybes . map check
 -- TODO: adopt another representation, such as Seq. Replace the explicit
 -- recursion in lookupVar with a fold or something. It's almost a mconcat.
 
-vars :: Name -> (Pat a, E a)
+vars :: Name -> (Pat a, E p a)
 vars = (VarPat &&& Var) . V
 
 -- vars n = (VarPat v, Var v) where v = V n typ
 
-vars2 :: (Name,Name) -> (Pat (a,b), (E a,E b))
+vars2 :: (Name,Name) -> (Pat (a,b), (E p a,E p b))
 vars2 (na,nb) = (ap :# bp, (ae,be))
  where
    (ap,ae) = vars na
@@ -381,10 +426,10 @@ vars2 (na,nb) = (ap :# bp, (ae,be))
     Rules
 --------------------------------------------------------------------}
 
-kPrim :: Prim a -> String -> E a
+kPrim :: p a -> String -> E p a
 kPrim p _msg = ConstE p
 
-kLit :: HasLit a => a -> String -> E a
+kLit :: HasLit a => a -> String -> E Prim a
 kLit = kPrim . litP
 
 {-# RULES
@@ -446,7 +491,8 @@ condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))
     Constructors that take Addr#, for ReifyLambda
 --------------------------------------------------------------------}
 
-var# :: forall a. Addr# -> E a
+var# :: forall a p. p ~ Prim => 
+        Addr# -> E p a
 var# addr = Var (V (unpackCString# addr))
 
 varPat# :: forall a. Addr# -> Pat a
@@ -455,8 +501,69 @@ varPat# addr = VarPat (V (unpackCString# addr))
 asPat# :: forall a. Addr# -> Pat a -> Pat a
 asPat# addr pat = varPat# addr :@ pat
 
-lamv# :: forall a b. Addr# -> E b -> E (a -> b)
+lamv# :: forall a b p. (PrimBasics p, Eq1' p, p ~ Prim) =>
+         Addr# -> E p b -> E p (a -> b)
 lamv# addr body = lam (VarPat (V (unpackCString# addr))) body
 
-casev# :: forall a b c. Addr# -> E c -> Addr# -> E c -> E (a :+ b) -> E c
+casev# :: forall a b c p. (PrimBasics p, Eq1' p, p ~ Prim) =>
+          Addr# -> E p c -> Addr# -> E p c -> E p (a :+ b) -> E p c
 casev# a q b = caseEither (varPat# a) q (varPat# b)
+
+-- TODO: Drop the p ~ Prim constraints, and tweak ReifyLambda to pass in Prim as
+-- a type argument.
+
+{--------------------------------------------------------------------
+    Less polymorphic versions temporarily
+--------------------------------------------------------------------}
+
+type EP = E Prim
+
+appP :: forall b a . EP (a :=> b) -> EP a -> EP b
+appP = (@^)
+
+lamP :: forall a b. Pat a -> EP b -> EP (a -> b)
+lamP = lam
+
+lettP :: forall a b. Pat a -> EP a -> EP b -> EP b
+lettP = lett
+
+varP# :: Addr# -> EP a
+varP# = var#
+
+lamvP# :: forall a b. Addr# -> EP b -> EP (a -> b)
+lamvP# = lamv#
+
+casevP# :: forall a b c. Addr# -> EP c -> Addr# -> EP c -> EP (a :+ b) -> EP c
+casevP# = casev#
+
+evalEP :: EP a -> a
+evalEP = evalE
+
+reifyEP :: a -> String -> EP a
+reifyEP = reifyE
+
+{--------------------------------------------------------------------
+    Move elsewhere
+--------------------------------------------------------------------}
+
+-- I'm experimenting with dropping Eq' in favor of Eq1' (and renaming the latter).
+
+-- instance Eq1' Prim where (====) = (===)
+
+instance Eq1' Prim where
+  LitP a ==== LitP b = a ==== b
+  NotP   ==== NotP   = True
+  AndP   ==== AndP   = True
+  OrP    ==== OrP    = True
+  XorP   ==== XorP   = True
+  AddP   ==== AddP   = True
+  ExlP   ==== ExlP   = True
+  ExrP   ==== ExrP   = True
+  PairP  ==== PairP  = True
+  CondP  ==== CondP  = True
+  _      ==== _      = False
+
+instance Eq1' Lit where
+  UnitL   ==== UnitL   = True
+  BoolL x ==== BoolL y = x == y
+  _       ==== _       = False

@@ -34,7 +34,7 @@ import Circat.Circuit
 import Circat.Category
 import Circat.Classes
 
-expToCircuit :: E (a -> b) -> (a :> b)
+expToCircuit :: E Prim (a -> b) -> (a :> b)
 expToCircuit = cccToCircuit . toCCC
 
 #define TS (tyPSource -> Dict)
@@ -46,24 +46,23 @@ expToCircuit = cccToCircuit . toCCC
 cccToCircuit :: (a :-> b) -> (a :> b)
 
 -- Category
-cccToCircuit Id                  = id
-cccToCircuit (g :. f)            = cccToCircuit g . cccToCircuit f
+cccToCircuit Id              = id
+cccToCircuit (g :. f)        = cccToCircuit g . cccToCircuit f
 -- Primitives
-cccToCircuit (Prim p)            = primToSource p
-cccToCircuit (Const (LitP b@LS)) = constC (eval b)
-cccToCircuit (Const p)           = constS (primToSource p) -- Combine
+cccToCircuit (Prim p)        = primToSource p
+cccToCircuit (Lit l@LS)      = constC (eval l)
 -- Product
-cccToCircuit Exl                 = exl
-cccToCircuit Exr                 = exr
-cccToCircuit (f :&&& g)          = cccToCircuit f &&& cccToCircuit g
+cccToCircuit Exl             = exl
+cccToCircuit Exr             = exr
+cccToCircuit (f :&&& g)      = cccToCircuit f &&& cccToCircuit g
 -- Coproduct
-cccToCircuit Inl                 = inl
-cccToCircuit Inr                 = inr
--- cccToCircuit k@(f :||| g)     = cccToCircuit f |||* cccToCircuit g
+cccToCircuit Inl             = inl
+cccToCircuit Inr             = inr
+-- cccToCircuit k@(f :||| g) = cccToCircuit f |||* cccToCircuit g
 -- Exponential
-cccToCircuit Apply               = apply
-cccToCircuit (Curry h)           = curry (cccToCircuit h)
-cccToCircuit (Uncurry h)         = uncurry (cccToCircuit h)
+cccToCircuit Apply           = apply
+cccToCircuit (Curry h)       = curry (cccToCircuit h)
+cccToCircuit (Uncurry h)     = uncurry (cccToCircuit h)
 
 cccToCircuit ccc = error $ "cccToCircuit: not yet handled: " ++ show ccc
 

@@ -57,7 +57,8 @@ import HERMIT.Dictionary.Navigation (rhsOfT,parentOfT,bindingGroupOfT)
 import HERMIT.Dictionary.Unfold (cleanupUnfoldR) -- unfoldNameR,
 
 import LambdaCCC.Misc (Unop) -- ,Binop
--- import qualified LambdaCCC.Ty     as T
+-- import qualified LambdaCCC.Ty as T
+-- import qualified LambdaCCC.Prim as P
 import qualified LambdaCCC.Lambda as E
 import LambdaCCC.MkStringExpr (mkStringExpr)
 
@@ -280,16 +281,20 @@ type ReExpr = RewriteH CoreExpr
 
 reifyExpr :: ReExpr
 reifyExpr =
-  do varId#    <- findIdT 'E.var#
-     appId     <- findIdT '(E.@^)
-     lamvId#   <- findIdT 'E.lamv#
-  -- casevId#  <- findIdT 'E.casev#
-     evalId    <- findIdT 'E.evalE
-     reifyId   <- findIdT 'E.reifyE
-     letId     <- findIdT 'E.lett
+  do varId#    <- findIdT 'E.varP#   -- 'E.var#
+     appId     <- findIdT 'E.appP    -- '(E.@^)
+     lamvId#   <- findIdT 'E.lamvP#  -- 'E.lamv#
+  -- casevId#  <- findIdT 'E.casevP# -- 'E.casev#
+     evalId    <- findIdT 'E.evalEP  -- 'E.evalEP
+     reifyId   <- findIdT 'E.reifyEP -- 'E.reifyE
+     letId     <- findIdT 'E.lettP   -- 'E.lett
      varPatId# <- findIdT 'E.varPat#
      pairPatId <- findIdT '(E.:#)
      asPatId#  <- findIdT 'E.asPat#
+     -- primId#   <- findIdT ''P.Prim   -- not found! :/
+     -- testEId  <- findIdT ''E.E
+--      testEId  <- findTyIdT ''E.E
+--      testTyId  <- findIdT ''T.Ty
      let rew :: ReExpr
          rew = tries [ ("Var#" ,rVar#)
                      , ("Reify",rReify)
@@ -421,9 +426,9 @@ reifyDef = rhsR reifyExpr
 reifyEval :: ReExpr
 reifyEval = reifyArg >>> evalArg
  where
-   reifyArg = do (_reifyE, [Type _, _str, arg, _ty]) <- callNameT 'E.reifyE
+   reifyArg = do (_reifyE, [Type _, _str, arg, _ty]) <- callNameT 'E.reifyEP
                  return arg
-   evalArg  = do (_evalE, [Type _, body])       <- callNameT 'E.evalE
+   evalArg  = do (_evalE, [Type _, body])            <- callNameT 'E.evalEP
                  return body
 
 -- TODO: Replace reifyEval with tryRulesBU ["reify'/eval","eval/reify'"]

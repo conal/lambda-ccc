@@ -19,9 +19,13 @@
 -- GADT of CCC combinators
 ----------------------------------------------------------------------
 
-module LambdaCCC.CCC (module LambdaCCC.Misc, (:->)(..), prim) where
+module LambdaCCC.CCC
+  ( module LambdaCCC.Misc
+  , (:->)(..), prim
+  , convertC
+  ) where
 
-import Prelude hiding (id,(.),curry,uncurry,const)
+import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
 import qualified Control.Arrow as A
 -- import Control.Applicative (liftA3)
 
@@ -31,7 +35,7 @@ import Data.Proof.EQ
 import LambdaCCC.Misc (Unop,Evalable(..),(:*),(:+),(:=>),Eq'(..),(==?))
 import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 -- import LambdaCCC.Ty
-import LambdaCCC.Prim (Prim(..)) -- ,cond,ifThenElse
+import LambdaCCC.Prim (Prim(..),Lit(..)) -- ,cond,ifThenElse
 
 import Circat.Category
 import Circat.Classes
@@ -52,26 +56,24 @@ infixr 2 :|||
 -- is as the categorical counterparts (terminal object, categorical products,
 -- coproducts, and exponentials).
 data (:->) :: * -> * -> * where
-  Id      :: a :-> a
-  (:.)    :: (b :-> c) -> (a :-> b) -> (a :-> c)
+  Id        :: a :-> a
+  (:.)      :: (b :-> c) -> (a :-> b) -> (a :-> c)
   -- Products
-  Exl     :: a :* b :-> a
-  Exr     :: a :* b :-> b
-  (:&&&)  :: (a :-> b) -> (a :-> c) -> (a :-> b :* c)
+  Exl       :: a :* b :-> a
+  Exr       :: a :* b :-> b
+  (:&&&)    :: (a :-> b) -> (a :-> c) -> (a :-> b :* c)
   -- Coproducts
-  Inl     :: a :-> a :+ b
-  Inr     :: b :-> a :+ b
-  (:|||)  :: (b :-> a) -> (c :-> a) -> (b :+ c :-> a)
-  DistL   :: a :* (b :+ c) :-> a :* b :+ a :* c
+  Inl       :: a :-> a :+ b
+  Inr       :: b :-> a :+ b
+  (:|||)    :: (b :-> a) -> (c :-> a) -> (b :+ c :-> a)
+  LdistribS :: a :* (b :+ c) :-> a :* b :+ a :* c
   -- Exponentials
-  Apply   :: (a :=> b) :* a :-> b
-  Curry   :: (a :* b :-> c) -> (a :-> (b :=> c))
-  Uncurry :: (a :-> (b :=> c)) -> (a :* b :-> c)
+  Apply     :: (a :=> b) :* a :-> b
+  Curry     :: (a :* b :-> c) -> (a :-> (b :=> c))
+  Uncurry   :: (a :-> (b :=> c)) -> (a :* b :-> c)
   -- Primitives
-  Prim    :: Prim (a -> b) -> (a :-> b)
-  Const   :: Prim       b  -> (a :-> b)
-
--- TODO: Do we really need both Prim and Const?
+  Prim      :: Prim (a :=> b) -> (a :-> b)
+  Lit       :: Lit b -> (a :-> b)
 
 -- TODO: Try to make instances for the Category subclasses, so we don't need
 -- separate terminology. Then eliminate dup, jam, etc.
@@ -85,12 +87,12 @@ instance Eq' (a :-> b) (c :-> d) where
   Inl        === Inl          = True
   Inr        === Inr          = True
   (f :||| g) === (f' :||| g') = f === f' && g === g'
-  DistL      === DistL        = True
+  LdistribS  === LdistribS    = True
   Apply      === Apply        = True
   Curry h    === Curry h'     = h === h'
   Uncurry k  === Uncurry k'   = k === k'
-  Prim  p    === Prim  p'     = p === p'
-  Const p    === Const p'     = p === p'
+  Prim p     === Prim p'      = p === p'
+  Lit l      === Lit l'       = l === l'
   _          === _            = False
 
 instance Eq (a :-> b) where (==) = (===)
@@ -108,22 +110,28 @@ instance Eq (a :-> b) where (==) = (===)
 -- syntax ("a :-> b").
 
 -- Homomorphic evaluation
+#if 0
 instance Evalable (a :-> b) where
   type ValT (a :-> b) = a :=> b
   eval Id           = id
   eval (g :. f)     = eval g . eval f
   eval (Prim p)     = eval p
-  eval (Const p)    = const (eval p)
+  eval (Lit l)      = const (eval l)
   eval Exl          = fst
   eval Exr          = snd
   eval (f :&&& g)   = eval f A.&&& eval g
   eval Inl          = Left
   eval Inr          = Right
   eval (f :||| g)   = eval f A.||| eval g
-  eval DistL        = distlF
+  eval LdistribS    = distlF
   eval Apply        = uncurry ($)
   eval (Curry   h)  = curry   (eval h)
   eval (Uncurry f)  = uncurry (eval f)
+#else
+instance Evalable (a :-> b) where
+  type ValT (a :-> b) = a -> b
+  eval = convertC
+#endif
 
 distlF :: a :* (b :+ c) -> a :* b :+ a :* c
 distlF (a, Left  b) = Left  (a,b)
@@ -152,7 +160,7 @@ instance Category (:->) where
   Exr        . (_ :&&& g)          = g
   (f :||| _) . Inl                 = f
   (_ :||| g) . Inr                 = g
-  Const p    . _                   = Const p
+  Lit l      . _                   = Lit l
   Apply      . (decompL -> g :. f) = composeApply g . f
 # endif
   g          . f                   = g :. f
@@ -161,7 +169,6 @@ instance Category (:->) where
 
 -- | @'composeApply' h == 'apply' . h@
 composeApply :: (z :-> (a :=> b) :* a) -> (z :-> b)
-composeApply (Const p :&&& f) = prim p . f
 -- apply . (curry h . f &&& g) == h . (f &&& g)
 composeApply ((decompL -> (Curry h :. f)) :&&& g) = h . (f &&& g)
 composeApply (h@Prim{} :. f    :&&& g) = uncurry h . (f  &&& g)
@@ -206,14 +213,13 @@ instance CoproductCat (:->) where
   inl       = Inl
   inr       = Inr
   (|||)     = (:|||)                                -- no rewrites?
-  ldistribS = DistL                                 -- TODO: rename ctor
+  ldistribS = LdistribS                                 -- TODO: rename ctor
   rdistribS = (swapP +++ swapP) . ldistribS . swapP -- maybe move to default.
 
 instance ClosedCat (:->) where
   apply = Apply
 # ifdef Simplify
   curry (Uncurry h) = h
-  curry (Prim p :. Exr) = Const p   -- FIX: not general enough
   -- curry (apply . (f . exl &&& exr)) == f  -- Proof below
   -- curry (Apply :. (f :. Exl :&&& Exr)) = f
 # endif
@@ -289,13 +295,13 @@ instance Show (a :-> b) where
   showsPrec _ Inl         = showString "inl"
   showsPrec _ Inr         = showString "inr"
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
-  showsPrec _ DistL       = showString "distl"
+  showsPrec _ LdistribS   = showString "distl"
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "uncurry" p h
   showsPrec p (Prim x)    = showsPrec p x
                             -- or: showsApp1 "prim" p x
-  showsPrec p (Const w)   = showsApp1 "const" p w
+  showsPrec p (Lit l)     = showsApp1 "const" p l
 
 
 -- -- | Category with boolean operations.
@@ -314,3 +320,41 @@ instance BoolCat (:->) where
 -- etc.
 
 -- TODO: reconcile curried vs uncurried, eliminating the conversions here.
+
+{--------------------------------------------------------------------
+    Experiment: convert to other CCC
+--------------------------------------------------------------------}
+
+convertC :: (BiCCC k, BoolCat k, HasConstArrow k Lit) =>
+            (a :-> b) -> (a `k` b)
+convertC Id           = id
+convertC (g :. f)     = convertC g . convertC f
+convertC (Prim p)     = convertP p
+convertC (Lit l)      = constArrow l
+convertC Exl          = exl
+convertC Exr          = exr
+convertC (f :&&& g)   = convertC f &&& convertC g
+convertC Inl          = inl
+convertC Inr          = inr
+convertC (f :||| g)   = convertC f ||| convertC g
+convertC LdistribS    = ldistribS
+convertC Apply        = apply
+convertC (Curry   h)  = curry   (convertC h)
+convertC (Uncurry f)  = uncurry (convertC f)
+
+convertP :: (BiCCC k, BoolCat k) =>
+            Prim (a :=> b) -> (a `k` b)
+convertP NotP  = not
+convertP AndP  = curry and
+convertP OrP   = curry or
+convertP XorP  = curry xor
+convertP ExlP  = exl
+convertP ExrP  = exr
+convertP PairP = curry id
+convertP InlP  = inl
+convertP InrP  = inr
+-- convertP CondP = condC
+-- convertP AddP  = curry (namedC "add")
+convertP p     = error $ "convertP: not yet handled: " ++ show p
+
+instance HasConstArrow (:->) Lit where constArrow = Lit

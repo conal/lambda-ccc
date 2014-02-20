@@ -1,5 +1,8 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses, ViewPatterns, PatternGuards, CPP #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-} -- see below
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -22,12 +25,21 @@ module LambdaCCC.Prim
   , Prim(..),litP,xor,ifThenElse,cond
   ) where
 
+import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
+
 -- import Control.Arrow ((&&&))
 import Data.Constraint (Dict(..))
 
-import LambdaCCC.Misc
+import Circat.Category
+import Circat.Classes (BoolCat(not,and,or))
+import qualified Circat.Classes as C
+import Circat.Circuit ((:>),IsSourceP,constC) -- :( . Disentangle!
 
-import Circat.Circuit (IsSourceP) -- :( . Disentangle!
+-- TODO: sort out the two uses of xor and simplify the Circat.Classes imports
+-- and uses.
+
+import LambdaCCC.Misc
+import LambdaCCC.ShowUtils (Show'(..))
 
 {--------------------------------------------------------------------
     Literals
@@ -84,6 +96,12 @@ instance Evalable (Lit a) where
   eval UnitL     = ()
   eval (BoolL b) = b
 
+instance HasConstArrow (->) Lit where
+  constArrow x = const (eval x)
+
+instance HasConstArrow (:>) Lit where
+  constArrow l@LS = constC (eval l)
+
 {--------------------------------------------------------------------
     Primitives
 --------------------------------------------------------------------}
@@ -131,13 +149,36 @@ instance Show (Prim a) where
   showsPrec _ InrP       = showString "Right"
   showsPrec _ CondP      = showString "cond"
 
+instance Show' Prim where showsPrec' = showsPrec
+
+instance (BiCCC k, BoolCat k, HasConstArrow k Lit) =>
+         HasConstArrow k Prim where
+  constArrow NotP  = constFun not
+  constArrow AndP  = constFun (curry and)
+  constArrow OrP   = constFun (curry or)
+  constArrow XorP  = constFun (curry C.xor)
+  constArrow ExlP  = constFun exl
+  constArrow ExrP  = constFun exr
+  constArrow PairP = constFun (curry id)
+  constArrow InlP  = constFun inl
+  constArrow InrP  = constFun inr
+  -- constArrow CondP = condC
+  -- constArrow AddP  = curry (namedC "add")
+  constArrow (LitP l) = constArrow l
+  constArrow p     = error $ "constArrow: not yet handled: " ++ show p
+
+--     Variable `k' occurs more often than in the instance head
+--       in the constraint: BiCCC k
+--     (Use -XUndecidableInstances to permit this)
+
+
 instance Evalable (Prim a) where
   type ValT (Prim a) = a
   eval (LitP l)      = eval l
   eval NotP          = not
   eval AndP          = (&&)
   eval OrP           = (||)
-  eval XorP          = (/=)
+  eval XorP          = xor
   eval AddP          = (+)
   eval ExlP          = fst
   eval ExrP          = snd
@@ -145,6 +186,10 @@ instance Evalable (Prim a) where
   eval InlP          = Left
   eval InrP          = Right
   eval CondP         = cond
+
+-- TODO: Split LitP out of Prim, and make Prim have domain and range. Then
+-- revisit 'HasConstArrow', and implement Evalable (Prim a b) homomorphically.
+-- See convertP in LambdaCCC.CCC.
 
 infixr 3 `xor`
 

@@ -28,7 +28,8 @@ Library
                   , template-haskell
                   , containers
                   , constraints
-                  , hermit >= 0.2.0.0
+--                  , kure >= 2.14.0
+                  , hermit >= 0.3.2.0
                   , ty >= 0.1.5
                   , circat >= 0.2.4
   Exposed-Modules:  LambdaCCC.Misc
@@ -41,6 +42,7 @@ Library
                     LambdaCCC.MkStringExpr
                     LambdaCCC.ReifyLambda
                     LambdaCCC.ToCircuit
+
 
 -- TODO: trim
 
