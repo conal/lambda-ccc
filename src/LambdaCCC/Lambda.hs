@@ -34,8 +34,9 @@ module LambdaCCC.Lambda
   -- Temporary less polymorphic variants.
   -- Remove when I can dig up Prim as a type in Core
   , EP, appP, lamP, lettP , varP#, lamvP#, casevP#, evalEP, reifyEP
-  ) 
-    where
+  -- workaround to problem with findIdT
+  , pairPat
+  ) where
 
 import Data.Functor ((<$>))
 import Control.Applicative (pure,liftA2)
@@ -541,6 +542,10 @@ evalEP = evalE
 
 reifyEP :: a -> String -> EP a
 reifyEP = reifyE
+
+-- Workaround to HERMIT issue. Remove later.
+pairPat :: Pat a -> Pat b -> Pat (a :* b)
+pairPat = (:#)
 
 {--------------------------------------------------------------------
     Move elsewhere

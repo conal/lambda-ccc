@@ -30,8 +30,8 @@ import Control.Arrow (arr,(>>>),(&&&))
 import qualified Data.Map as M
 import Text.Printf (printf)
 
-import qualified Language.Haskell.TH as TH (Name) -- ,mkName
-import qualified Language.Haskell.TH.Syntax as TH (showName)
+-- import qualified Language.Haskell.TH as TH (Name) -- ,mkName
+-- import qualified Language.Haskell.TH.Syntax as TH (showName)
 
 -- GHC API
 -- import PrelNames (unitTyConKey,boolTyConKey,intTyConKey)
@@ -41,7 +41,7 @@ import HERMIT.Core (Crumb(..),localFreeIdsExpr)
 import HERMIT.External
 import HERMIT.GHC hiding (mkStringExpr)
 import HERMIT.Kure hiding (apply)
-import HERMIT.Optimize
+import HERMIT.Plugin
 
 -- Note: All of the Dictionary submodules are now re-exported by HERMIT.Dictionary,
 --       so if you prefer you could import all these via that module, rather than seperately.
@@ -49,7 +49,7 @@ import HERMIT.Dictionary.AlphaConversion (unshadowR)
 import HERMIT.Dictionary.Common
 import HERMIT.Dictionary.Composite (simplifyR)
 import HERMIT.Dictionary.Debug (observeR)
-import HERMIT.Dictionary.GHC (rules) -- rule,
+import HERMIT.Dictionary.Rules (rulesR) -- ruleR,
 import HERMIT.Dictionary.Inline (inlineNameR) -- , inlineNamesR
 import HERMIT.Dictionary.Local (letIntroR,letFloatArgR,letFloatTopR)
 import HERMIT.Dictionary.Navigation (rhsOfT,parentOfT,bindingGroupOfT)
@@ -59,7 +59,7 @@ import HERMIT.Dictionary.Unfold (cleanupUnfoldR) -- unfoldNameR,
 import LambdaCCC.Misc (Unop) -- ,Binop
 -- import qualified LambdaCCC.Ty as T
 -- import qualified LambdaCCC.Prim as P
-import qualified LambdaCCC.Lambda as E
+-- import qualified LambdaCCC.Lambda as E
 import LambdaCCC.MkStringExpr (mkStringExpr)
 
 {--------------------------------------------------------------------
@@ -279,18 +279,31 @@ tyTy = dropTyApp1 ''T.Ty . exprType
 
 type ReExpr = RewriteH CoreExpr
 
+lamName :: Unop String
+lamName = ("LambdaCCC.Lambda." ++)
+
+paren :: Unop String
+paren =  ("(" ++) . (++")")
+
+findIdE :: String -> TranslateH a Id
+findIdE = findIdT . lamName
+
+findIdESym :: String -> TranslateH a Id
+findIdESym = findIdT . paren . lamName
+
 reifyExpr :: ReExpr
 reifyExpr =
-  do varId#    <- findIdT 'E.varP#   -- 'E.var#
-     appId     <- findIdT 'E.appP    -- '(E.@^)
-     lamvId#   <- findIdT 'E.lamvP#  -- 'E.lamv#
-  -- casevId#  <- findIdT 'E.casevP# -- 'E.casev#
-     evalId    <- findIdT 'E.evalEP  -- 'E.evalEP
-     reifyId   <- findIdT 'E.reifyEP -- 'E.reifyE
-     letId     <- findIdT 'E.lettP   -- 'E.lett
-     varPatId# <- findIdT 'E.varPat#
-     pairPatId <- findIdT '(E.:#)
-     asPatId#  <- findIdT 'E.asPat#
+  do varId#    <- findIdE "varP#"   -- "var#"
+     appId     <- findIdE "appP"    -- "(@^)"
+     lamvId#   <- findIdE "lamvP#"  -- "lamv#"
+  -- casevId#  <- findIdE "casevP#" -- "casev#"
+     evalId    <- findIdE "evalEP"  -- "evalEP"
+     reifyId   <- findIdE "reifyEP" -- "reifyE"
+     letId     <- findIdE "lettP"   -- "lett"
+     varPatId# <- findIdE "varPat#"
+--      pairPatId <- findIdESym ":#"
+     pairPatId <- findIdE "pairPat"
+     asPatId#  <- findIdE "asPat#"
      -- primId#   <- findIdT ''P.Prim   -- not found! :/
      -- testEId  <- findIdT ''E.E
 --      testEId  <- findTyIdT ''E.E
@@ -409,7 +422,7 @@ anybuER r = anybuR (promoteExprR r)
 -- anytdER r = anytdR (promoteExprR r)
 
 tryRulesBU :: [String] -> RewriteH Core
-tryRulesBU = tryR . anybuER . rules
+tryRulesBU = tryR . anybuER . rulesR
 
 reifyRules :: RewriteH Core
 reifyRules = tryRulesBU $ map ("reify/" ++)
@@ -423,45 +436,45 @@ reifyRules = tryRulesBU $ map ("reify/" ++)
 reifyDef :: RewriteH Core
 reifyDef = rhsR reifyExpr
 
+callNameLam :: String -> TranslateH CoreExpr (CoreExpr, [CoreExpr])
+callNameLam = callNameT . lamName
+
+-- Unused
 reifyEval :: ReExpr
 reifyEval = reifyArg >>> evalArg
  where
-   reifyArg = do (_reifyE, [Type _, _str, arg, _ty]) <- callNameT 'E.reifyEP
+   reifyArg = do (_reifyE, [Type _, _str, arg, _ty]) <- callNameLam "reifyEP"
                  return arg
-   evalArg  = do (_evalE, [Type _, body])            <- callNameT 'E.evalEP
+   evalArg  = do (_evalE, [Type _, body])            <- callNameLam "E.evalEP"
                  return body
 
 -- TODO: Replace reifyEval with tryRulesBU ["reify'/eval","eval/reify'"]
 
--- reifyEval =
-
--- rswE = reifyE ▲ (evalE ▲ swapBI_reified) ($fHasTy(->) ▲ ▲ tup ▹ ■)
-
-inlineCleanup :: TH.Name -> RewriteH Core
+inlineCleanup :: String -> RewriteH Core
 inlineCleanup nm = tryR $ anybuER (inlineNameR nm) >>> anybuER cleanupUnfoldR
 
--- inlineNamesTD :: [TH.Name] -> RewriteH Core
+-- inlineNamesTD :: [String] -> RewriteH Core
 -- inlineNamesTD nms = anytdER (inlineNamesR nms)
 
-reifyNamed :: TH.Name -> RewriteH Core
-reifyNamed nm = snocPathIn (rhsOfT $ cmpTHName2Var nm)
-                  (   inlineCleanup 'E.ifThenElse
+reifyNamed :: String -> RewriteH Core
+reifyNamed nm = snocPathIn (rhsOfT cmpNm)
+                  (   inlineCleanup (lamName "ifThenElse")
                   -- >>> (tryR $ anytdER $ rule "if/pair")
                   >>> reifyExprC
                   >>> reifyRules
                   >>> pathR [App_Arg] (promoteExprR (letIntroR nm'))
                   >>> promoteExprR letFloatArgR
                   )
-            >>> snocPathIn (extractT $ parentOfT $ bindingGroupOfT $ cmpTHName2Var nm)
+            >>> snocPathIn (extractT $ parentOfT $ bindingGroupOfT $ cmpNm)
                   (promoteProgR letFloatTopR)
             >>> inlineCleanup nm
-            >>> inlineCleanup 'E.reifyE
+            >>> inlineCleanup (lamName "reifyE")
             -- >>> tryR (anybuER (promoteExprR reifyEval))
             >>> tryRulesBU ["reify'/eval","eval/reify'"]
             >>> simplifyR  -- For the rule applications at least
  where
-   nm' = TH.showName nm ++ "_reified"
-
+   nm' = nm ++ "_reified"
+   cmpNm = cmpString2Var nm
 
 -- I don't know why I need both cleanupUnfoldR and simplifyR.
 
@@ -475,7 +488,7 @@ reifyNamed nm = snocPathIn (rhsOfT $ cmpTHName2Var nm)
 --------------------------------------------------------------------}
 
 plugin :: Plugin
-plugin = optimize (phase 0 . interactive externals)
+plugin = hermitPlugin (phase 0 . interactive externals)
 
 externals :: [External]
 externals =
@@ -486,7 +499,7 @@ externals =
         (reifyRules :: RewriteH Core)
         ["convert some non-local vars to consts"]
     , external "inline-cleanup"
-        (inlineCleanup :: TH.Name -> RewriteH Core)
+        (inlineCleanup :: String -> RewriteH Core)
         ["inline a named definition, and clean-up beta-redexes"]
     , external "reify-def"
         (reifyDef :: RewriteH Core)
@@ -498,7 +511,7 @@ externals =
         (reifyDef >>> reifyRules :: RewriteH Core)
         ["reify-core and cleanup for definitions"]
     , external "reify-named"
-        (reifyNamed :: TH.Name -> RewriteH Core)
+        (reifyNamed :: String -> RewriteH Core)
         ["reify via name"]
 --     , external "reify-tops"
 --         (reifyTops :: RewriteH ModGuts)
