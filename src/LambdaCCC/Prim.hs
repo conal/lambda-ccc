@@ -199,13 +199,13 @@ xor = (/=)
 
 -- For desugaring if-then-else expressions (assuming RebindableSyntax)
 ifThenElse :: Bool -> Binop a
-ifThenElse i t e = cond (i,(t,e))
+ifThenElse i t e = cond (i,(e,t)) -- note t/e swap
 {-# INLINE ifThenElse #-}
 
-cond :: (Bool, (a,a)) -> a
-cond (True ,(a,_)) = a
-cond (False,(_,b)) = b
-{-# NOINLINE cond #-}
+-- cond :: (Bool, (a,a)) -> a
+-- cond (True ,(a,_)) = a
+-- cond (False,(_,b)) = b
+-- {-# NOINLINE cond #-}
 
 litP :: HasLit a => a -> Prim a
 litP = LitP . toLit
