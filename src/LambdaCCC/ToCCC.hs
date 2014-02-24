@@ -31,9 +31,8 @@ import Data.Proof.EQ
 
 #define PlainConvert
 
-import LambdaCCC.Misc
-import LambdaCCC.Lambda hiding (xor)
-
+import LambdaCCC.Misc (Unit,(:*),(:=>),(===?))
+import LambdaCCC.Lambda (E(..),V,Pat(..))
 import Circat.Category
 
 {--------------------------------------------------------------------
@@ -42,15 +41,13 @@ import Circat.Category
 
 #ifdef PlainConvert
 
-toCCC' :: BiCCCC k p => E p a -> (Unit `k` a)
-toCCC' e = convert e UnitPat
-
 -- | Rewrite a lambda expression via CCC combinators
-toCCC :: BiCCCC k p => E p (a :=> b) -> (a `k` b)
-toCCC (Lam p e) = convert e p
-toCCC e = toCCC (Lam vp (e :^ ve))
- where
-   (vp,ve) = vars "ETA"
+toCCC :: BiCCCC k p => E p a -> (Unit `k` a)
+toCCC e = convert e UnitPat
+
+-- | Variant on 'toCCC'
+toCCC' :: BiCCCC k p => E p (a :=> b) -> (a `k` b)
+toCCC' = unUnitFun . toCCC
 
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: forall a b prim k. BiCCCC k prim =>

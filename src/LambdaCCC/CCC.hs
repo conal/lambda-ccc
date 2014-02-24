@@ -32,7 +32,7 @@ import qualified Control.Arrow as A
 import Data.IsTy
 import Data.Proof.EQ
 
-import LambdaCCC.Misc (Unop,Evalable(..),(:*),(:+),(:=>),Eq'(..),(==?))
+import LambdaCCC.Misc (Unop,Evalable(..),Unit,(:*),(:+),(:=>),Eq'(..),(==?))
 import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 -- import LambdaCCC.Ty
 import LambdaCCC.Prim (Prim(..),Lit(..)) -- ,cond,ifThenElse
@@ -62,6 +62,7 @@ data (:->) :: * -> * -> * where
   Exl       :: a :* b :-> a
   Exr       :: a :* b :-> b
   (:&&&)    :: (a :-> b) -> (a :-> c) -> (a :-> b :* c)
+  It        :: a :-> Unit
   -- Coproducts
   Inl       :: a :-> a :+ b
   Inr       :: b :-> a :+ b
@@ -158,12 +159,20 @@ instance Category (:->) where
   (h :. g)   . f                   = h . (g . f)
   Exl        . (f :&&& _)          = f
   Exr        . (_ :&&& g)          = g
+  It          . _                  = it
   (f :||| _) . Inl                 = f
   (_ :||| g) . Inr                 = g
   Lit l      . _                   = Lit l
   Apply      . (decompL -> g :. f) = composeApply g . f
+  -- Experiment. To do: prove
+  Curry (decompR -> f :. Exr) . _ = curry (f . exr)
 # endif
   g          . f                   = g :. f
+
+-- To prove:
+-- 
+--   curry (f . exr) . g == curry (f . exr)
+
 
 #ifdef Simplify
 
@@ -208,6 +217,9 @@ instance ProductCat (:->) where
                                                = (f &&& g) . r
 # endif
   f &&& g = f :&&& g
+
+instance TerminalCat (:->) where
+  it = It
 
 instance CoproductCat (:->) where
   inl       = Inl
@@ -292,6 +304,7 @@ instance Show (a :-> b) where
   showsPrec _ Exl         = showString "exl"
   showsPrec _ Exr         = showString "exr"
   showsPrec p (f :&&& g)  = showsOp2' "&&&" (3,AssocRight) p f g
+  showsPrec _ It          = showString "it"
   showsPrec _ Inl         = showString "inl"
   showsPrec _ Inr         = showString "inr"
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
@@ -334,6 +347,7 @@ convertC (Lit l)      = unitArrow l . it
 convertC Exl          = exl
 convertC Exr          = exr
 convertC (f :&&& g)   = convertC f &&& convertC g
+convertC It           = it
 convertC Inl          = inl
 convertC Inr          = inr
 convertC (f :||| g)   = convertC f ||| convertC g

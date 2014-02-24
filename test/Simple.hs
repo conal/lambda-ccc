@@ -22,10 +22,11 @@ import Prelude
 
 import LambdaCCC.Misc (Unop,Binop)
 import LambdaCCC.Lambda (EP,reifyEP,xor,ifThenElse)
-import LambdaCCC.ToCCC (toCCC)
+import LambdaCCC.ToCCC (toCCC')
 import LambdaCCC.CCC ((:->),convertC)
 -- import LambdaCCC.ToCircuit
 
+import Circat.Category (unUnitFun)
 import Circat.Circuit (IsSourceP2,(:>),outGWith)
 import Circat.Netlist (outV)
 
@@ -34,7 +35,7 @@ import qualified LambdaCCC.Prim         -- TODO: remove
 import qualified LambdaCCC.Lambda
 import qualified LambdaCCC.Ty
 
-import LambdaCCC.Ty
+-- import LambdaCCC.Ty
 
 swap :: (Bool,Bool) -> (Bool,Bool)
 swap (a,b) = (b,a)
@@ -63,7 +64,7 @@ main = do print e
    -- Both of the following definitions work:
    -- ccc     = toCCCTerm e
    -- circuit = toCCC     e
-   ccc     = toCCC e
+   ccc     = toCCC' e
    circuit = convertC ccc
 
 -- -- Type-specialized toCCC

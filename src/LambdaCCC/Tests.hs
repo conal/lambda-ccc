@@ -23,6 +23,8 @@ import LambdaCCC.Lambda
 import LambdaCCC.CCC
 import LambdaCCC.ToCCC
 
+-- import Circat.Category (unitFun, unUnitFun)
+
 {--------------------------------------------------------------------
     Convenient notation for expression building
 --------------------------------------------------------------------}
@@ -51,6 +53,15 @@ infixl 6 +@
 
 -- TODO: Use Num and Boolean classes
 
+{--------------------------------------------------------------------
+    CCC conversion
+--------------------------------------------------------------------}
+
+toCU :: EP (a :=> b) -> (Unit :-> (a :=> b))
+toCU = toCCC
+
+toC :: EP (a :=> b) -> (a :-> b)
+toC = toCCC'
 
 {--------------------------------------------------------------------
     Examples
@@ -73,7 +84,7 @@ e2 = notE e1
 infixr 1 :+>
 type a :+> b = EP (a -> b)
 
--- \ x -> not
+-- not
 e3 :: Bool :+> Bool
 e3 = ConstE NotP
 
@@ -116,20 +127,20 @@ e9 = Lam p ((a `xorE` b) # (a &&* b))   -- half-adder
 
 {- Evaluations:
 
-> eval e1
-False
-> eval e2
-True
-> eval e3 True
-False
-> eval e4 5
-5
-> eval e5 10
-20
-> eval e6 10
-(10,10)
-> eval e8 (True,False)
-(False,True)
+  > eval e1
+  False
+  > eval e2
+  True
+  > eval e3 True
+  False
+  > eval e4 5
+  5
+  > eval e5 10
+  20
+  > eval e6 10
+  (10,10)
+  > eval e8 (True,False)
+  (False,True)
 
 -}
 
@@ -137,53 +148,54 @@ False
 
 Without Simplify and without Sugared:
 
-> toCCC e3
-apply . (const not &&& id)
-> toCCC e4
-id
-> toCCC e5
-apply . (apply . (const add &&& id) &&& id)
-> toCCC e6
-apply . (apply . (const (,) &&& id) &&& id)
-> toCCC e7
-apply . (const not &&& apply . (apply . (const (&&) &&& apply . (const not &&& id . exl)) &&& apply . (const not &&& id . exr)))
-> toCCC e8
-apply . (apply . (const (,) &&& id . exr) &&& id . exl)
-> toCCC e9
-apply . (apply . (const (,) &&& apply . (apply . (const xor &&& id . exl) &&& id . exr)) &&& apply . (apply . (const (&&) &&& id . exl) &&& id . exr))
+  > toC e3
+  apply . (curry (not . exr) . it &&& id)
+  > toC e4
+  id
+  > toC e5
+  apply . (apply . (*** Exception: unitArrow: not yet handled: add
+  > toC e6
+  apply . (apply . (curry (curry id . exr) . it &&& id) &&& id)
+  > toC e7
+  apply . (curry (not . exr) . it &&& apply . (apply . (curry (curry (uncurry (&&)) . exr) . it &&& apply . (curry (not . exr) . it &&& id . exl)) &&& apply . (curry (not . exr) . it &&& id . exr)))
+  > toC e8
+  apply . (apply . (curry (curry id . exr) . it &&& id . exr) &&& id . exl)
+  > toC e9
+  apply . (apply . (curry (curry id . exr) . it &&& apply . (apply . (curry (curry (uncurry xor) . exr) . it &&& id . exl) &&& id . exr)) &&& apply . (apply . (curry (curry (uncurry (&&)) . exr) . it &&& id . exl) &&& id . exr))
+  > 
 
 With Simplify:
 
-> toCCC e3
-not
-> toCCC e4
-id
-> toCCC e5
-uncurry add . (id &&& id)
-> toCCC e6
-id &&& id
-> toCCC e7
-not . uncurry (&&) . (not . exl &&& not . exr)
-> toCCC e8
-exr &&& exl
-> toCCC e9
-uncurry xor &&& uncurry (&&)
+  > toC e3
+  not
+  > toC e4
+  id
+  > toC e5
+  *** Exception: unitArrow: not yet handled: add
+  > toC e6
+  id &&& id
+  > toC e7
+  not . uncurry (&&) . (not . exl &&& not . exr)
+  > toC e8
+  exr &&& exl
+  > toC e9
+  uncurry xor &&& uncurry (&&)
 
 With Simplify and Sugared:
 
-> toCCC e3
-not
-> toCCC e4
-id
-> toCCC e5
-uncurry add . dup
-> toCCC e6
-dup
-> toCCC e7
-not . uncurry (&&) . twiceP not
-> toCCC e8
-swapP
-> toCCC e9
-uncurry xor &&& uncurry (&&)
+  > toC e3
+  not
+  > toC e4
+  id
+  > toC e5
+  *** Exception: unitArrow: not yet handled: add
+  > toC e6
+  dup
+  > toC e7
+  not . uncurry (&&) . twiceP not
+  > toC e8
+  swapP
+  > toC e9
+  uncurry xor &&& uncurry (&&)
 
 -}
