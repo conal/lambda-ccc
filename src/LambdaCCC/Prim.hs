@@ -96,11 +96,11 @@ instance Evalable (Lit a) where
   eval UnitL     = ()
   eval (BoolL b) = b
 
-instance HasConstArrow (->) Lit where
-  constArrow x = const (eval x)
+instance HasUnitArrow (->) Lit where
+  unitArrow x = const (eval x)
 
-instance HasConstArrow (:>) Lit where
-  constArrow l@LS = constC (eval l)
+instance HasUnitArrow (:>) Lit where
+  unitArrow l@LS = constC (eval l)
 
 {--------------------------------------------------------------------
     Primitives
@@ -151,21 +151,21 @@ instance Show (Prim a) where
 
 instance Show' Prim where showsPrec' = showsPrec
 
-instance (BiCCC k, BoolCat k, HasConstArrow k Lit) =>
-         HasConstArrow k Prim where
-  constArrow NotP  = constFun not
-  constArrow AndP  = constFun (curry and)
-  constArrow OrP   = constFun (curry or)
-  constArrow XorP  = constFun (curry C.xor)
-  constArrow ExlP  = constFun exl
-  constArrow ExrP  = constFun exr
-  constArrow PairP = constFun (curry id)
-  constArrow InlP  = constFun inl
-  constArrow InrP  = constFun inr
-  -- constArrow CondP = condC
-  -- constArrow AddP  = curry (namedC "add")
-  constArrow (LitP l) = constArrow l
-  constArrow p     = error $ "constArrow: not yet handled: " ++ show p
+instance (BiCCC k, BoolCat k, HasUnitArrow k Lit) =>
+         HasUnitArrow k Prim where
+  unitArrow NotP  = constFun not
+  unitArrow AndP  = constFun (curry and)
+  unitArrow OrP   = constFun (curry or)
+  unitArrow XorP  = constFun (curry C.xor)
+  unitArrow ExlP  = constFun exl
+  unitArrow ExrP  = constFun exr
+  unitArrow PairP = constFun (curry id)
+  unitArrow InlP  = constFun inl
+  unitArrow InrP  = constFun inr
+  -- unitArrow CondP = condC
+  -- unitArrow AddP  = curry (namedC "add")
+  unitArrow (LitP l) = unitArrow l
+  unitArrow p     = error $ "unitArrow: not yet handled: " ++ show p
 
 --     Variable `k' occurs more often than in the instance head
 --       in the constraint: BiCCC k

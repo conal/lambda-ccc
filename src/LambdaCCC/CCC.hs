@@ -325,12 +325,12 @@ instance BoolCat (:->) where
     Experiment: convert to other CCC
 --------------------------------------------------------------------}
 
-convertC :: (BiCCC k, BoolCat k, HasConstArrow k Lit) =>
+convertC :: (BiCCC k, BoolCat k, HasUnitArrow k Lit) =>
             (a :-> b) -> (a `k` b)
 convertC Id           = id
 convertC (g :. f)     = convertC g . convertC f
 convertC (Prim p)     = convertP p
-convertC (Lit l)      = constArrow l
+convertC (Lit l)      = unitArrow l . it
 convertC Exl          = exl
 convertC Exr          = exr
 convertC (f :&&& g)   = convertC f &&& convertC g
@@ -357,4 +357,4 @@ convertP InrP  = inr
 -- convertP AddP  = curry (namedC "add")
 convertP p     = error $ "convertP: not yet handled: " ++ show p
 
-instance HasConstArrow (:->) Lit where constArrow = Lit
+instance HasUnitArrow (:->) Lit where unitArrow = Lit

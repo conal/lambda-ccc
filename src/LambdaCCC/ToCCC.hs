@@ -55,7 +55,7 @@ toCCC e = toCCC (Lam vp (e :^ ve))
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: forall a b prim k. BiCCCC k prim =>
            E prim b -> Pat a -> (a `k` b)
-convert (ConstE p)   _ = constArrow p
+convert (ConstE p)   _ = unitArrow p . it
 convert (Var v)      k = convertVar v k
 convert (u :^ v)     k = apply . (convert u k &&& convert v k)
 convert (Lam p e)    k = curry (convert e (k :# p))
@@ -65,8 +65,6 @@ convert (Either f g) k = curry ((convert' f ||| convert' g) . ldistribS)
    convert' h = uncurry (convert h k)
 
 #else
-
--- Maybe change to HasUnitArrow, and use it from TerminalCat
 
 infixl 9 @@
 infixr 2 ||||
