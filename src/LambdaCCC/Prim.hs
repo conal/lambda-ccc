@@ -153,15 +153,15 @@ instance Show' Prim where showsPrec' = showsPrec
 
 instance (BiCCC k, BoolCat k, HasUnitArrow k Lit) =>
          HasUnitArrow k Prim where
-  unitArrow NotP  = constFun not
-  unitArrow AndP  = constFun (curry and)
-  unitArrow OrP   = constFun (curry or)
-  unitArrow XorP  = constFun (curry C.xor)
-  unitArrow ExlP  = constFun exl
-  unitArrow ExrP  = constFun exr
-  unitArrow PairP = constFun (curry id)
-  unitArrow InlP  = constFun inl
-  unitArrow InrP  = constFun inr
+  unitArrow NotP  = unitFun not
+  unitArrow AndP  = unitFun (curry and)
+  unitArrow OrP   = unitFun (curry or)
+  unitArrow XorP  = unitFun (curry C.xor)
+  unitArrow ExlP  = unitFun exl
+  unitArrow ExrP  = unitFun exr
+  unitArrow PairP = unitFun (curry id)
+  unitArrow InlP  = unitFun inl
+  unitArrow InrP  = unitFun inr
   -- unitArrow CondP = condC
   -- unitArrow AddP  = curry (namedC "add")
   unitArrow (LitP l) = unitArrow l
