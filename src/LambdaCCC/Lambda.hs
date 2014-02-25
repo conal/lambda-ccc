@@ -388,7 +388,7 @@ eval' :: (HasOpInfo p, Show' p, EvalableP p) =>
          E p a -> Env -> a
 eval' (Var v)   env    = fromMaybe (error $ "eval': unbound variable: " ++ show v) $
                          lookupVar v env
-eval' (ConstE p) _   = evalP p
+eval' (ConstE p) _     = evalP p
 eval' (u :^ v)  env    = (eval' u env) (eval' v env)
 eval' (Lam p e) env    = \ x -> eval' e (extendEnv p x env)
 eval' (Either f g) env = eval' f env `either` eval' g env
