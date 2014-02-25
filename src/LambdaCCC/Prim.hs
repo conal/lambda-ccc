@@ -75,10 +75,8 @@ litHasShow (BoolL _) = Dict
 --   showsPrec p UnitL     = showsPrec p ()
 --   showsPrec p (BoolL b) = showsPrec p b
 
--- instance Show (Lit a) where
---   showsPrec p l | Dict <- litHasShow l = showsPrec p l
-
-instance Show (Lit a) where showsPrec p l@LSh = showsPrec p l
+instance Show (Lit a) where
+  showsPrec p l@LSh = showsPrec p (eval l)
 
 litIsSourceP :: Lit a -> Dict (IsSourceP a)
 litIsSourceP UnitL     = Dict
