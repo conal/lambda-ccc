@@ -388,6 +388,7 @@ eval' :: (HasOpInfo p, Show' p, EvalableP p) =>
          E p a -> Env -> a
 
 #if 1
+
 eval' (Var v)      env = fromMaybe (error $ "eval': unbound variable: " ++ show v) $
                          lookupVar v env
 eval' (ConstE p)   _   = evalP p
@@ -405,6 +406,15 @@ eval' (ConstE p)   = const (evalP p)
 eval' (u :^ v)     = eval' u <*> eval' v
 eval' (Lam p e)    = (fmap.fmap) (eval' e) (flip (extendEnv p))
 eval' (Either f g) = liftA2 either (eval' f) (eval' g)
+
+-- Derivation of Lam case:
+-- 
+--      \ env -> \ x -> eval' e (extendEnv p x env)
+--   == \ env -> \ x -> eval' e (flip (extendEnv p) env x)
+--   == \ env -> eval' e . flip (extendEnv p) env
+--   == \ env -> fmap (eval' e) (flip (extendEnv p) env)
+--   == fmap (eval' e) . flip (extendEnv p)
+--   == (fmap.fmap) (eval' e) (flip (extendEnv p))
 
 #endif
 
