@@ -39,7 +39,7 @@ module LambdaCCC.Lambda
   ) where
 
 import Data.Functor ((<$>))
-import Control.Applicative (pure,liftA2)
+import Control.Applicative (Applicative(..),liftA2)
 import Control.Monad (guard)
 import Control.Arrow ((&&&))
 import Data.Function (on)
@@ -386,18 +386,36 @@ evalE e = trace ("evalE: " ++ show e) $
 
 eval' :: (HasOpInfo p, Show' p, EvalableP p) => 
          E p a -> Env -> a
-eval' (Var v)   env    = fromMaybe (error $ "eval': unbound variable: " ++ show v) $
+
+#if 1
+eval' (Var v)      env = fromMaybe (error $ "eval': unbound variable: " ++ show v) $
                          lookupVar v env
-eval' (ConstE p) _     = evalP p
-eval' (u :^ v)  env    = (eval' u env) (eval' v env)
-eval' (Lam p e) env    = \ x -> eval' e (extendEnv p x env)
+eval' (ConstE p)   _   = evalP p
+eval' (u :^ v)     env = (eval' u env) (eval' v env)
+eval' (Lam p e)    env = \ x -> eval' e (extendEnv p x env)
 eval' (Either f g) env = eval' f env `either` eval' g env
 
-extendEnv :: Pat b -> b -> Env -> Env
+#else
+
+-- More efficiently, traverse the expression just once, even under lambdas:
+
+eval' (Var v)      = fromMaybe (error $ "eval': unbound variable: " ++ show v) .
+                     lookupVar v
+eval' (ConstE p)   = const (evalP p)
+eval' (u :^ v)     = eval' u <*> eval' v
+eval' (Lam p e)    = (fmap.fmap) (eval' e) (flip (extendEnv p))
+eval' (Either f g) = liftA2 either (eval' f) (eval' g)
+
+#endif
+
+extendEnv :: Pat b -> b -> (Env -> Env)
 extendEnv UnitPat       ()  = id
 extendEnv (VarPat vb)   b   = (Bind vb b :)
 extendEnv (p :# q)    (a,b) = extendEnv q b . extendEnv p a
 extendEnv (p :@ q)      b   = extendEnv q b . extendEnv p b
+
+-- TODO: Rewrite extendEnv so that it examines the pattern just once,
+-- independently from the value.
 
 lookupVar :: forall a. V a -> Env -> Maybe a
 lookupVar va = listToMaybe . catMaybes . map check
