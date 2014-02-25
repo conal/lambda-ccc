@@ -62,14 +62,14 @@ main = do print e
  where
    e       = reifyEP halfAddH "halfAddH"
    -- Both of the following definitions work:
-   -- ccc     = toCCCTerm e
-   -- circuit = toCCC     e
-   ccc     = toCCC' e
-   circuit = convertC ccc
+   ccc     = toCCCTerm' e
+   circuit = toCCC'     e
+--    ccc     = toCCC' e
+--    circuit = convertC ccc
 
--- -- Type-specialized toCCC
--- toCCCTerm :: EP (a -> b) -> (a :-> b)
--- toCCCTerm = toCCC
+-- Type-specialized toCCC
+toCCCTerm' :: EP (a -> b) -> (a :-> b)
+toCCCTerm' = toCCC'
 
 -- Diagram and Verilog
 outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()
