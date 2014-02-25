@@ -470,8 +470,8 @@ reifyNamed nm = snocPathIn (rhsOfT cmpNm)
             >>> inlineCleanup nm
             >>> inlineCleanup (lamName "reifyE")
             -- >>> tryR (anybuER (promoteExprR reifyEval))
-            >>> tryRulesBU ["reify'/eval","eval/reify'"]
-            >>> simplifyR  -- For the rule applications at least
+            -- >>> tryRulesBU ["reifyE/evalE","evalE/reifyE"]
+            >>> tryR simplifyR  -- For the rule applications at least
  where
    nm' = nm ++ "_reified"
    cmpNm = cmpString2Var nm
