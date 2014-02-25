@@ -359,11 +359,11 @@ reifyE _ msg = error (printf "Oops -- reifyE %s was not eliminated" msg)
 
 {-# RULES
 
-"reify/eval" forall e msg. reifyE (evalE e) msg = e
-"eval/reify" forall x msg. evalE (reifyE x msg) = x
+"reifyE/evalE" forall e msg. reifyE (evalE e) msg = e
+-- "evalE/reifyE" forall x msg. evalE (reifyE x msg) = x
 
-"reify/eval" forall e msg. reifyEP (evalEP e) msg = e
-"eval/reify" forall x msg. evalEP (reifyEP x msg) = x
+"reifyEP/evalEP" forall e msg. reifyEP (evalEP e) msg = e
+-- "evalEP/reifyEP" forall x msg. evalEP (reifyEP x msg) = x
 
   #-}
 
@@ -539,9 +539,11 @@ casevP# = casev#
 
 evalEP :: EP a -> a
 evalEP = evalE
+{-# NOINLINE evalEP #-}
 
 reifyEP :: a -> String -> EP a
 reifyEP = reifyE
+{-# NOINLINE reifyEP #-}
 
 -- Workaround to HERMIT issue. Remove later.
 pairPat :: Pat a -> Pat b -> Pat (a :* b)
