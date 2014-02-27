@@ -52,14 +52,14 @@ toCCC' = unUnitFun . toCCC
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: forall a b prim k. BiCCCC k prim =>
            E prim b -> Pat a -> (a `k` b)
-convert (ConstE p)   _ = unitArrow p . it
-convert (Var v)      k = convertVar v k
-convert (u :^ v)     k = apply . (convert u k &&& convert v k)
-convert (Lam p e)    k = curry (convert e (k :# p))
-convert (Either f g) k = curry ((convert' f ||| convert' g) . ldistribS)
+convert (ConstE x)   _ = unitArrow x . it
+convert (Var v)      p = convertVar v p
+convert (u :^ v)     p = apply . (convert u p &&& convert v p)
+convert (Lam q e)    p = curry (convert e (p :# q))
+convert (Either f g) p = curry ((convert' f ||| convert' g) . ldistribS)
  where
-   convert' :: E prim (p :=> q) -> ((a :* p) `k` q)
-   convert' h = uncurry (convert h k)
+   convert' :: E prim (c :=> d) -> ((a :* c) `k` d)
+   convert' h = uncurry (convert h p)
 
 #else
 
