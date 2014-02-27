@@ -1,6 +1,9 @@
 {-# LANGUAGE TypeOperators, FlexibleContexts, ConstraintKinds #-}
-{-# LANGUAGE RebindableSyntax #-}
+{-# LANGUAGE RebindableSyntax, CPP #-}
 {-# OPTIONS_GHC -Wall -fno-warn-unused-imports #-}
+
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -14,9 +17,22 @@
 -- Test conversion of Haskell source code into circuits. To run:
 -- 
 --   hermit Simple.hs -v0 -opt=LambdaCCC.ReifyLambda +Main Simple.hss resume && ./Simple
+--
+-- I'm working toward splitting off main to SimpleMain. When it works:
+--
+--   hermit Simple.hs -v0 -opt=LambdaCCC.ReifyLambda +Simple Simple.hss resume
+--   
 ----------------------------------------------------------------------
 
-module Main where
+#define WithMain
+
+module
+#ifdef WithMain
+       Main
+#else
+       Simple (halfAdd')
+#endif
+              where
 
 import Prelude
 
@@ -31,11 +47,17 @@ import Circat.Circuit (IsSourceP2,(:>),outGWith)
 import Circat.Netlist (outV)
 
 -- Needed for resolving names. Bug? Is there an alternative?
-import qualified LambdaCCC.Prim         -- TODO: remove
 import qualified LambdaCCC.Lambda
-import qualified LambdaCCC.Ty
+-- import qualified LambdaCCC.Prim
+-- import qualified LambdaCCC.Ty
 
 -- import LambdaCCC.Ty
+
+ident :: Bool -> Bool
+ident a = a
+
+notNot :: Bool -> Bool
+notNot a = not (not a)
 
 swap :: (Bool,Bool) -> (Bool,Bool)
 swap (a,b) = (b,a)
@@ -46,6 +68,9 @@ swap2 (a,b) = (not b, not a)
 halfAdd :: (Bool,Bool) -> (Bool,Bool)
 halfAdd (a,b) = (a && b, a `xor` b)
 
+halfAdd' :: (Bool,Bool) -> (Bool,Bool)
+halfAdd' = \ (a,b) -> (a && b, a `xor` b)
+
 -- Version with HOFs
 halfAddH :: (Bool,Bool) -> (Bool,Bool)
 halfAddH (a,b) = (foo (&&), foo xor)
@@ -54,6 +79,8 @@ halfAddH (a,b) = (foo (&&), foo xor)
    foo f = f a b
 
 -- Without the type signature on foo, I get an unhandled polymorphic type.
+
+#ifdef WithMain
 
 main :: IO ()
 main = do print e
@@ -75,3 +102,13 @@ toCCCTerm' = toCCC'
 outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()
 outGV s c = do outGWith ("pdf","") s c
                outV                s c
+
+#else
+
+fiddle :: Int
+fiddle = length "Fiddle"
+
+-- WEIRD: sometimes when I comment out this fiddle definition, I get the dread
+-- "expectJust initTcInteractive" GHC panic.
+
+#endif

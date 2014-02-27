@@ -2,6 +2,6 @@
 
 -- { rhs-of 'halfAddH ; bash }
 
-reify-named 'halfAddH
+reify-named "halfAddH"
 
--- consider 'halfAddH
+binding-of "halfAddH_reified"
