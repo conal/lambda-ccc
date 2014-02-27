@@ -571,7 +571,9 @@ evalEP = evalE
 
 reifyEP :: a -> String -> EP a
 reifyEP = reifyE
-{-# NOINLINE reifyEP #-}
+
+-- If reifyEP doesn't get inlined, change the reifyE prim rules below to
+-- reifyEP.
 
 -- Workaround to HERMIT issue. Remove later.
 pairPat :: Pat a -> Pat b -> Pat (a :* b)
