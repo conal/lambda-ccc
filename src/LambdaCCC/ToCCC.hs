@@ -29,9 +29,15 @@ import Data.Maybe (fromMaybe)
 
 import Data.Proof.EQ
 
-#define PlainConvert
+-- #define PlainConvert
 
-import LambdaCCC.Misc (Unit,(:*),(:=>),(===?))
+import LambdaCCC.Misc (Unit,(:=>)
+#ifdef PlainConvert
+                      ,(:*)
+#else
+                      ,(:+)
+#endif
+                      ,(===?))
 import LambdaCCC.Lambda (E(..),V,Pat(..))
 import Circat.Category
 
@@ -88,7 +94,7 @@ newtype MkC prim b =
 
 instance HasLambda (MkC prim) where
   type PrimT (MkC prim) = prim
-  constL x         = MkC (\ _ -> constArrow x)
+  constL x         = MkC (\ _ -> unitArrow x . it)
   varL y           = MkC (\ p -> convertVar y p)
   MkC u @@ MkC v   = MkC (\ p -> apply . (u p &&& v p))
   lamL q (MkC u)   = MkC (\ p -> curry (u (p :# q)))
@@ -104,19 +110,18 @@ convert (Lam p e)    = lamL p (convert e)
 convert (Either f g) = convert f |||| convert g
 
 -- | Rewrite a lambda expression via CCC combinators
-toCCC :: BiCCCC k prim => E prim (a :=> b) -> (a `k` b)
-toCCC (Lam p e) = unMkC (convert e) p
-toCCC e = toCCC (Lam vp (e :^ ve))
- where
-   (vp,ve) = vars "ETA"
+toCCC :: BiCCCC k p => E p a -> (Unit `k` a)
+toCCC e = unMkC (convert e) UnitPat
 
-toCCC' :: BiCCCC k p => E p a -> (Unit `k` a)
-toCCC' e = unMkC (convert e) UnitPat
+-- | Variant on 'toCCC'
+toCCC' :: BiCCCC k p => E p (a :=> b) -> (a `k` b)
+toCCC' = unUnitFun . toCCC
 
--- A universal instance of 'HasLambda'
-newtype Lambda a = L (forall f . HasLambda f => f a)
+-- A universal instance of 'HasLambda', with 'PrimT' @p@.
+newtype Lambda p a = L (forall f . (HasLambda f, PrimT f ~ p) => f a)
 
-instance HasLambda Lambda where
+instance HasLambda (Lambda p) where
+  type PrimT (Lambda p) = p
   constL o     = L (constL o)
   varL x       = L (varL x)
   L u @@ L v   = L (u @@ v)
