@@ -31,13 +31,7 @@ import Data.Proof.EQ
 
 -- #define PlainConvert
 
-import LambdaCCC.Misc (Unit,(:=>)
-#ifdef PlainConvert
-                      ,(:*)
-#else
-                      ,(:+)
-#endif
-                      ,(===?))
+import LambdaCCC.Misc
 import LambdaCCC.Lambda (E(..),V,Pat(..))
 import Circat.Category
 
