@@ -45,10 +45,6 @@ import Circat.Category
 toCCC :: BiCCCC k p => E p a -> (Unit `k` a)
 toCCC e = convert e UnitPat
 
--- | Variant on 'toCCC'
-toCCC' :: BiCCCC k p => E p (a :=> b) -> (a `k` b)
-toCCC' = unUnitFun . toCCC
-
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: forall a b prim k. BiCCCC k prim =>
            E prim b -> Pat a -> (a `k` b)
@@ -107,10 +103,6 @@ convert (Either f g) = convert f |||| convert g
 toCCC :: BiCCCC k p => E p a -> (Unit `k` a)
 toCCC e = unMkC (convert e) UnitPat
 
--- | Variant on 'toCCC'
-toCCC' :: BiCCCC k p => E p (a :=> b) -> (a `k` b)
-toCCC' = unUnitFun . toCCC
-
 -- A universal instance of 'HasLambda', with 'PrimT' @p@.
 newtype Lambda p a = L (forall f . (HasLambda f, PrimT f ~ p) => f a)
 
@@ -123,6 +115,10 @@ instance HasLambda (Lambda p) where
   L f |||| L g = L (f |||| g)
 
 #endif
+
+-- | Variant on 'toCCC'
+toCCC' :: BiCCCC k p => E p (a :=> b) -> (a `k` b)
+toCCC' = unUnitFun . toCCC
 
 -- TODO: Handle constants in a generic manner, so we can drop the constraint that k ~ (:->).
 
