@@ -56,25 +56,25 @@ infixr 2 :|||
 -- is as the categorical counterparts (terminal object, categorical products,
 -- coproducts, and exponentials).
 data (:->) :: * -> * -> * where
-  Id        :: a :-> a
-  (:.)      :: (b :-> c) -> (a :-> b) -> (a :-> c)
+  Id      :: a :-> a
+  (:.)    :: (b :-> c) -> (a :-> b) -> (a :-> c)
   -- Products
-  Exl       :: a :* b :-> a
-  Exr       :: a :* b :-> b
-  (:&&&)    :: (a :-> b) -> (a :-> c) -> (a :-> b :* c)
-  It        :: a :-> Unit
+  Exl     :: a :* b :-> a
+  Exr     :: a :* b :-> b
+  (:&&&)  :: (a :-> b) -> (a :-> c) -> (a :-> b :* c)
+  It      :: a :-> Unit
   -- Coproducts
-  Inl       :: a :-> a :+ b
-  Inr       :: b :-> a :+ b
-  (:|||)    :: (b :-> a) -> (c :-> a) -> (b :+ c :-> a)
-  LdistribS :: a :* (b :+ c) :-> a :* b :+ a :* c
+  Inl     :: a :-> a :+ b
+  Inr     :: b :-> a :+ b
+  (:|||)  :: (b :-> a) -> (c :-> a) -> (b :+ c :-> a)
+  DistL   :: a :* (b :+ c) :-> a :* b :+ a :* c
   -- Exponentials
-  Apply     :: (a :=> b) :* a :-> b
-  Curry     :: (a :* b :-> c) -> (a :-> (b :=> c))
-  Uncurry   :: (a :-> (b :=> c)) -> (a :* b :-> c)
+  Apply   :: (a :=> b) :* a :-> b
+  Curry   :: (a :* b :-> c) -> (a :-> (b :=> c))
+  Uncurry :: (a :-> (b :=> c)) -> (a :* b :-> c)
   -- Primitives
-  Prim      :: Prim (a :=> b) -> (a :-> b)
-  Lit       :: Lit b -> (a :-> b)
+  Prim    :: Prim (a :=> b) -> (a :-> b)
+  Lit     :: Lit b -> (a :-> b)
 
 -- TODO: Try to make instances for the Category subclasses, so we don't need
 -- separate terminology. Then eliminate dup, jam, etc.
@@ -88,7 +88,7 @@ instance Eq' (a :-> b) (c :-> d) where
   Inl        === Inl          = True
   Inr        === Inr          = True
   (f :||| g) === (f' :||| g') = f === f' && g === g'
-  LdistribS  === LdistribS    = True
+  DistL      === DistL        = True
   Apply      === Apply        = True
   Curry h    === Curry h'     = h === h'
   Uncurry k  === Uncurry k'   = k === k'
@@ -114,20 +114,20 @@ instance Eq (a :-> b) where (==) = (===)
 #if 0
 instance Evalable (a :-> b) where
   type ValT (a :-> b) = a :=> b
-  eval Id           = id
-  eval (g :. f)     = eval g . eval f
-  eval (Prim p)     = eval p
-  eval (Lit l)      = const (eval l)
-  eval Exl          = fst
-  eval Exr          = snd
-  eval (f :&&& g)   = eval f A.&&& eval g
-  eval Inl          = Left
-  eval Inr          = Right
-  eval (f :||| g)   = eval f A.||| eval g
-  eval LdistribS    = distlF
-  eval Apply        = uncurry ($)
-  eval (Curry   h)  = curry   (eval h)
-  eval (Uncurry f)  = uncurry (eval f)
+  eval Id          = id
+  eval (g :. f)    = eval g . eval f
+  eval (Prim p)    = eval p
+  eval (Lit l)     = const (eval l)
+  eval Exl         = fst
+  eval Exr         = snd
+  eval (f :&&& g)  = eval f A.&&& eval g
+  eval Inl         = Left
+  eval Inr         = Right
+  eval (f :||| g)  = eval f A.||| eval g
+  eval DistL       = distlF
+  eval Apply       = uncurry ($)
+  eval (Curry   h) = curry   (eval h)
+  eval (Uncurry f) = uncurry (eval f)
 #else
 instance Evalable (a :-> b) where
   type ValT (a :-> b) = a -> b
@@ -222,11 +222,11 @@ instance TerminalCat (:->) where
   it = It
 
 instance CoproductCat (:->) where
-  inl       = Inl
-  inr       = Inr
-  (|||)     = (:|||)                                -- no rewrites?
-  ldistribS = LdistribS                                 -- TODO: rename ctor
-  rdistribS = (swapP +++ swapP) . ldistribS . swapP -- maybe move to default.
+  inl   = Inl
+  inr   = Inr
+  (|||) = (:|||)                            -- no rewrites?
+  distl = DistL                             -- TODO: rename ctor
+  distr = (swapP +++ swapP) . distl . swapP -- maybe move to default.
 
 instance ClosedCat (:->) where
   apply = Apply
@@ -308,7 +308,7 @@ instance Show (a :-> b) where
   showsPrec _ Inl         = showString "inl"
   showsPrec _ Inr         = showString "inr"
   showsPrec p (f :||| g)  = showsOp2' "|||" (2,AssocRight) p f g
-  showsPrec _ LdistribS   = showString "distl"
+  showsPrec _ DistL       = showString "distl"
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "uncurry" p h
@@ -351,7 +351,7 @@ convertC It           = it
 convertC Inl          = inl
 convertC Inr          = inr
 convertC (f :||| g)   = convertC f ||| convertC g
-convertC LdistribS    = ldistribS
+convertC DistL        = distl
 convertC Apply        = apply
 convertC (Curry   h)  = curry   (convertC h)
 convertC (Uncurry f)  = uncurry (convertC f)

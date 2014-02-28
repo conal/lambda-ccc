@@ -89,7 +89,7 @@ instance HasLambda (MkC prim) where
   MkC u @@ MkC v   = MkC (\ p -> apply . (u p &&& v p))
   lamL q (MkC u)   = MkC (\ p -> curry (u (p :# q)))
   MkC f |||| MkC g =
-    MkC (\ p -> curry ((uncurry (f p) ||| uncurry (g p)) . ldistribS))
+    MkC (\ p -> curry ((uncurry (f p) ||| uncurry (g p)) . distl))
 
 -- | Convert from 'E' to another 'HasLambda' with the same primitives:
 convert :: HasLambda ex => E (PrimT ex) b -> ex b
