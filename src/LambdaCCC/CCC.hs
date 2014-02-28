@@ -225,7 +225,9 @@ instance CoproductCat (:->) where
   inl   = Inl
   inr   = Inr
   (|||) = (:|||)                            -- no rewrites?
-  distl = DistL                             -- TODO: rename ctor
+
+instance DistribCat (:->) where
+  distl = DistL
   distr = (swapP +++ swapP) . distl . swapP -- maybe move to default.
 
 instance ClosedCat (:->) where
