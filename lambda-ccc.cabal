@@ -8,6 +8,7 @@ Author:             Conal Elliott
 Maintainer:         conal@tabula.com
 Copyright:          (c) 2013 by Tabula, Inc
 License:            BSD3
+License-File:       COPYING
 Stability:          experimental
 build-type:         Simple
 
