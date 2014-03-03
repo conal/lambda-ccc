@@ -6,7 +6,7 @@
 
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -40,17 +40,14 @@ module LambdaCCC.Lambda
 
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..),liftA2)
-import Control.Monad (guard)
 import Control.Arrow ((&&&))
-import Data.Function (on)
-import Data.Maybe (isJust,fromMaybe,catMaybes,listToMaybe)
+import Data.Maybe (fromMaybe,catMaybes,listToMaybe)
 import Text.Printf (printf)
 import Debug.Trace (trace)
 
 import GHC.Pack (unpackCString#)
 import GHC.Prim (Addr#)
 
-import Data.IsTy
 import Data.Proof.EQ
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
