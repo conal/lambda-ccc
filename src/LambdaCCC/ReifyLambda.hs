@@ -282,14 +282,8 @@ type ReExpr = RewriteH CoreExpr
 lamName :: Unop String
 lamName = ("LambdaCCC.Lambda." ++)
 
-paren :: Unop String
-paren =  ("(" ++) . (++")")
-
 findIdE :: String -> TranslateH a Id
 findIdE = findIdT . lamName
-
-findIdESym :: String -> TranslateH a Id
-findIdESym = findIdT . paren . lamName
 
 reifyExpr :: ReExpr
 reifyExpr =
@@ -301,8 +295,7 @@ reifyExpr =
      reifyId   <- findIdE "reifyEP" -- "reifyE"
      letId     <- findIdE "lettP"   -- "lett"
      varPatId# <- findIdE "varPat#"
---      pairPatId <- findIdESym ":#"
-     pairPatId <- findIdE "pairPat"
+     pairPatId <- findIdE ":#"
      asPatId#  <- findIdE "asPat#"
      -- primId#   <- findIdT ''P.Prim   -- not found! :/
      -- testEId  <- findIdT ''E.E
