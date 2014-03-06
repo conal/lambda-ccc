@@ -65,6 +65,11 @@ swap (a,b) = (b,a)
 swap2 :: (Bool,Bool) -> (Bool,Bool)
 swap2 (a,b) = (not b, not a)
 
+swap3 :: (Bool,Bool) -> (Bool,Bool)
+swap3 = swap'
+ where
+   swap' (a,b) = (b,a)
+
 halfAdd :: (Bool,Bool) -> (Bool,Bool)
 halfAdd (a,b) = (a && b, a `xor` b)
 
@@ -75,7 +80,7 @@ halfAdd' = \ (a,b) -> (a && b, a `xor` b)
 halfAddH :: (Bool,Bool) -> (Bool,Bool)
 halfAddH (a,b) = (foo (&&), foo xor)
  where
-   foo :: (Bool -> Bool -> Bool) -> Bool
+   -- foo :: (Bool -> Bool -> Bool) -> Bool
    foo f = f a b
 
 -- Without the type signature on foo, I get an unhandled polymorphic type.

@@ -2,6 +2,10 @@
 
 -- { rhs-of 'halfAddH ; bash }
 
+set-pp-type Show
+
 reify-named "halfAddH"
 
-binding-of "halfAddH_reified"
+-- rhs-of main
+-- rhs-of halfAddH
+rhs-of halfAddH_reified
