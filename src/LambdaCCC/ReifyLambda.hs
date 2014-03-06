@@ -26,7 +26,7 @@ module LambdaCCC.ReifyLambda
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..))
 -- import Control.Monad ((<=<),liftM2)
-import Control.Arrow (arr,(>>>),(&&&))
+import Control.Arrow (arr,(>>>))
 import qualified Data.Map as M
 import Text.Printf (printf)
 
@@ -60,7 +60,7 @@ import LambdaCCC.Misc (Unop) -- ,Binop
 -- import qualified LambdaCCC.Ty as T
 -- import qualified LambdaCCC.Prim as P
 -- import qualified LambdaCCC.Lambda as E
-import LambdaCCC.MkStringExpr (mkStringExpr)
+-- import LambdaCCC.MkStringExpr (mkStringExpr)
 
 {--------------------------------------------------------------------
     Core utilities
@@ -287,13 +287,13 @@ findIdE = findIdT . lamName
 
 reifyExpr :: ReExpr
 reifyExpr =
-  do varId#    <- findIdE "varP#"   -- "var#"
-     appId     <- findIdE "appP"    -- "(@^)"
-     lamvId#   <- findIdE "lamvP#"  -- "lamv#"
-  -- casevId#  <- findIdE "casevP#" -- "casev#"
-     evalId    <- findIdE "evalEP"  -- "evalEP"
-     reifyId   <- findIdE "reifyEP" -- "reifyE"
-     letId     <- findIdE "lettP"   -- "lett"
+  do varId#    <- findIdE "varP#"    -- "var#"
+     appId     <- findIdE "appP"     -- "(@^)"
+     lamvId#   <- findIdE "lamvP#"   -- "lamv#"
+  -- casevId#  <- findIdE "casevP#"  -- "casev#"
+     evalId    <- findIdE "evalEP"   -- "evalEP"
+     reifyId#  <- findIdE "reifyEP#" -- "reifyE#"
+     letId     <- findIdE "lettP"    -- "lett"
      varPatId# <- findIdE "varPat#"
      pairPatId <- findIdE ":#"
      asPatId#  <- findIdE "asPat#"
@@ -304,8 +304,9 @@ reifyExpr =
      let rew :: ReExpr
          rew = tries [ ("Var#" ,rVar#)
                      , ("Reify",rReify)
-                     , ("App"  ,rApp)
+                     , ("AppT" ,rAppT)
                      , ("LamT" ,rLamT)
+                     , ("App"  ,rApp)
                      , ("Lam#" ,rLam#)
                      , ("Let"  ,rLet)
                      , ("Case" ,rCase)
@@ -320,14 +321,15 @@ reifyExpr =
          -- Reify non-local variables and their polymorphic instantiations.
          rReify = do e@(collectTypeArgs -> (Var v, _)) <- idR
                      let t = exprType e
-                     (str,_) <- applyInContextT mkVarName v
-                     return $ apps reifyId [t] [e,str]
-         rApp  = do App (exprType -> funTy) _ <- idR
-                    appT  rew rew $ arr $ \ u' v' ->
-                      let (a,b) = splitFunTy funTy in
-                        apps appId [b,a] [u', v'] -- note b,a
+                     return $ apps reifyId# [t] [e,varLitE v]
+         rAppT = do App _ (Type _) <- idR   -- Type applications
+                    appT rew idR (arr App)
          rLamT = do Lam (isTyVar -> True) _ <- idR
                     lamT idR rew (arr Lam)
+         rApp  = do App (exprType -> funTy) _ <- idR
+                    appT rew rew $ arr $ \ u' v' ->
+                      let (a,b) = splitFunTy funTy in
+                        apps appId [b,a] [u', v'] -- note b,a
          rLam# = do Lam (varType -> vty) (exprType -> bodyTy) <- idR
                     lamT idR rew $ arr $ \ v e' ->
                       apps lamvId# [vty, bodyTy] [varLitE v,e']
@@ -400,8 +402,8 @@ altT :: (ExtendPath c Crumb, AddBindings c, Monad m)
      -> Translate c m CoreAlt b
 -}
 
-mkVarName :: MonadThings m => Translate c m Var (CoreExpr,Type)
-mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType
+-- mkVarName :: MonadThings m => Translate c m Var (CoreExpr,Type)
+-- mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType
 
 varLitE :: Var -> CoreExpr
 varLitE = Lit . mkMachString . uqName . varName
@@ -438,7 +440,7 @@ reifyEval = reifyArg >>> evalArg
  where
    reifyArg = do (_reifyE, [Type _, _str, arg, _ty]) <- callNameLam "reifyEP"
                  return arg
-   evalArg  = do (_evalE, [Type _, body])            <- callNameLam "E.evalEP"
+   evalArg  = do (_evalE, [Type _, body])            <- callNameLam "evalEP"
                  return body
 
 -- TODO: Replace reifyEval with tryRulesBU ["reify'/eval","eval/reify'"]
@@ -461,9 +463,11 @@ reifyNamed nm = snocPathIn (rhsOfT cmpNm)
             >>> snocPathIn (extractT $ parentOfT $ bindingGroupOfT $ cmpNm)
                   (promoteProgR letFloatTopR)
             >>> inlineCleanup nm
-            >>> inlineCleanup (lamName "reifyE")
+            -- I don't know why the following is needed, considering the INLINE
+            >>> inlineCleanup (lamName "reifyEP#")
             -- >>> tryR (anybuER (promoteExprR reifyEval))
             -- >>> tryRulesBU ["reifyE/evalE","evalE/reifyE"]
+            -- >>> tryRulesBU ["reifyEP/evalEP"]
             >>> tryR simplifyR  -- For the rule applications at least
  where
    nm' = nm ++ "_reified"
@@ -510,6 +514,6 @@ externals =
 --         (reifyTops :: RewriteH ModGuts)
 --         ["reify via name"]
     , external "reify-eval"
-        (promoteExprR reifyEval :: RewriteH Core)
+        (anybuER (promoteExprR reifyEval) :: RewriteH Core)
         ["simplify reifyE composed with evalE"]
     ]
