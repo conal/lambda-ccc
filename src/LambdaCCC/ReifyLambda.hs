@@ -4,8 +4,10 @@
 {-# LANGUAGE MagicHash, CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+-- TODO: Restore the following pragmas
+
+{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -36,7 +38,7 @@ import Text.Printf (printf)
 -- GHC API
 -- import PrelNames (unitTyConKey,boolTyConKey,intTyConKey)
 
-import HERMIT.Context (ReadBindings(..),hermitBindings) -- ,AddBindings,HermitBindingSite
+import HERMIT.Context (ReadBindings(..),hermitBindings,boundIn) -- ,AddBindings,HermitBindingSite
 import HERMIT.Core (Crumb(..),localFreeIdsExpr)
 import HERMIT.External
 import HERMIT.GHC hiding (mkStringExpr)
@@ -112,11 +114,19 @@ pretties = intercalate "," . map pretty
 -}
 
 -- | Variant of GHC's 'collectArgs'
-collectTypeArgs :: CoreExpr -> (CoreExpr, [Type])
-collectTypeArgs expr = go expr []
+collectTypeArgs :: CoreExpr -> ([Type], CoreExpr)
+collectTypeArgs expr = go [] expr
   where
-    go (App f (Type t)) ts = go f (t:ts)
-    go e 	        ts = (e, ts)
+    go ts (App f (Type t)) = go (t:ts) f
+    go ts                e = (reverse ts, e)
+
+collectForalls :: Type -> ([Var], Type)
+collectForalls ty = go [] ty
+  where
+    go vs (ForAllTy v t') = go (v:vs) t'
+    go vs t               = (reverse vs, t)
+
+-- TODO: Rewrite collectTypeArgs and collectForalls as unfolds and refactor.
 
 #if 0
 
@@ -171,7 +181,7 @@ pairT tu tv f = translate $ \ c ->
 appVTysT :: (ExtendPath c Crumb, Monad m) =>
             Translate c m Var a -> (a -> [Type] -> b) -> Translate c m CoreExpr b
 appVTysT tv h = translate $ \c ->
-  \ case (collectTypeArgs -> (Var v, ts)) ->
+  \ case (collectTypeArgs -> (ts, Var v)) ->
            liftM2 h (Kure.apply tv (applyN (length ts) (@@ App_Fun) c) v)
                     (return ts)
          _ -> fail "not an application of a variable to types."
@@ -192,7 +202,8 @@ rhsR = defR idR
 
 -- The set of variables in a HERMIT context
 isLocal :: ReadBindings c => c -> (Var -> Bool)
-isLocal = flip M.member . hermitBindings
+-- isLocal = flip M.member . hermitBindings
+isLocal = flip boundIn
 
 -- TODO: Maybe return a predicate instead of a set. More abstract, and allows
 -- for efficient construction. Here, we'd probably want to use the underlying
@@ -311,17 +322,28 @@ reifyExpr =
                      , ("Let"  ,rLet)
                      , ("Case" ,rCase)
                      ]
+
+--          rVar#  = do local <- isLocalT
+--                      varT $
+--                        do v <- idR
+--                           if local v then
+--                             return $ apps varId# [varType v] [varLitE v]
+--                            else
+--                             fail "rVar: not a lambda-bound variable"
          rVar#  = do local <- isLocalT
-                     varT $
-                       do v <- idR
-                          if local v then
-                            return $ apps varId# [varType v] [varLitE v]
-                           else
-                            fail "rVar: not a lambda-bound variable"
+                     Var v <- idR
+                     if local v then
+                       return $ apps varId# [varType v] [varLitE v]
+                      else
+                       fail "rVar: not a lambda-bound variable"
+
          -- Reify non-local variables and their polymorphic instantiations.
-         rReify = do e@(collectTypeArgs -> (Var v, _)) <- idR
-                     let t = exprType e
-                     return $ apps reifyId# [t] [e,varLitE v]
+         rReify = do local <- isLocalT
+                     e@(collectTypeArgs -> (_, Var v)) <- idR
+                     if local v then
+                       fail "rReify: lambda-bound variable"
+                      else
+                       return $ apps reifyId# [exprType e] [e,varLitE v]
          rAppT = do App _ (Type _) <- idR   -- Type applications
                     appT rew idR (arr App)
          rLamT = do Lam (isTyVar -> True) _ <- idR
@@ -371,8 +393,21 @@ reifyExpr =
          -- TODO: Literals
      do _ <- observeR' "Reifying expression "
         ty <- arr exprType
+#if 0
         let mkEval e' = apps evalId [ty] [e']
+#else
+        let (tyVars,ty') = collectForalls ty
+            mkEval (collectTyBinders -> (tyVars',body)) =
+              if tyVars == tyVars' then
+                mkLams tyVars (apps evalId [ty'] [body])
+              else
+                error $ "mkEval: type variable mismatch: "
+                        ++ show (uqVarName <$> tyVars, uqVarName <$> tyVars')
+#endif
         mkEval <$> rew
+
+-- If I ever get the type variable mismatch error, take a different approach,
+-- extracting the type of e' and dropping the EP.
 
 reifyExprC :: RewriteH Core
 reifyExprC = tryR unshadowR >>> promoteExprR reifyExpr
@@ -406,7 +441,10 @@ altT :: (ExtendPath c Crumb, AddBindings c, Monad m)
 -- mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType
 
 varLitE :: Var -> CoreExpr
-varLitE = Lit . mkMachString . uqName . varName
+varLitE = Lit . mkMachString . uqVarName
+
+uqVarName :: Var -> String
+uqVarName = uqName . varName
 
 anybuER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) =>
            Rewrite c m CoreExpr -> Rewrite c m g
@@ -451,17 +489,23 @@ inlineCleanup nm = tryR $ anybuER (inlineNameR nm) >>> anybuER cleanupUnfoldR
 -- inlineNamesTD :: [String] -> RewriteH Core
 -- inlineNamesTD nms = anytdER (inlineNamesR nms)
 
+-- #define FactorReified
+
 reifyNamed :: String -> RewriteH Core
 reifyNamed nm = snocPathIn (rhsOfT cmpNm)
                   (   inlineCleanup (lamName "ifThenElse")
                   -- >>> (tryR $ anytdER $ rule "if/pair")
                   >>> reifyExprC
                   >>> reifyRules
-                  >>> pathR [App_Arg] (promoteExprR (letIntroR nm'))
+#ifdef FactorReified
+                  >>> pathR [App_Arg] (promoteExprR (letIntroR (nm ++ "_reified")))
                   >>> promoteExprR letFloatArgR
+#endif
                   )
+#ifdef FactorReified
             >>> snocPathIn (extractT $ parentOfT $ bindingGroupOfT $ cmpNm)
                   (promoteProgR letFloatTopR)
+#endif
             >>> inlineCleanup nm
             -- I don't know why the following is needed, considering the INLINE
             >>> inlineCleanup (lamName "reifyEP#")
@@ -470,7 +514,6 @@ reifyNamed nm = snocPathIn (rhsOfT cmpNm)
             -- >>> tryRulesBU ["reifyEP/evalEP"]
             >>> tryR simplifyR  -- For the rule applications at least
  where
-   nm' = nm ++ "_reified"
    cmpNm = cmpString2Var nm
 
 -- I don't know why I need both cleanupUnfoldR and simplifyR.
