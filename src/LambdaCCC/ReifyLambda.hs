@@ -208,18 +208,6 @@ rhsR = defR idR
 isLocal :: ReadBindings c => c -> (Var -> Bool)
 isLocal = flip boundIn
 
-isLambdaBoundSite :: HermitBindingSite -> Bool
-isLambdaBoundSite LAM           = True
-isLambdaBoundSite CASEALT       = True
-isLambdaBoundSite CASEBINDER {} = True
-isLambdaBoundSite NONREC {}     = True   -- test
-isLambdaBoundSite _             = False
-
-isLambdaBound :: ReadBindings c => c -> (Var -> Bool)
-isLambdaBound c v = fromMaybe False (isLambdaBoundSite.hbSite <$> lookupHermitBinding v c)
-                       
--- isLambdaBound doesn't give me the distinction I'd hoped for.
-
 -- TODO: Maybe return a predicate instead of a set. More abstract, and allows
 -- for efficient construction. Here, we'd probably want to use the underlying
 -- map to implement the returned predicate.
@@ -227,10 +215,6 @@ isLambdaBound c v = fromMaybe False (isLambdaBoundSite.hbSite <$> lookupHermitBi
 -- | Extract just the lambda-bound variables in a HERMIT context
 isLocalT :: (ReadBindings c, Applicative m) => Translate c m a (Var -> Bool)
 isLocalT = contextonlyT (pure . isLocal)
-
--- | Extract just the lambda-bound variables in a HERMIT context
-isLambdaBoundT :: (ReadBindings c, Applicative m) => Translate c m a (Var -> Bool)
-isLambdaBoundT = contextonlyT (pure . isLambdaBound)
 
 -- topLevelBindsR :: (ExtendPath c Crumb, AddBindings c, MonadCatch m) =>
 --                   Rewrite c m CoreBind -> Rewrite c m ModGuts
@@ -342,14 +326,14 @@ reifyExpr =
                      , ("Case" ,rCase)
                      ]
 
---          rVar#  = do local <- isLambdaBoundT
+--          rVar#  = do local <- isLocalT
 --                      varT $
 --                        do v <- idR
 --                           if local v then
 --                             return $ apps varId# [varType v] [varLitE v]
 --                            else
 --                             fail "rVar: not a lambda-bound variable"
-         rVar#  = do local <- isLambdaBoundT
+         rVar#  = do local <- isLocalT
                      Var v <- idR
                      if local v then
                        return $ apps varId# [varType v] [varLitE v]
@@ -357,7 +341,7 @@ reifyExpr =
                        fail "rVar: not a lambda-bound variable"
 
          -- Reify non-local variables and their polymorphic instantiations.
-         rReify = do local <- isLambdaBoundT
+         rReify = do local <- isLocalT
                      e@(collectTypeArgs -> (_, Var v)) <- idR
                      if local v then
                        fail "rReify: lambda-bound variable"
