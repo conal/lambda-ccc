@@ -1,11 +1,12 @@
 -- HERMIT script for Tests.hs
 
--- { rhs-of 'halfAddH ; bash }
+-- { rhs-of 'swap ; bash }
 
 set-pp-type Show
 
-reify-named "halfAddH"
+reify-named swap6
 
 -- rhs-of main
--- rhs-of halfAddH
-rhs-of halfAddH_reified
+-- rhs-of swap6
+binding-of swap6
+-- binding-of swap6_reified

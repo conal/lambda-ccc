@@ -30,7 +30,7 @@ module
 #ifdef WithMain
        Main
 #else
-       Simple (halfAdd')
+       Simple
 #endif
               where
 
@@ -59,8 +59,9 @@ ident a = a
 notNot :: Bool -> Bool
 notNot a = not (not a)
 
-swap :: (Bool,Bool) -> (Bool,Bool)
-swap (a,b) = (b,a)
+-- swap :: (Bool,Bool) -> (Bool,Bool)
+swap :: (a,b) -> (b,a)
+swap (x,y) = (y,x)
 
 swap2 :: (Bool,Bool) -> (Bool,Bool)
 swap2 (a,b) = (not b, not a)
@@ -68,31 +69,57 @@ swap2 (a,b) = (not b, not a)
 swap3 :: (Bool,Bool) -> (Bool,Bool)
 swap3 = swap'
  where
-   swap' (a,b) = (b,a)
+   swap' (x,y) = (y,x)
+
+swap4 :: (Bool,Bool) -> (Bool,Bool)
+swap4 = swap'
+ where
+   swap' :: (a,b) -> (b,a)
+   swap' (x,y) = (y,x)
+
+swap5 :: (Bool,Int) -> (Int,Bool)
+swap5 = swap
+
+swap6 :: (Bool,Bool) -> (Bool,Bool)
+swap6 = \ p -> swap' (swap' p)
+        -- swap' . swap'
+ where
+   swap' :: (a,b) -> (b,a)
+   swap' (x,y) = (y,x)
+
+swap7 :: (Bool,Bool) -> (Bool,Bool)
+swap7 p = swap (swap p)
+
+swap8 :: (Bool,Bool) -> (Bool,Bool)
+swap8 p = swap p
+
+id' :: a -> a
+id' x = x
+
+foo :: Bool -> Bool
+foo = id'
 
 halfAdd :: (Bool,Bool) -> (Bool,Bool)
 halfAdd (a,b) = (a && b, a `xor` b)
 
-halfAdd' :: (Bool,Bool) -> (Bool,Bool)
-halfAdd' = \ (a,b) -> (a && b, a `xor` b)
-
 -- Version with HOFs
 halfAddH :: (Bool,Bool) -> (Bool,Bool)
-halfAddH (a,b) = (foo (&&), foo xor)
+halfAddH (a,b) = (h (&&), h xor)
  where
-   -- foo :: (Bool -> Bool -> Bool) -> Bool
-   foo f = f a b
+   h :: (Bool -> Bool -> Bool) -> Bool
+   h f = f a b
 
--- Without the type signature on foo, I get an unhandled polymorphic type.
+-- Without the type signature on foo, I get into trouble with polymorphism.
+-- Still working.
 
 #ifdef WithMain
 
 main :: IO ()
 main = do print e
           print ccc
-          outGV "halfAddH" circuit
+          outGV "swap6" circuit
  where
-   e       = reifyEP halfAddH "halfAddH"
+   e       = reifyEP swap6 "swap6"
    -- Both of the following definitions work:
    ccc     = toCCCTerm' e
    circuit = toCCC'     e
