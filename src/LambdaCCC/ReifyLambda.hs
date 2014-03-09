@@ -30,6 +30,8 @@ import Control.Applicative (Applicative(..))
 -- import Control.Monad ((<=<),liftM2)
 import Control.Arrow (arr,(>>>))
 import qualified Data.Map as M
+import qualified Data.Set as S
+import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
 
 -- import qualified Language.Haskell.TH as TH (Name) -- ,mkName
@@ -38,7 +40,9 @@ import Text.Printf (printf)
 -- GHC API
 -- import PrelNames (unitTyConKey,boolTyConKey,intTyConKey)
 
-import HERMIT.Context (ReadBindings(..),hermitBindings,boundIn) -- ,AddBindings,HermitBindingSite
+import HERMIT.Context
+  (ReadBindings(..),hermitBindings,HermitBinding(..),HermitBindingSite(..)
+  ,lookupHermitBinding,boundIn) -- ,AddBindings
 import HERMIT.Core (Crumb(..),localFreeIdsExpr)
 import HERMIT.External
 import HERMIT.GHC hiding (mkStringExpr)
@@ -202,8 +206,19 @@ rhsR = defR idR
 
 -- The set of variables in a HERMIT context
 isLocal :: ReadBindings c => c -> (Var -> Bool)
--- isLocal = flip M.member . hermitBindings
 isLocal = flip boundIn
+
+isLambdaBoundSite :: HermitBindingSite -> Bool
+isLambdaBoundSite LAM           = True
+isLambdaBoundSite CASEALT       = True
+isLambdaBoundSite CASEBINDER {} = True
+isLambdaBoundSite NONREC {}     = True   -- test
+isLambdaBoundSite _             = False
+
+isLambdaBound :: ReadBindings c => c -> (Var -> Bool)
+isLambdaBound c v = fromMaybe False (isLambdaBoundSite.hbSite <$> lookupHermitBinding v c)
+                       
+-- isLambdaBound doesn't give me the distinction I'd hoped for.
 
 -- TODO: Maybe return a predicate instead of a set. More abstract, and allows
 -- for efficient construction. Here, we'd probably want to use the underlying
@@ -212,6 +227,10 @@ isLocal = flip boundIn
 -- | Extract just the lambda-bound variables in a HERMIT context
 isLocalT :: (ReadBindings c, Applicative m) => Translate c m a (Var -> Bool)
 isLocalT = contextonlyT (pure . isLocal)
+
+-- | Extract just the lambda-bound variables in a HERMIT context
+isLambdaBoundT :: (ReadBindings c, Applicative m) => Translate c m a (Var -> Bool)
+isLambdaBoundT = contextonlyT (pure . isLambdaBound)
 
 -- topLevelBindsR :: (ExtendPath c Crumb, AddBindings c, MonadCatch m) =>
 --                   Rewrite c m CoreBind -> Rewrite c m ModGuts
@@ -323,14 +342,14 @@ reifyExpr =
                      , ("Case" ,rCase)
                      ]
 
---          rVar#  = do local <- isLocalT
+--          rVar#  = do local <- isLambdaBoundT
 --                      varT $
 --                        do v <- idR
 --                           if local v then
 --                             return $ apps varId# [varType v] [varLitE v]
 --                            else
 --                             fail "rVar: not a lambda-bound variable"
-         rVar#  = do local <- isLocalT
+         rVar#  = do local <- isLambdaBoundT
                      Var v <- idR
                      if local v then
                        return $ apps varId# [varType v] [varLitE v]
@@ -338,7 +357,7 @@ reifyExpr =
                        fail "rVar: not a lambda-bound variable"
 
          -- Reify non-local variables and their polymorphic instantiations.
-         rReify = do local <- isLocalT
+         rReify = do local <- isLambdaBoundT
                      e@(collectTypeArgs -> (_, Var v)) <- idR
                      if local v then
                        fail "rReify: lambda-bound variable"
