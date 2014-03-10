@@ -7,7 +7,7 @@
 -- TODO: Restore the following pragmas
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
-{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -333,6 +333,7 @@ reifyExpr =
 --                             return $ apps varId# [varType v] [varLitE v]
 --                            else
 --                             fail "rVar: not a lambda-bound variable"
+
          rVar#  = do local <- isLocalT
                      Var v <- idR
                      if local v then
@@ -362,6 +363,31 @@ reifyExpr =
                     Let (NonRec (varType -> patTy) _) (exprType -> bodyTy) <- idR
                     letT reifyBind rew $ \ (patE,rhs') body' ->
                       apps letId [patTy,bodyTy] [patE,rhs',body']
+
+--          rLetPoly = do Let (NonRec (varType -> ForAllTy _ _) _) _ <- idR
+--                        letAllR (nonRecAllR idR reifyRhs) rew
+
+-- letAllR :: (ExtendPath c Crumb, ReadPath c Crumb, AddBindings c, Monad m) =>
+--            Rewrite c m CoreBind -> Rewrite c m CoreExpr -> Rewrite c m CoreExpr
+
+-- nonRecAllR :: (ExtendPath c Crumb, Monad m) =>
+--               Rewrite c m Var -> Rewrite c m CoreExpr -> Rewrite c m CoreBind
+
+-- letT :: (ExtendPath c Crumb, ReadPath c Crumb, AddBindings c, Monad m) =>
+--         Translate c m CoreBind a1 -> Translate c m CoreExpr a2 -> (a1 -> a2 -> b) -> Translate c m CoreExpr b
+
+
+         -- reifyBind :: TranslateH CoreBind (CoreExpr,CoreExpr)
+         -- reifyBind = nonRecT varPatT# rew (,)
+
+--         let (tyVars,ty') = collectForalls ty
+--             mkEval (collectTyBinders -> (tyVars',body)) =
+--               if tyVars == tyVars' then
+--                 mkLams tyVars (apps evalId [ty'] [body])
+--               else
+--                 error $ "mkEval: type variable mismatch: "
+--                         ++ show (uqVarName <$> tyVars, uqVarName <$> tyVars')
+
          -- For now, handling only single-branch case expressions containing
          -- pair patterns. The result will be to form nested lambda patterns in
          -- a beta redex.
@@ -394,23 +420,22 @@ reifyExpr =
          reifyBind :: TranslateH CoreBind (CoreExpr,CoreExpr)
          reifyBind = nonRecT varPatT# rew (,)
          -- TODO: Literals
-     do _ <- observeR' "Reifying expression "
-        ty <- arr exprType
-#if 0
-        let mkEval e' = apps evalId [ty] [e']
-#else
-        let (tyVars,ty') = collectForalls ty
-            mkEval (collectTyBinders -> (tyVars',body)) =
-              if tyVars == tyVars' then
-                mkLams tyVars (apps evalId [ty'] [body])
-              else
-                error $ "mkEval: type variable mismatch: "
+         reifyRhs :: RewriteH CoreExpr
+         reifyRhs =
+           do ty <- arr exprType
+              let (tyVars,ty') = collectForalls ty
+                  mkEval (collectTyBinders -> (tyVars',body)) =
+                    if tyVars == tyVars' then
+                      mkLams tyVars (apps evalId [ty'] [body])
+                    else
+                      error $ "mkEval: type variable mismatch: "
                         ++ show (uqVarName <$> tyVars, uqVarName <$> tyVars')
-#endif
-        mkEval <$> rew
-
--- If I ever get the type variable mismatch error, take a different approach,
--- extracting the type of e' and dropping the EP.
+                    -- If I ever get the type variable mismatch error, take a
+                    -- different approach, extracting the type of e' and
+                    -- dropping the EP.
+              mkEval <$> rew
+     do _ <- observeR' "Reifying expression "
+        reifyRhs
 
 reifyExprC :: RewriteH Core
 reifyExprC = tryR unshadowR >>> promoteExprR reifyExpr
