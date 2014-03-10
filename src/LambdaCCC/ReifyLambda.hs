@@ -29,6 +29,7 @@ import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..))
 -- import Control.Monad ((<=<),liftM2)
 import Control.Arrow (arr,(>>>))
+import Data.List (intercalate)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Maybe (fromMaybe)
@@ -40,9 +41,11 @@ import Text.Printf (printf)
 -- GHC API
 -- import PrelNames (unitTyConKey,boolTyConKey,intTyConKey)
 
+import qualified Language.KURE.Translate as Kure
+import HERMIT.Monad (HermitM,newIdH)
 import HERMIT.Context
   (ReadBindings(..),hermitBindings,HermitBinding(..),HermitBindingSite(..)
-  ,lookupHermitBinding,boundIn) -- ,AddBindings
+  ,lookupHermitBinding,boundIn,BoundVars,HasGlobalRdrEnv(..)) -- ,AddBindings
 import HERMIT.Core (Crumb(..),localFreeIdsExpr)
 import HERMIT.External
 import HERMIT.GHC hiding (mkStringExpr)
@@ -150,6 +153,11 @@ dropTyApp1 _ _ = error "dropTyApp1: not a unary TyConApp"
 
 #endif
 
+-- Substitute a new subexpression for a variable in an expression
+subst1 :: (Id,CoreExpr) -> CoreExpr -> CoreExpr
+subst1 (v,new) = substExpr (error "subst1: no SDoc")
+                    (extendIdSubst emptySubst v new)
+
 {--------------------------------------------------------------------
     KURE utilities
 --------------------------------------------------------------------}
@@ -168,6 +176,23 @@ snocPathIn mkP r = mkP >>= flip localPathR r
 {--------------------------------------------------------------------
     HERMIT utilities
 --------------------------------------------------------------------}
+
+-- Next two from Andy G:
+
+-- | Lookup the name in the context first, then, failing that, in GHC's global
+-- reader environment.
+findTyConT :: ( BoundVars c, HasGlobalRdrEnv c, HasDynFlags m
+              , MonadThings m, MonadCatch m) =>
+              String -> Translate c m a TyCon
+findTyConT nm = prefixFailMsg ("Cannot resolve name " ++ nm ++ ", ") $
+                contextonlyT (findTyConMG nm)
+
+findTyConMG :: (BoundVars c, HasGlobalRdrEnv c, HasDynFlags m, MonadThings m) => String -> c -> m TyCon
+findTyConMG nm c =
+    case filter isTyConName $ findNamesFromString (hermitGlobalRdrEnv c) nm of
+      [n] -> lookupTyCon n
+      ns  -> do dynFlags <- getDynFlags
+                fail $ "multiple matches found:\n" ++ intercalate ", " (map (showPpr dynFlags) ns)
 
 #if 0
 -- | Translate a pair expression.
@@ -299,6 +324,9 @@ lamName = ("LambdaCCC.Lambda." ++)
 findIdE :: String -> TranslateH a Id
 findIdE = findIdT . lamName
 
+findTyConE :: String -> TranslateH a TyCon
+findTyConE = findTyConT . lamName
+
 reifyExpr :: ReExpr
 reifyExpr =
   do varId#    <- findIdE "varP#"    -- "var#"
@@ -312,20 +340,22 @@ reifyExpr =
      pairPatId <- findIdE ":#"
      asPatId#  <- findIdE "asPat#"
      -- primId#   <- findIdT ''P.Prim   -- not found! :/
-     -- testEId  <- findIdT ''E.E
---      testEId  <- findTyIdT ''E.E
---      testTyId  <- findIdT ''T.Ty
-     let rew :: ReExpr
-         rew = tries [ ("Var#" ,rVar#)
+     -- testEId  <- findIdT "EP"
+     epTC      <- findTyConE "EP"
+     let eTy e = TyConApp epTC [e]
+         eVar :: Var -> HermitM Var
+         eVar v = newIdH (uqVarName v ++ "E") (eTy (varType v))
+         rew :: ReExpr
+         rew = tries [ ("Eval" ,rEval)
                      , ("Reify",rReify)
                      , ("AppT" ,rAppT)
+                     , ("Var#" ,rVar#)
                      , ("LamT" ,rLamT)
                      , ("App"  ,rApp)
                      , ("Lam#" ,rLam#)
                      , ("Let"  ,rLet)
                      , ("Case" ,rCase)
                      ]
-
 --          rVar#  = do local <- isLocalT
 --                      varT $
 --                        do v <- idR
@@ -334,13 +364,9 @@ reifyExpr =
 --                            else
 --                             fail "rVar: not a lambda-bound variable"
 
-         rVar#  = do local <- isLocalT
-                     Var v <- idR
-                     if local v then
-                       return $ apps varId# [varType v] [varLitE v]
-                      else
-                       fail "rVar: not a lambda-bound variable"
-
+         -- reify (eval e) == e
+         rEval = do (_evalE, [Type _, e]) <- callNameLam "evalEP"
+                    return e
          -- Reify non-local variables and their polymorphic instantiations.
          rReify = do local <- isLocalT
                      e@(collectTypeArgs -> (_, Var v)) <- idR
@@ -356,13 +382,40 @@ reifyExpr =
                     appT rew rew $ arr $ \ u' v' ->
                       let (a,b) = splitFunTy funTy in
                         apps appId [b,a] [u', v'] -- note b,a
+#if 0
+         rLam# = translate $ \ c -> \case
+                   Lam v@(varType -> vty) e ->
+                     do eV <- eVar v
+                        e' <- Kure.apply rew (c @@ Lam_Body) $
+                                subst1 (v, apps evalId [vty] [
+                                             apps varId# [vty] [varLitE eV]]) e
+                        return (apps lamvId# [vty, exprType e] [varLitE eV,e'])
+                   _       -> fail "not a lambda."
+#else
          rLam# = do Lam (varType -> vty) (exprType -> bodyTy) <- idR
                     lamT idR rew $ arr $ \ v e' ->
                       apps lamvId# [vty, bodyTy] [varLitE v,e']
+#endif
+         -- TODO: Eliminate rVar#
+         rVar# :: ReExpr
+         rVar#  = do local <- isLocalT
+                     Var v <- idR
+                     if local v then
+                       return $ apps varId# [varType v] [varLitE v]
+                      else
+                       fail "rVar: not a lambda-bound variable"
+#if 0
          rLet  = do -- only NonRec for now
                     Let (NonRec (varType -> patTy) _) (exprType -> bodyTy) <- idR
                     letT reifyBind rew $ \ (patE,rhs') body' ->
                       apps letId [patTy,bodyTy] [patE,rhs',body']
+#else
+         rLet  = toRedex >>> rew
+          where
+            toRedex = do Let (NonRec v rhs) body <- idR
+                         return (Lam v body `App` rhs)
+
+#endif
 
 --          rLetPoly = do Let (NonRec (varType -> ForAllTy _ _) _) _ <- idR
 --                        letAllR (nonRecAllR idR reifyRhs) rew
@@ -434,7 +487,7 @@ reifyExpr =
                     -- different approach, extracting the type of e' and
                     -- dropping the EP.
               mkEval <$> rew
-     do _ <- observeR' "Reifying expression "
+     do _ <- observeR' "Reifying expression"
         reifyRhs
 
 reifyExprC :: RewriteH Core
@@ -504,12 +557,13 @@ callNameLam = callNameT . lamName
 reifyEval :: ReExpr
 reifyEval = reifyArg >>> evalArg
  where
-   reifyArg = do (_reifyE, [Type _, _str, arg, _ty]) <- callNameLam "reifyEP"
+   reifyArg = do (_reifyE, [Type _, arg, _str]) <- callNameLam "reifyEP"
                  return arg
    evalArg  = do (_evalE, [Type _, body])            <- callNameLam "evalEP"
                  return body
 
--- TODO: Replace reifyEval with tryRulesBU ["reify'/eval","eval/reify'"]
+-- TODO: reifyEval replaced with tryRulesBU ["reify'/eval","eval/reify'"], and
+-- even those rules are no longer invoked explicitly.
 
 inlineCleanup :: String -> RewriteH Core
 inlineCleanup nm = tryR $ anybuER (inlineNameR nm) >>> anybuER cleanupUnfoldR
