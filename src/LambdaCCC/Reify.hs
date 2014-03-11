@@ -45,7 +45,7 @@ import HERMIT.Monad (HermitM,newIdH)
 import HERMIT.Context
   (HermitC,ReadBindings(..),hermitBindings,HermitBinding(..),HermitBindingSite(..)
   ,lookupHermitBinding,boundIn,BoundVars,HasGlobalRdrEnv(..)) -- ,AddBindings
-import HERMIT.Core (Crumb(..),localFreeIdsExpr)
+import HERMIT.Core (Crumb(..),localFreeIdsExpr,CoreProg)
 import HERMIT.External
 import HERMIT.GHC hiding (mkStringExpr)
 import HERMIT.Kure hiding (apply)
@@ -146,12 +146,12 @@ apps' :: ( Functor m, HasDynFlags m, MonadThings m, MonadCatch m
          String -> [Type] -> [CoreExpr] -> Translate c m a CoreExpr
 apps' s ts es = (\ i -> apps i ts es) <$> findIdT s
 
-defR :: RewriteH Id -> RewriteH CoreExpr -> RewriteH Core
-defR rewI rewE = prunetdR (  promoteDefR (defAllR rewI rewE)
-                          <+ promoteBindR (nonRecAllR rewI rewE) )
+-- defR :: RewriteH Id -> RewriteH CoreExpr -> RewriteH Core
+-- defR rewI rewE = prunetdR (  promoteDefR (defAllR rewI rewE)
+--                           <+ promoteBindR (nonRecAllR rewI rewE) )
 
-rhsR :: RewriteH CoreExpr -> RewriteH Core
-rhsR = defR idR
+-- rhsR :: RewriteH CoreExpr -> RewriteH Core
+-- rhsR = defR idR
 
 -- The set of variables in a HERMIT context
 isLocal :: ReadBindings c => c -> (Var -> Bool)
@@ -231,7 +231,7 @@ epOf t = do epTC <- findTyConE "EP"
 
 evalS, reifyS :: String
 evalS = "evalEP"
-reifyS = "reifyEP'"
+reifyS = "reifyEP"
 
 varPS, letS, varPatS :: String
 varPS   = "varP#"
@@ -317,11 +317,18 @@ filterR p = do a <- idR
                if p a then return a else fail "filterR: condition failed"
 
 -- e --> eval (reify e) in preparation for rewriting reify e.
+-- Fail if e is already an eval or if it has IO type.
 reifyRhs :: ReExpr
 reifyRhs = unlessIO >>> unlessEval >>> reifyR >>> evalR
 
-reifyDef :: RewriteH Core
-reifyDef = rhsR reifyRhs
+reifyDef :: RewriteH CoreBind
+reifyDef = nonRecAllR idR reifyRhs
+
+reifyModGuts :: RewriteH ModGuts
+reifyModGuts = modGutsR (progBindsAnyR (const reifyDef))
+
+progTest :: RewriteH CoreProg
+progTest = progBindsAnyR (const idR)
 
 inlineLocal :: ReExpr
 inlineLocal = do Var v <- idR
@@ -347,20 +354,18 @@ reifyLetToRedex = inReify toRedex
 -- abstractions and applications.
 
 reifyCase :: ReExpr
-reifyCase =
-  do Case scrut@(exprType -> scrutT) wild bodyT [branch] <- unReify
-     _ <- observeR' "Reifying case"
-     (patE,rhs) <- reifyBranch wild branch
-     scrut' <- reifyOf scrut
-     appsE letS [scrutT,bodyT] [patE,scrut',rhs]
+reifyCase = do Case scrut@(exprType -> scrutT) wild bodyT [branch] <- unReify
+               _ <- observeR' "Reifying case"
+               (patE,rhs) <- reifyBranch wild branch
+               scrut'     <- reifyOf scrut
+               appsE letS [scrutT,bodyT] [patE,scrut',rhs]
 
 -- Reify a case alternative, yielding a reified pattern and a reified
 -- alternative body (RHS).
 -- Only pair patterns for now.
 reifyBranch :: Var -> CoreAlt -> TranslateU (CoreExpr,CoreExpr)
 reifyBranch wild (DataAlt (isTupleTyCon.dataConTyCon -> True), vars@[_,_], rhs) =
-  do -- _ <- observeR' "Reifying case alternative"
-     vPats <- mapM varPatT# vars
+  do vPats <- mapM varPatT# vars
      sub   <- varSubst (wild : vars)
      pat   <- appsE ":#" (varType <$> vars) vPats
      pat'  <- if wild `elemVarSet` localFreeIdsExpr rhs
@@ -370,28 +375,29 @@ reifyBranch wild (DataAlt (isTupleTyCon.dataConTyCon -> True), vars@[_,_], rhs) 
                   return pat
      rhs'  <- reifyOf (sub rhs)
      return (pat', rhs')
-reifyBranch _ _ = fail "reifyBranch: Only handles pair patterns so far."
+ where
+   varPatT# :: Var -> TranslateU CoreExpr
+   varPatT# v = appsE varPatS [varType v] [varLitE v]
 
-varPatT# :: Var -> TranslateU CoreExpr
-varPatT# v = appsE varPatS [varType v] [varLitE v]
+reifyBranch _ _ = fail "reifyBranch: Only handles pair patterns so far."
 
 
 reifyMisc :: ReExpr
-reifyMisc = tries [ ("reifyEval" , reifyEval)
-                  , ("reifyApp"  , reifyApp)
-                  , ("reifyLam"  , reifyLam)
-                  , ("reifyLet"  , reifyLetToRedex >>> reifyMisc)  -- experimental
-                  , ("reifyCase" , reifyCase)
-                  , ("reifyInline", reifyInline >>> reifyMisc)  -- experimental
-                  -- to come: case, lamT, appT
+reifyMisc = tries [ ("reifyEval"   , reifyEval)
+                  , ("reifyApp"    , reifyApp)
+                  , ("reifyLam"    , reifyLam)
+                  , ("reifyLet"    , reifyLetToRedex >>> reifyMisc)  -- experimental
+                  , ("reifyCase"   , reifyCase)
+                  , ("reifyInline" , reifyInline     >>> reifyMisc)  -- experimental
+                  -- To come: case, lamT, appT
                   ]
 
 -- Note: the ">>> reifyMisc" comes from the intent to use (anytdR reifyMisc),
 -- which apparently does not revisit the current node after rewriting. To do:
 -- Ask Andy whether I should be using a different combinator.
 
-reifyExprC :: RewriteH Core
-reifyExprC = tryR unshadowR >>> anytdR reifyDef >>> anytdR (promoteExprR reifyMisc)
+-- reifyExprC :: RewriteH Core
+-- reifyExprC = tryR unshadowR >>> anytdR reifyDef >>> anytdR (promoteExprR reifyMisc)
 
 reifyRules :: RewriteH Core
 reifyRules = tryRulesBU $ map ("reify/" ++)
@@ -430,7 +436,7 @@ externals =
         (promoteExprR reifyRhs :: RewriteH Core)
         ["reifyE the RHS of a definition"]
     , external "reify-def"
-        (reifyDef :: RewriteH Core)
+        (promoteBindR reifyDef :: RewriteH Core)
         ["reifyE a definition"]
     , external "reify-misc"
         (promoteExprR reifyMisc :: RewriteH Core)
@@ -451,4 +457,8 @@ externals =
         (promoteExprR reifyLetToRedex :: RewriteH Core) ["let to redex"]
     , external "reify-case"
         (promoteExprR reifyCase :: RewriteH Core) ["reify case"]
+    , external "reify-module"
+        (promoteModGutsR reifyModGuts :: RewriteH Core) ["reify all top-level definitions"]
+    , external "prog-test"
+        (promoteProgR progTest :: RewriteH Core) ["mumble"]
     ]
