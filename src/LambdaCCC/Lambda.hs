@@ -29,7 +29,7 @@ module LambdaCCC.Lambda
   , (@^), lam, lett
   , (#), caseEither
   , var#, lamv#, varPat#, asPat#, casev#
-  , reifyE#, evalE
+  , reifyE#, evalE, reifyEP'
   , vars, vars2
   -- Temporary less polymorphic variants.
   -- Remove when I can dig up Prim as a type in Core
@@ -357,6 +357,13 @@ reifyE# a addr = reifyE a (unpackCString# addr)
 reifyEP# :: a -> Addr# -> EP a
 reifyEP# = reifyE#
 {-# INLINE reifyEP# #-}
+
+-- Experimenting with a simplified interface for localized rewriting, which
+-- introduces reify calls all the way down.
+reifyEP' :: a -> EP a
+reifyEP' a = reifyE a "<...>"
+{-# INLINE reifyEP' #-}
+
 
 -- The artificially strange definition of reifyE prevents it from getting
 -- inlined and so allows the reify'/eval rule to fire. The NOINLINE pragma is
