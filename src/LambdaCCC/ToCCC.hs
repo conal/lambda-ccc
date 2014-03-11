@@ -45,6 +45,8 @@ import Circat.Category
 toCCC :: BiCCCC k p => E p a -> (Unit `k` a)
 toCCC e = convert e UnitPat
 
+-- toCCC :: forall p a. E p a -> forall k. BiCCCC k p => (Unit `k` a)
+
 -- | Convert @\ p -> e@ to CCC combinators
 convert :: forall a b prim k. BiCCCC k prim =>
            E prim b -> Pat a -> (a `k` b)
@@ -119,6 +121,8 @@ instance HasLambda (Lambda p) where
 -- | Variant on 'toCCC'
 toCCC' :: BiCCCC k p => E p (a :=> b) -> (a `k` b)
 toCCC' = unUnitFun . toCCC
+
+-- toCCC' :: forall p a b. E p (a :=> b) -> forall k. BiCCCC k p => (a `k` b)
 
 -- TODO: Handle constants in a generic manner, so we can drop the constraint that k ~ (:->).
 
