@@ -29,11 +29,11 @@ module LambdaCCC.Lambda
   , (@^), lam, lett
   , (#), caseEither
   , var#, lamv#, varPat#, asPat#, casev#
-  , reifyE#, evalE, reifyEP'
+  , reifyE, evalE
   , vars, vars2
   -- Temporary less polymorphic variants.
   -- Remove when I can dig up Prim as a type in Core
-  , EP, appP, lamP, lettP , varP#, lamvP#, casevP#, evalEP, reifyEP, reifyEP#
+  , EP, appP, lamP, lettP , varP#, lamvP#, casevP#, evalEP, reifyEP
   ) where
 
 import Data.Functor ((<$>))
@@ -341,42 +341,16 @@ data Bind = forall a. Bind (V a) a
 -- | Variable environment
 type Env = [Bind]
 
--- TODO: Tinker with generalizing reifyE over primitives
-
-reifyE :: a -> String -> E p a
-reifyE _ msg = error (printf "Oops -- reifyE %s was not eliminated" msg)
-
-reifyEP :: a -> String -> EP a
-reifyEP = reifyE
-{-# NOINLINE reifyEP #-}
-
-reifyE# :: a -> Addr# -> EP a
-reifyE# a addr = reifyE a (unpackCString# addr)
-{-# INLINE reifyE# #-}
-
-reifyEP# :: a -> Addr# -> EP a
-reifyEP# = reifyE#
-{-# INLINE reifyEP# #-}
-
--- Experimenting with a simplified interface for localized rewriting, which
--- introduces reify calls all the way down.
-reifyEP' :: a -> EP a
-reifyEP' a = reifyE a "<...>"
-{-# INLINE reifyEP' #-}
-
-
--- The artificially strange definition of reifyE prevents it from getting
--- inlined and so allows the reify'/eval rule to fire. The NOINLINE pragma is
--- somehow insufficient, and the reify/eval rule won't fire. I don't know how to
--- get rules with dictionaries to work.
+reifyE :: a -> E p a
+reifyE _ = error (printf "reifyE: Oops -- not eliminated.")
 
 {-# RULES
 
-"reifyE/evalE" forall e msg. reifyE (evalE e) msg = e
--- "evalE/reifyE" forall x msg. evalE (reifyE x msg) = x
+"reifyE/evalE" forall e. reifyE (evalE e) = e
+-- "evalE/reifyE" forall x. evalE (reifyE x) = x
 
-"reifyEP/evalEP" forall e msg. reifyEP (evalEP e) msg = e
--- "evalEP/reifyEP" forall x msg. evalEP (reifyEP x msg) = x
+"reifyEP/evalEP" forall e. reifyEP (evalEP e) = e
+-- "evalEP/reifyEP" forall x. evalEP (reifyEP x) = x
 
   #-}
 
@@ -468,29 +442,29 @@ vars2 (na,nb) = (ap :# bp, (ae,be))
     Rules
 --------------------------------------------------------------------}
 
-kPrim :: p a -> Addr# -> E p a
-kPrim p _msg = ConstE p
+kPrim :: p a -> E p a
+kPrim = ConstE
 
-kLit :: HasLit a => a -> Addr# -> E Prim a
+kLit :: HasLit a => a -> EP a
 kLit = kPrim . litP
 
 {-# RULES
  
-"reify/not"   reifyE# not   = kPrim NotP
-"reify/(&&)"  reifyE# (&&)  = kPrim AndP
-"reify/(||)"  reifyE# (||)  = kPrim OrP
-"reify/xor"   reifyE# xor   = kPrim XorP
-"reify/(+)"   reifyE# (+)   = kPrim AddP
-"reify/exl"   reifyE# fst   = kPrim ExlP
-"reify/exr"   reifyE# snd   = kPrim ExrP
-"reify/pair"  reifyE# (,)   = kPrim PairP
-"reify/inl"   reifyE# Left  = kPrim InlP
-"reify/inr"   reifyE# Right = kPrim InrP
-"reify/if"    reifyE# cond  = kPrim CondP
+"reify/not"   reifyE not   = kPrim NotP
+"reify/(&&)"  reifyE (&&)  = kPrim AndP
+"reify/(||)"  reifyE (||)  = kPrim OrP
+"reify/xor"   reifyE xor   = kPrim XorP
+"reify/(+)"   reifyE (+)   = kPrim AddP
+"reify/exl"   reifyE fst   = kPrim ExlP
+"reify/exr"   reifyE snd   = kPrim ExrP
+"reify/pair"  reifyE (,)   = kPrim PairP
+"reify/inl"   reifyE Left  = kPrim InlP
+"reify/inr"   reifyE Right = kPrim InrP
+"reify/if"    reifyE cond  = kPrim CondP
  
-"reify/()"    reifyE# ()    = kLit  ()
-"reify/false" reifyE# False = kLit  False
-"reify/true"  reifyE# True  = kLit  True
+"reify/()"    reifyE ()    = kLit  ()
+"reify/false" reifyE False = kLit  False
+"reify/true"  reifyE True  = kLit  True
  
   #-}
 
@@ -581,6 +555,10 @@ casevP# = casev#
 evalEP :: EP a -> a
 evalEP = evalE
 {-# NOINLINE evalEP #-}
+
+reifyEP :: a -> EP a
+reifyEP = reifyE
+{-# INLINE reifyEP #-}
 
 -- If reifyEP doesn't get inlined, change the reifyE prim rules below to
 -- reifyEP.
