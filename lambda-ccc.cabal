@@ -29,7 +29,7 @@ Library
                   , template-haskell
                   , containers
                   , constraints
-                  , kure
+                  , kure   >= 0.4.0.0
                   , hermit >= 0.4.0.0
                   , ty >= 0.1.5
                   , circat >= 0.2.7
