@@ -275,7 +275,8 @@ evalR = idR >>= evalOf
 -- reify (u v) --> reify u `appP` reify v
 reifyApp :: ReExpr
 reifyApp = do App u v <- unReify
-              FunTy a b <- constT (return (exprType u)) -- or fail
+              _ <- observeR' "reifyApp"
+              Just (a,b) <- constT (return (splitFunTy_maybe (exprType u)))
               u' <- reifyOf u
               v' <- reifyOf v
               appsE "appP" [b,a] [u', v'] -- note b,a
@@ -296,16 +297,16 @@ reifyLam = do Lam v e <- unReify
               appsE "lamvP#" [varType v, exprType e] [varLitE v,e']
 
 -- Pass through unless an IO
-unlessIO :: ReExpr
-unlessIO = filterR (not . isIO . exprType)
+unlessTC :: String -> ReExpr
+unlessTC name = filterR (not . hasTC name . exprType)
 
 -- Pass through unless an eval application
 unlessEval :: ReExpr
 unlessEval = filterR (not . isEval)
 
-isIO :: Type -> Bool
-isIO (TyConApp (uqName . tyConName -> "IO") [_]) = True
-isIO _                                           = False
+hasTC :: String -> Type -> Bool
+hasTC name (TyConApp tc [_]) = uqName (tyConName tc) == name
+hasTC _ _                    = False
 
 isEval :: CoreExpr -> Bool
 isEval (App (App (Var v) (Type _)) _) = uqVarName v == evalS
@@ -317,9 +318,10 @@ filterR p = do a <- idR
                if p a then return a else fail "filterR: condition failed"
 
 -- e --> eval (reify e) in preparation for rewriting reify e.
--- Fail if e is already an eval or if it has IO type.
+-- Fail if e is already an eval or if it has IO or EP type.
 reifyRhs :: ReExpr
-reifyRhs = unlessIO >>> unlessEval >>> reifyR >>> evalR
+reifyRhs = unlessTC "IO" >>> unlessTC "EP" >>> unlessEval >>>
+           reifyR >>> evalR
 
 reifyDef :: RewriteH CoreBind
 reifyDef = nonRecAllR idR reifyRhs
@@ -330,18 +332,20 @@ reifyModGuts = modGutsR (progBindsAnyR (const reifyDef))
 progTest :: RewriteH CoreProg
 progTest = progBindsAnyR (const idR)
 
-inlineLocal :: ReExpr
-inlineLocal = do Var v <- idR
-                 True  <- contextonlyT (return . boundIn v)
-                 inlineR
+-- inlineLocal :: ReExpr
+-- inlineLocal = do Var v <- idR
+--                  True  <- contextonlyT (return . boundIn v)
+--                  inlineR
+
+-- Inline if doing so yields an eval
+inlineEval :: ReExpr
+inlineEval = inlineR >>> filterR isEval
 
 inReify :: Unop ReExpr
 inReify = reifyR <~ unReify
 
 reifyInline :: ReExpr
-reifyInline = inReify inlineLocal
-
--- TODO: apply reifyInline only when eval arises.
+reifyInline = inReify inlineEval
 
 reifyLetToRedex :: ReExpr
 reifyLetToRedex = inReify toRedex
@@ -448,9 +452,6 @@ externals =
     , external "reify-inline"
         (promoteExprR reifyInline :: RewriteH Core)
         ["inline names where reified"]
-    , external "unless-io"
-        (promoteExprR unlessIO :: RewriteH Core)
-        ["Pass through if not IO-typed"]
     , external "reify-it" (promoteExprR reifyR :: RewriteH Core) ["apply reify"]
     , external "eval-it" (promoteExprR evalR :: RewriteH Core) ["apply eval"]
     , external "reify-let-to-redex"
