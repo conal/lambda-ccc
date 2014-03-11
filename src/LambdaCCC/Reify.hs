@@ -64,7 +64,7 @@ import HERMIT.Dictionary.Navigation (rhsOfT,parentOfT,bindingGroupOfT)
 -- import HERMIT.Dictionary.Composite (simplifyR)
 import HERMIT.Dictionary.Unfold (cleanupUnfoldR) -- unfoldNameR,
 
-import LambdaCCC.Misc (Unop) -- ,Binop
+import LambdaCCC.Misc (Unop,(<~)) -- ,Binop
 -- import qualified LambdaCCC.Ty as T
 -- import qualified LambdaCCC.Prim as P
 -- import qualified LambdaCCC.Lambda as E
@@ -102,10 +102,11 @@ collectForalls ty = go [] ty
 
 -- TODO: Rewrite collectTypeArgs and collectForalls as unfolds and refactor.
 
--- Substitute a new subexpression for a variable in an expression
-subst1 :: (Id,CoreExpr) -> CoreExpr -> CoreExpr
-subst1 (v,new) = substExpr (error "subst1: no SDoc")
-                    (extendIdSubst emptySubst v new)
+-- | Substitute new subexpressions for variables in an expression
+subst :: [(Id,CoreExpr)] -> CoreExpr -> CoreExpr
+subst ps = substExpr (error "subst: no SDoc") (foldr add emptySubst ps)
+ where
+   add (v,new) sub = extendIdSubst sub v new
 
 {--------------------------------------------------------------------
     KURE utilities
@@ -232,8 +233,10 @@ evalS, reifyS :: String
 evalS = "evalEP"
 reifyS = "reifyEP'"
 
-varPS :: String
-varPS = "varP#"
+varPS, letS, varPatS :: String
+varPS   = "varP#"
+letS    = "lettP"
+varPatS = "varPat#"
 
 -- reify u --> u
 unReify :: ReExpr
@@ -279,13 +282,18 @@ reifyApp = do App u v <- unReify
 
 -- TODO: refactor so we unReify once and then try variations
 
+varEval :: Var -> TranslateU CoreExpr
+varEval v = (evalOf <=< appsE1 varPS [varType v]) (varLitE v)
+
+varSubst :: [Var] -> TranslateU (Unop CoreExpr)
+varSubst vs = do vs' <- mapM varEval vs
+                 return (subst (vs `zip` vs'))
+
 reifyLam :: ReExpr
 reifyLam = do Lam v e <- unReify
-              let vty  = varType v
-                  vLit = varLitE v
-              evalVar <- (evalOf <=< appsE1 varPS [vty]) vLit
-              e' <- reifyOf (subst1 (v,evalVar) e)
-              appsE "lamvP#" [vty, exprType e] [vLit,e']
+              sub     <- varSubst [v]
+              e'      <- reifyOf (sub e)
+              appsE "lamvP#" [varType v, exprType e] [varLitE v,e']
 
 -- Pass through unless an IO
 unlessIO :: ReExpr
@@ -320,15 +328,62 @@ inlineLocal = do Var v <- idR
                  True  <- contextonlyT (return . boundIn v)
                  inlineR
 
+inReify :: Unop ReExpr
+inReify = reifyR <~ unReify
+
 reifyInline :: ReExpr
-reifyInline = unReify >>> inlineLocal >>> reifyR
+reifyInline = inReify inlineLocal
+
+-- TODO: apply reifyInline only when eval arises.
+
+reifyLetToRedex :: ReExpr
+reifyLetToRedex = inReify toRedex
+ where
+   toRedex = do Let (NonRec v rhs) body <- idR
+                return (Lam v body `App` rhs)
+
+-- TODO: restrict to monomorphic bindings, leaving polymorphic bindings to
+-- another treatment. Or maybe convert anyway, and deal with the resulting type
+-- abstractions and applications.
+
+reifyCase :: ReExpr
+reifyCase =
+  do Case scrut@(exprType -> scrutT) wild bodyT [branch] <- unReify
+     _ <- observeR' "Reifying case"
+     (patE,rhs) <- reifyBranch wild branch
+     scrut' <- reifyOf scrut
+     appsE letS [scrutT,bodyT] [patE,scrut',rhs]
+
+-- Reify a case alternative, yielding a reified pattern and a reified
+-- alternative body (RHS).
+-- Only pair patterns for now.
+reifyBranch :: Var -> CoreAlt -> TranslateU (CoreExpr,CoreExpr)
+reifyBranch wild (DataAlt (isTupleTyCon.dataConTyCon -> True), vars@[_,_], rhs) =
+  do -- _ <- observeR' "Reifying case alternative"
+     vPats <- mapM varPatT# vars
+     sub   <- varSubst (wild : vars)
+     pat   <- appsE ":#" (varType <$> vars) vPats
+     pat'  <- if wild `elemVarSet` localFreeIdsExpr rhs
+                then -- WARNING: untested as of 2014-03-11
+                  appsE "asPat#" [varType wild] [varLitE wild,pat]
+                else
+                  return pat
+     rhs'  <- reifyOf (sub rhs)
+     return (pat', rhs')
+reifyBranch _ _ = fail "reifyBranch: Only handles pair patterns so far."
+
+varPatT# :: Var -> TranslateU CoreExpr
+varPatT# v = appsE varPatS [varType v] [varLitE v]
+
 
 reifyMisc :: ReExpr
 reifyMisc = tries [ ("reifyEval" , reifyEval)
                   , ("reifyApp"  , reifyApp)
                   , ("reifyLam"  , reifyLam)
-                  -- to come: case, lamT, appT, let
+                  , ("reifyLet"  , reifyLetToRedex >>> reifyMisc)  -- experimental
+                  , ("reifyCase" , reifyCase)
                   , ("reifyInline", reifyInline >>> reifyMisc)  -- experimental
+                  -- to come: case, lamT, appT
                   ]
 
 -- Note: the ">>> reifyMisc" comes from the intent to use (anytdR reifyMisc),
@@ -355,11 +410,6 @@ callNameLam = callNameT . lamName
 
 inlineCleanup :: String -> RewriteH Core
 inlineCleanup nm = tryR $ anybuER (inlineNameR nm) >>> anybuER cleanupUnfoldR
-
--- inlineNamesTD :: [String] -> RewriteH Core
--- inlineNamesTD nms = anytdER (inlineNamesR nms)
-
--- #define FactorReified
 
 {--------------------------------------------------------------------
     Plugin
@@ -397,4 +447,8 @@ externals =
         ["Pass through if not IO-typed"]
     , external "reify-it" (promoteExprR reifyR :: RewriteH Core) ["apply reify"]
     , external "eval-it" (promoteExprR evalR :: RewriteH Core) ["apply eval"]
+    , external "reify-let-to-redex"
+        (promoteExprR reifyLetToRedex :: RewriteH Core) ["let to redex"]
+    , external "reify-case"
+        (promoteExprR reifyCase :: RewriteH Core) ["reify case"]
     ]
