@@ -7,7 +7,7 @@
 -- TODO: Restore the following pragmas
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -233,10 +233,6 @@ rhsR = defR idR
 isLocal :: ReadBindings c => c -> (Var -> Bool)
 isLocal = flip boundIn
 
--- TODO: Maybe return a predicate instead of a set. More abstract, and allows
--- for efficient construction. Here, we'd probably want to use the underlying
--- map to implement the returned predicate.
-
 -- | Extract just the lambda-bound variables in a HERMIT context
 isLocalT :: (ReadBindings c, Applicative m) => Translate c m a (Var -> Bool)
 isLocalT = contextonlyT (pure . isLocal)
@@ -342,138 +338,7 @@ reifyExpr =
      -- primId#   <- findIdT ''P.Prim   -- not found! :/
      -- testEId  <- findIdT "EP"
      epTC      <- findTyConE "EP"
-     let eTy e = TyConApp epTC [e]
-         eVar :: Var -> HermitM Var
-         eVar v = newIdH (uqVarName v ++ "E") (eTy (varType v))
-         rew :: ReExpr
-         rew = tries [ ("Eval" ,rEval)
-                     , ("Reify",rReify)
-                     , ("AppT" ,rAppT)
-                     , ("Var#" ,rVar#)
-                     , ("LamT" ,rLamT)
-                     , ("App"  ,rApp)
-                     , ("Lam#" ,rLam#)
-                     , ("Let"  ,rLet)
-                     , ("Case" ,rCase)
-                     ]
---          rVar#  = do local <- isLocalT
---                      varT $
---                        do v <- idR
---                           if local v then
---                             return $ apps varId# [varType v] [varLitE v]
---                            else
---                             fail "rVar: not a lambda-bound variable"
-
-         -- reify (eval e) == e
-         rEval = do (_evalE, [Type _, e]) <- callNameLam "evalEP"
-                    return e
-         -- Reify non-local variables and their polymorphic instantiations.
-         rReify = do local <- isLocalT
-                     e@(collectTypeArgs -> (_, Var v)) <- idR
-                     if local v then
-                       fail "rReify: lambda-bound variable"
-                      else
-                       return $ apps reifyId# [exprType e] [e,varLitE v]
-         rAppT = do App _ (Type _) <- idR   -- Type applications
-                    appT rew idR (arr App)
-         rLamT = do Lam (isTyVar -> True) _ <- idR
-                    lamT idR rew (arr Lam)
-         rApp  = do App (exprType -> funTy) _ <- idR
-                    appT rew rew $ arr $ \ u' v' ->
-                      let (a,b) = splitFunTy funTy in
-                        apps appId [b,a] [u', v'] -- note b,a
-#if 0
-         rLam# = translate $ \ c -> \case
-                   Lam v@(varType -> vty) e ->
-                     do eV <- eVar v
-                        e' <- Kure.apply rew (c @@ Lam_Body) $
-                                subst1 (v, apps evalId [vty] [
-                                             apps varId# [vty] [varLitE eV]]) e
-                        return (apps lamvId# [vty, exprType e] [varLitE eV,e'])
-                   _       -> fail "not a lambda."
-#else
-         rLam# = do Lam (varType -> vty) (exprType -> bodyTy) <- idR
-                    lamT idR rew $ arr $ \ v e' ->
-                      apps lamvId# [vty, bodyTy] [varLitE v,e']
-#endif
-         -- TODO: Eliminate rVar#
-         rVar# :: ReExpr
-         rVar#  = do local <- isLocalT
-                     Var v <- idR
-                     if local v then
-                       return $ apps varId# [varType v] [varLitE v]
-                      else
-                       fail "rVar: not a lambda-bound variable"
-#if 0
-         rLet  = do -- only NonRec for now
-                    Let (NonRec (varType -> patTy) _) (exprType -> bodyTy) <- idR
-                    letT reifyBind rew $ \ (patE,rhs') body' ->
-                      apps letId [patTy,bodyTy] [patE,rhs',body']
-#else
-         rLet  = toRedex >>> rew
-          where
-            toRedex = do Let (NonRec v rhs) body <- idR
-                         return (Lam v body `App` rhs)
-
-#endif
-
---          rLetPoly = do Let (NonRec (varType -> ForAllTy _ _) _) _ <- idR
---                        letAllR (nonRecAllR idR reifyRhs) rew
-
--- letAllR :: (ExtendPath c Crumb, ReadPath c Crumb, AddBindings c, Monad m) =>
---            Rewrite c m CoreBind -> Rewrite c m CoreExpr -> Rewrite c m CoreExpr
-
--- nonRecAllR :: (ExtendPath c Crumb, Monad m) =>
---               Rewrite c m Var -> Rewrite c m CoreExpr -> Rewrite c m CoreBind
-
--- letT :: (ExtendPath c Crumb, ReadPath c Crumb, AddBindings c, Monad m) =>
---         Translate c m CoreBind a1 -> Translate c m CoreExpr a2 -> (a1 -> a2 -> b) -> Translate c m CoreExpr b
-
-
-         -- reifyBind :: TranslateH CoreBind (CoreExpr,CoreExpr)
-         -- reifyBind = nonRecT varPatT# rew (,)
-
---         let (tyVars,ty') = collectForalls ty
---             mkEval (collectTyBinders -> (tyVars',body)) =
---               if tyVars == tyVars' then
---                 mkLams tyVars (apps evalId [ty'] [body])
---               else
---                 error $ "mkEval: type variable mismatch: "
---                         ++ show (uqVarName <$> tyVars, uqVarName <$> tyVars')
-
-         -- For now, handling only single-branch case expressions containing
-         -- pair patterns. The result will be to form nested lambda patterns in
-         -- a beta redex.
-         rCase = do Case (exprType -> scrutT) wild _ [_] <- idR
-                    _ <- observeR' "Reifying case"
-                    caseT rew idR idR (const (reifyAlt wild)) $
-                      \ scrutE' _ bodyT [(patE,rhs)] ->
-                          apps letId [scrutT,bodyT] [patE,scrutE',rhs]
-         -- Reify a case alternative, yielding a reified pattern and a reified
-         -- alternative body (RHS).
-         reifyAlt :: Var -> TranslateH CoreAlt (CoreExpr,CoreExpr)
-         reifyAlt wild =
-           do -- Only pair patterns for now
-              _ <- observeR' "Reifying case alternative"
-              (DataAlt (isTupleTyCon.dataConTyCon -> True), vars@[_,_], _) <- idR
-              vPats <- mapM (applyInContextT (labeled "varPatT" varPatT#)) vars
-              altT idR (const idR) rew $ \ _ _ rhs' ->
-                let pat  = apps pairPatId (varType <$> vars) vPats
-                    pat' | wild `elemVarSet` localFreeIdsExpr rhs'
-                         = -- WARNING: untested as of 2013-07-22
-                           apps asPatId# [varType wild] [varLitE wild,pat]
-                         | otherwise = pat
-                in
-                  (pat', rhs')
-         varPatT# :: TranslateH Var CoreExpr
-         varPatT# = do v <- idR
-                       return $ apps varPatId# [varType v] [varLitE v]
-         -- Reify a Core binding into a reified pattern and expression.
-         -- Only handle NonRec bindings for now.
-         reifyBind :: TranslateH CoreBind (CoreExpr,CoreExpr)
-         reifyBind = nonRecT varPatT# rew (,)
-         -- TODO: Literals
-         reifyRhs :: RewriteH CoreExpr
+     let reifyRhs :: RewriteH CoreExpr
          reifyRhs =
            do ty <- arr exprType
               let (tyVars,ty') = collectForalls ty
@@ -487,6 +352,114 @@ reifyExpr =
                     -- different approach, extracting the type of e' and
                     -- dropping the EP.
               mkEval <$> rew
+          where
+            eTy e = TyConApp epTC [e]
+            eVar :: Var -> HermitM Var
+            eVar v = newIdH (uqVarName v ++ "E") (eTy (varType v))
+            rew :: ReExpr
+            rew = tries [ ("Eval" ,rEval)
+                        , ("Reify",rReify)
+                        , ("AppT" ,rAppT)
+                        , ("Var#" ,rVar#)
+                        , ("LamT" ,rLamT)
+                        , ("App"  ,rApp)
+                        , ("Lam#" ,rLam#)
+                        , ("Let"  ,rLet)
+                        , ("Case" ,rCase)
+                        ]
+             where
+--             rVar#  = do local <- isLocalT
+--                         varT $
+--                           do v <- idR
+--                              if local v then
+--                                return $ apps varId# [varType v] [varLitE v]
+--                               else
+--                                fail "rVar: not a lambda-bound variable"
+            
+            -- reify (eval e) == e
+            rEval = do (_evalE, [Type _, e]) <- callNameLam "evalEP"
+                       return e
+            -- Reify non-local variables and their polymorphic instantiations.
+            rReify = do local <- isLocalT
+                        e@(collectTypeArgs -> (_, Var v)) <- idR
+                        if local v then
+                          fail "rReify: lambda-bound variable"
+                         else
+                          return $ apps reifyId# [exprType e] [e,varLitE v]
+            rAppT = do App _ (Type _) <- idR   -- Type applications
+                       appT rew idR (arr App)
+            rLamT = do Lam (isTyVar -> True) _ <- idR
+                       lamT idR rew (arr Lam)
+            rApp  = do App (exprType -> funTy) _ <- idR
+                       appT rew rew $ arr $ \ u' v' ->
+                         let (a,b) = splitFunTy funTy in
+                           apps appId [b,a] [u', v'] -- note b,a
+#if 0       
+            rLam# = translate $ \ c -> \case
+                      Lam v@(varType -> vty) e ->
+                        do eV <- eVar v
+                           e' <- Kure.apply rew (c @@ Lam_Body) $
+                                   subst1 (v, apps evalId [vty] [
+                                                apps varId# [vty] [varLitE eV]]) e
+                           return (apps lamvId# [vty, exprType e] [varLitE eV,e'])
+                      _       -> fail "not a lambda."
+#else       
+            rLam# = do Lam (varType -> vty) (exprType -> bodyTy) <- idR
+                       lamT idR rew $ arr $ \ v e' ->
+                         apps lamvId# [vty, bodyTy] [varLitE v,e']
+#endif      
+            -- TODO: Eliminate rVar#
+            rVar# :: ReExpr
+            rVar#  = do local <- isLocalT
+                        Var v <- idR
+                        if local v then
+                          return $ apps varId# [varType v] [varLitE v]
+                         else
+                          fail "rVar: not a lambda-bound variable"
+#if 0       
+            rLet  = do -- only NonRec for now
+                       Let (NonRec (varType -> patTy) _) (exprType -> bodyTy) <- idR
+                       letT reifyBind rew $ \ (patE,rhs') body' ->
+                         apps letId [patTy,bodyTy] [patE,rhs',body']
+#else       
+            rLet  = toRedex >>> rew
+             where
+               toRedex = do Let (NonRec v rhs) body <- idR
+                            return (Lam v body `App` rhs)
+            
+#endif      
+            -- For now, handling only single-branch case expressions containing
+            -- pair patterns. The result will be to form nested lambda patterns in
+            -- a beta redex.
+            rCase = do Case (exprType -> scrutT) wild _ [_] <- idR
+                       _ <- observeR' "Reifying case"
+                       caseT rew idR idR (const (reifyAlt wild)) $
+                         \ scrutE' _ bodyT [(patE,rhs)] ->
+                             apps letId [scrutT,bodyT] [patE,scrutE',rhs]
+            -- Reify a case alternative, yielding a reified pattern and a reified
+            -- alternative body (RHS).
+            reifyAlt :: Var -> TranslateH CoreAlt (CoreExpr,CoreExpr)
+            reifyAlt wild =
+              do -- Only pair patterns for now
+                 _ <- observeR' "Reifying case alternative"
+                 (DataAlt (isTupleTyCon.dataConTyCon -> True), vars@[_,_], _) <- idR
+                 vPats <- mapM (applyInContextT (labeled "varPatT" varPatT#)) vars
+                 altT idR (const idR) rew $ \ _ _ rhs' ->
+                   let pat  = apps pairPatId (varType <$> vars) vPats
+                       pat' | wild `elemVarSet` localFreeIdsExpr rhs'
+                            = -- WARNING: untested as of 2013-07-22
+                              apps asPatId# [varType wild] [varLitE wild,pat]
+                            | otherwise = pat
+                   in
+                     (pat', rhs')
+            varPatT# :: TranslateH Var CoreExpr
+            varPatT# = do v <- idR
+                          return $ apps varPatId# [varType v] [varLitE v]
+            -- Reify a Core binding into a reified pattern and expression.
+            -- Only handle NonRec bindings for now.
+            reifyBind :: TranslateH CoreBind (CoreExpr,CoreExpr)
+            reifyBind = nonRecT varPatT# rew (,)
+         -- TODO: Literals
      do _ <- observeR' "Reifying expression"
         reifyRhs
 
