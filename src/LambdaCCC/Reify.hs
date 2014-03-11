@@ -26,7 +26,7 @@ module LambdaCCC.Reify (plugin) where
 
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..))
-import Control.Monad ((<=<))
+import Control.Monad ((<=<),guard)
 import Control.Arrow (arr,(>>>))
 import Data.List (intercalate)
 import qualified Data.Map as M
@@ -263,6 +263,12 @@ dropEP (TyConApp (uqName . tyConName -> name) [t]) =
   else error ("dropEP: not an EP: " ++ show name)
 dropEP _ = error "dropEP: not a TyConApp"
 
+reifyR :: ReExpr
+reifyR = idR >>= reifyOf
+
+evalR :: ReExpr
+evalR = idR >>= evalOf
+
 -- reify (u v) --> reify u `appP` reify v
 reifyApp :: ReExpr
 reifyApp = do App u v <- unReify
@@ -281,10 +287,30 @@ reifyLam = do Lam v e <- unReify
               e' <- reifyOf (subst1 (v,evalVar) e)
               appsE "lamvP#" [vty, exprType e] [vLit,e']
 
+-- Pass through unless an IO
+unlessIO :: ReExpr
+unlessIO = filterR (not . isIO . exprType)
+
+-- Pass through unless an eval application
+unlessEval :: ReExpr
+unlessEval = filterR (not . isEval)
+
+isIO :: Type -> Bool
+isIO (TyConApp (uqName . tyConName -> "IO") [_]) = True
+isIO _                                           = False
+
+isEval :: CoreExpr -> Bool
+isEval (App (App (Var v) (Type _)) _) = uqVarName v == evalS
+isEval _                              = False
+
+-- Pass through if condition satisfied
+filterR :: (a -> Bool) -> RewriteH a
+filterR p = do a <- idR
+               if p a then return a else fail "filterR: condition failed"
 
 -- e --> eval (reify e) in preparation for rewriting reify e.
 reifyRhs :: ReExpr
-reifyRhs = idR >>= reifyOf >>= evalOf
+reifyRhs = unlessIO >>> unlessEval >>> reifyR >>> evalR
 
 reifyDef :: RewriteH Core
 reifyDef = rhsR reifyRhs
@@ -295,10 +321,7 @@ inlineLocal = do Var v <- idR
                  inlineR
 
 reifyInline :: ReExpr
-reifyInline = unReify >>> inlineLocal >>> reify
-
-reify :: ReExpr
-reify = idR >>= reifyOf
+reifyInline = unReify >>> inlineLocal >>> reifyR
 
 reifyMisc :: ReExpr
 reifyMisc = tries [ ("reifyEval" , reifyEval)
@@ -369,4 +392,9 @@ externals =
     , external "reify-inline"
         (promoteExprR reifyInline :: RewriteH Core)
         ["inline names where reified"]
+    , external "unless-io"
+        (promoteExprR unlessIO :: RewriteH Core)
+        ["Pass through if not IO-typed"]
+    , external "reify-it" (promoteExprR reifyR :: RewriteH Core) ["apply reify"]
+    , external "eval-it" (promoteExprR evalR :: RewriteH Core) ["apply eval"]
     ]
