@@ -1,3 +1,6 @@
-any-td reify-misc
-
-binding-of main
+reify-module
+repeat (any-td reify-misc)
+any-td (inline-cleanup reifyEP)  -- why necessary?
+reify-rules ; simplify
+-- binding-of main
+binding-of reified
