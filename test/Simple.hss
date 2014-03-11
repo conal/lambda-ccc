@@ -2,16 +2,17 @@
 
 -- { rhs-of 'swap ; bash }
 
-set-pp-type Show
+-- set-pp-type Show
 -- set-pp-type Hide
+-- set-pp-type Omit
 
-binding-of notNot
+binding-of zoot
 reify-def
 any-td reify-misc
 
--- reify-named notNot
+-- reify-named bar
 
 -- rhs-of main
--- rhs-of notNot
--- binding-of notNot
--- binding-of notNot_reified
+-- rhs-of bar
+-- binding-of bar
+-- binding-of bar_reified

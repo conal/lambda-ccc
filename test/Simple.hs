@@ -24,7 +24,7 @@
 --   
 ----------------------------------------------------------------------
 
-#define WithMain
+-- #define WithMain
 
 module
 #ifdef WithMain
@@ -37,7 +37,7 @@ module
 import Prelude
 
 import LambdaCCC.Misc (Unop,Binop)
-import LambdaCCC.Lambda (EP,reifyEP,reifyEP',xor,ifThenElse)
+import LambdaCCC.Lambda (EP,reifyEP,reifyEP,xor,ifThenElse)
 import LambdaCCC.ToCCC (toCCC')
 import LambdaCCC.CCC ((:->),convertC)
 
@@ -54,12 +54,23 @@ ident a = a
 notNot :: Bool -> Bool
 notNot a = not (not a)
 
--- swap :: (Bool,Bool) -> (Bool,Bool)
-swap :: (a,b) -> (b,a)
-swap (x,y) = (y,x)
+bar :: Bool -> (Bool,Bool)
+bar x = (y, not y)
+ where
+   y = not x
+
+baz :: (Bool,Bool)
+baz = (x,x) where x = True
+
+swap1 :: (Bool,Bool) -> (Bool,Bool)
+swap1 (x,y) = (y,x)
 
 swap2 :: (Bool,Bool) -> (Bool,Bool)
 swap2 (a,b) = (not b, not a)
+
+{-
+swap :: (a,b) -> (b,a)
+swap (x,y) = (y,x)
 
 swap3 :: (Bool,Bool) -> (Bool,Bool)
 swap3 = swap'
@@ -94,8 +105,14 @@ id' x = x
 foo :: Bool -> Bool
 foo = id'
 
+-}
+
 halfAdd :: (Bool,Bool) -> (Bool,Bool)
 halfAdd (a,b) = (a && b, a `xor` b)
+
+zoot :: Bool -> Bool
+zoot a = a `xor` a
+
 
 -- Version with HOFs
 halfAddH :: (Bool,Bool) -> (Bool,Bool)
@@ -107,15 +124,17 @@ halfAddH (a,b) = (h (&&), h xor)
 -- Without the type signature on foo, I get into trouble with polymorphism.
 -- Still working.
 
+reified :: EP ((Bool, Bool) -> (Bool, Bool))
+reified = reifyEP halfAdd
+
 #ifdef WithMain
 
 main :: IO ()
 main = do print e
           print ccc
-          outGV "notNot" circuit
+          outGV "test" circuit
  where
-   -- e       = reifyEP notNot "notNot"
-   e       = reifyEP' notNot
+   e       = reified
    -- Both of the following definitions work:
    ccc     = toCCCTerm' e
    circuit = toCCC'     e
@@ -131,8 +150,8 @@ main = do print e
 
 #else
 
-fiddle :: Int
-fiddle = length "Fiddle"
+-- fiddle :: Int
+-- fiddle = length "Fiddle"
 
 -- WEIRD: sometimes when I comment out this fiddle definition, I get the dread
 -- "expectJust initTcInteractive" GHC panic.
