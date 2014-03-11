@@ -3,10 +3,15 @@
 -- { rhs-of 'swap ; bash }
 
 set-pp-type Show
+-- set-pp-type Hide
 
-reify-named swap6
+binding-of notNot
+reify-def
+any-td reify-misc
+
+-- reify-named notNot
 
 -- rhs-of main
--- rhs-of swap6
-binding-of swap6
--- binding-of swap6_reified
+-- rhs-of notNot
+-- binding-of notNot
+-- binding-of notNot_reified

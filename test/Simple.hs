@@ -37,10 +37,9 @@ module
 import Prelude
 
 import LambdaCCC.Misc (Unop,Binop)
-import LambdaCCC.Lambda (EP,reifyEP,xor,ifThenElse)
+import LambdaCCC.Lambda (EP,reifyEP,reifyEP',xor,ifThenElse)
 import LambdaCCC.ToCCC (toCCC')
 import LambdaCCC.CCC ((:->),convertC)
--- import LambdaCCC.ToCircuit
 
 import Circat.Category (unUnitFun)
 import Circat.Circuit (IsSourceP2,(:>),outGWith)
@@ -48,10 +47,6 @@ import Circat.Netlist (outV)
 
 -- Needed for resolving names. Bug? Is there an alternative?
 import qualified LambdaCCC.Lambda
--- import qualified LambdaCCC.Prim
--- import qualified LambdaCCC.Ty
-
--- import LambdaCCC.Ty
 
 ident :: Bool -> Bool
 ident a = a
@@ -117,23 +112,22 @@ halfAddH (a,b) = (h (&&), h xor)
 main :: IO ()
 main = do print e
           print ccc
-          outGV "swap6" circuit
+          outGV "notNot" circuit
  where
-   e       = reifyEP swap6 "swap6"
+   -- e       = reifyEP notNot "notNot"
+   e       = reifyEP' notNot
    -- Both of the following definitions work:
    ccc     = toCCCTerm' e
    circuit = toCCC'     e
 --    ccc     = toCCC' e
 --    circuit = convertC ccc
-
--- Type-specialized toCCC
-toCCCTerm' :: EP (a -> b) -> (a :-> b)
-toCCCTerm' = toCCC'
-
--- Diagram and Verilog
-outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()
-outGV s c = do outGWith ("pdf","") s c
-               outV                s c
+   -- Type-specialized toCCC
+   toCCCTerm' :: EP (a -> b) -> (a :-> b)
+   toCCCTerm' = toCCC'
+   -- Diagram and Verilog
+   outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()
+   outGV s c = do outGWith ("pdf","") s c
+                  outV                s c
 
 #else
 
