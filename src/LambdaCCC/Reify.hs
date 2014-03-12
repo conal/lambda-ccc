@@ -327,7 +327,10 @@ reifyDef :: RewriteH CoreBind
 reifyDef = nonRecAllR idR reifyRhs
 
 reifyModGuts :: RewriteH ModGuts
-reifyModGuts = modGutsR (progBindsAnyR (const reifyDef))
+reifyModGuts = modGutsR (tryR (progBindsAnyR (const reifyDef)))
+
+-- The tryR above is for when there are no applicable definitions remaining,
+-- e.g., if GHC has already inlined all that remained after export culling.
 
 progTest :: RewriteH CoreProg
 progTest = progBindsAnyR (const idR)
