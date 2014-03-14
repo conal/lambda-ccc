@@ -210,6 +210,17 @@ inTyLams r = r'
    isTyLam (Lam v _) = isTyVar v
    isTyLam _         = False
 
+-- Fully type-eta-expand.
+typeEtaLong :: ReExpr
+typeEtaLong = expand >>> tryR simplifyE
+ where
+   -- e --> \ a ... z . e a ... z
+   expand = do e@(collectForalls . exprType -> (tvs,_)) <- idR
+               return $ mkLams tvs (mkApps e ((Type . TyVarTy) <$> tvs))
+
+simplifyE :: RewriteH CoreExpr
+simplifyE = extractR simplifyR
+
 -- TODO: Try rewriting more gracefully, testing isForAllTy first and
 -- maybeEtaExpandR
 
@@ -295,7 +306,7 @@ reifyOf e = appsE reifyS [exprType e] [e]
 evalOf :: CoreExpr -> TranslateU CoreExpr
 evalOf e = appsE evalS [dropEP (exprType e)] [e]
 
-dropEP :: Type -> Type
+dropEP :: Unop Type
 dropEP (TyConApp (uqName . tyConName -> name) [t]) =
   if name == epS then t
   else error ("dropEP: not an EP: " ++ show name)
@@ -359,6 +370,8 @@ isTyLamsEval = isEval . snd . collectTyBinders
 -- Fail if e is already an eval or if it has IO or EP type.
 reifyRhs :: String -> ReExpr
 reifyRhs nm =
+  unlessTC "IO" >>> unlessTC epS >>> unlessEval >>>
+  typeEtaLong >>>
   do (tvs,body) <- collectTyBinders <$> idR
      eTy        <- epOf (exprType body)
      v          <- constT $ newIdH (nm ++ "_reified") (mkForAllTys tvs eTy)
@@ -366,11 +379,6 @@ reifyRhs nm =
      evald      <- evalOf (mkCoreApps (Var v) ((Type . TyVarTy) <$> tvs))
      return $
        Let (NonRec v reified) (mkLams tvs evald)
-
--- reifyRhs nm = inTyLams $
---                     unlessTC "IO" >>> unlessTC epS >>> unlessEval
---                 >>> reifyR >>> letIntroR (nm ++ "_reified") >>> evalR
---                 >>> letFloatArgR
 
 reifyDef :: RewriteH CoreBind
 reifyDef = do NonRec v _ <- idR
@@ -406,14 +414,9 @@ reifyModGuts = modGutsR reifyProg
 
 -- Inline if doing so yields an eval
 inlineEval :: ReExpr
-inlineEval = inAppTys (inlineR >>> acceptR isTyLamsEval) -- >>> simplifyE
- where
-   -- After inlining type lambdas, beta reduce.
-   -- TODO: See whether it works with two type variables.
-   -- It doesn't, because the outermost form isn't a beta redex:
-   -- (\ a \ b -> ...) u v
-   simplifyE :: ReExpr
-   simplifyE = repeatR (betaReduceR >>> letNonRecSubstSafeR)
+inlineEval = inAppTys (inlineR >>> acceptR isTyLamsEval) >>> tryR simplifyE
+
+-- The simplifyE is for beta-reducing type applications.
 
 -- Rewrite inside of reify applications
 inReify :: Unop ReExpr
@@ -536,5 +539,7 @@ externals =
 --     , external "inline-app-ty"
 --         (promoteExprR inlineAppTy :: RewriteH Core) ["temp test"]
     , external "inline-eval"
-        (promoteExprR inlineEval :: RewriteH Core) ["temp test"]
+        (promoteExprR inlineEval :: RewriteH Core) ["inline to an eval"]
+    , external "type-eta-long"
+        (promoteExprR typeEtaLong :: RewriteH Core) ["type-eta-long form"]
     ]

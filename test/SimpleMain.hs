@@ -20,28 +20,25 @@
 ----------------------------------------------------------------------
 
 import Simple
+-- import Squimple (reified)
 
 import Prelude
 
 import LambdaCCC.Misc (Unop)
--- import LambdaCCC.Lambda (reifyEP)
+import LambdaCCC.Lambda (reifyEP)
 import LambdaCCC.ToCCC (toCCC')
 import LambdaCCC.CCC (convertC,(:->))
 
 import Circat.Circuit (IsSourceP2,(:>),outGWith)
 import Circat.Netlist (outV)
 
--- -- Experimental
--- import LambdaCCC.Prim (Prim)
--- import Circat.Category (BiCCCC)
-
 main :: IO ()
 main = do print e
           print (idCT (toCCC' e))
           outGV "test" (toCCC' e)
  where
-   e       = reified              -- Works
-   -- e       = reifyEP halfAdd   -- Doesn't
+   e       = reified           -- Works
+--    e       = reifyEP halfAdd   -- Doesn't
 
 --    -- Both of the following definitions work:
 --    ccc     = toCCC' e

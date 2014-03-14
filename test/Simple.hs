@@ -16,23 +16,11 @@
 -- 
 -- Test conversion of Haskell source code into circuits. To run:
 -- 
---   hermit Simple.hs -v0 -opt=LambdaCCC.ReifyLambda +Main Simple.hss resume && ./Simple
---
--- I'm working toward splitting off main to SimpleMain. When it works:
---
---   hermit Simple.hs -v0 -opt=LambdaCCC.ReifyLambda +Simple Simple.hss resume
+--   hermit Simple.hs -v0 -opt=LambdaCCC.Reify +Simple Auto.hss resume && ghc -O2 --make SimpleMain.hs && ./SimpleMain
 --   
 ----------------------------------------------------------------------
 
--- #define WithMain
-
-module
-#ifdef WithMain
-       Main
-#else
-       Simple
-#endif
-              where
+module Simple where
 
 import Prelude
 
@@ -48,16 +36,30 @@ import Circat.Netlist (outV)
 -- Needed for resolving names. Bug? Is there an alternative?
 import qualified LambdaCCC.Lambda
 
-ident :: Bool -> Bool
-ident a = a
+ident :: a -> a
+ident x = x
+
+voodle :: a -> a
+voodle = ident
+
+viddle :: Bool -> Bool
+viddle b = ident b
 
 notNot :: Bool -> Bool
 notNot a = not (not a)
+
+notNot' :: Bool -> Bool
+notNot' a = not (ident (not a))
 
 bar :: Bool -> (Bool,Bool)
 bar x = (y, not y)
  where
    y = not x
+
+bar' :: Bool -> (Bool,Bool)
+bar' x = (y, not y)
+ where
+   y = notNot x
 
 baz :: (Bool,Bool)
 baz = (x,x) where x = True
@@ -68,9 +70,11 @@ swap1 (x,y) = (y,x)
 swap2 :: (Bool,Bool) -> (Bool,Bool)
 swap2 (a,b) = (not b, not a)
 
-{-
 swap :: (a,b) -> (b,a)
 swap (x,y) = (y,x)
+
+swapZ :: (a,b) -> (b,a)
+swapZ = swap
 
 swap3 :: (Bool,Bool) -> (Bool,Bool)
 swap3 = swap'
@@ -105,14 +109,11 @@ id' x = x
 foo :: Bool -> Bool
 foo = id'
 
--}
-
 halfAdd :: (Bool,Bool) -> (Bool,Bool)
 halfAdd (a,b) = (a && b, a `xor` b)
 
 zoot :: Bool -> Bool
 zoot a = a `xor` a
-
 
 -- Version with HOFs
 halfAddH :: (Bool,Bool) -> (Bool,Bool)
@@ -121,39 +122,12 @@ halfAddH (a,b) = (h (&&), h xor)
    h :: (Bool -> Bool -> Bool) -> Bool
    h f = f a b
 
--- Without the type signature on foo, I get into trouble with polymorphism.
--- Still working.
+--------
 
-reified :: EP ((Bool, Bool) -> (Bool, Bool))
-reified = reifyEP halfAdd
+-- Reification example for exporting
 
-#ifdef WithMain
+-- reified :: EP ((Bool, Bool) -> (Bool, Bool))
+-- reified = reifyEP halfAdd
 
-main :: IO ()
-main = do print e
-          print ccc
-          outGV "test" circuit
- where
-   e       = reified
-   -- Both of the following definitions work:
-   ccc     = toCCCTerm' e
-   circuit = toCCC'     e
---    ccc     = toCCC' e
---    circuit = convertC ccc
-   -- Type-specialized toCCC
-   toCCCTerm' :: EP (a -> b) -> (a :-> b)
-   toCCCTerm' = toCCC'
-   -- Diagram and Verilog
-   outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()
-   outGV s c = do outGWith ("pdf","") s c
-                  outV                s c
-
-#else
-
--- fiddle :: Int
--- fiddle = length "Fiddle"
-
--- WEIRD: sometimes when I comment out this fiddle definition, I get the dread
--- "expectJust initTcInteractive" GHC panic.
-
-#endif
+reified :: EP (Bool -> (Bool,Bool))
+reified = reifyEP bar'
