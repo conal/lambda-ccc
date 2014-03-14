@@ -449,23 +449,25 @@ kPrim = ConstE
 kLit :: HasLit a => a -> EP a
 kLit = kPrim . litP
 
+-- TODO: change the following rules back to reifyE
+
 {-# RULES
  
-"reify/not"   reifyE not   = kPrim NotP
-"reify/(&&)"  reifyE (&&)  = kPrim AndP
-"reify/(||)"  reifyE (||)  = kPrim OrP
-"reify/xor"   reifyE xor   = kPrim XorP
-"reify/(+)"   reifyE (+)   = kPrim AddP
-"reify/exl"   reifyE fst   = kPrim ExlP
-"reify/exr"   reifyE snd   = kPrim ExrP
-"reify/pair"  reifyE (,)   = kPrim PairP
-"reify/inl"   reifyE Left  = kPrim InlP
-"reify/inr"   reifyE Right = kPrim InrP
-"reify/if"    reifyE cond  = kPrim CondP
+"reify/not"   reifyEP not   = kPrim NotP
+"reify/(&&)"  reifyEP (&&)  = kPrim AndP
+"reify/(||)"  reifyEP (||)  = kPrim OrP
+"reify/xor"   reifyEP xor   = kPrim XorP
+"reify/(+)"   reifyEP (+)   = kPrim AddP
+"reify/exl"   reifyEP fst   = kPrim ExlP
+"reify/exr"   reifyEP snd   = kPrim ExrP
+"reify/pair"  reifyEP (,)   = kPrim PairP
+"reify/inl"   reifyEP Left  = kPrim InlP
+"reify/inr"   reifyEP Right = kPrim InrP
+"reify/if"    reifyEP cond  = kPrim CondP
  
-"reify/()"    reifyE ()    = kLit  ()
-"reify/false" reifyE False = kLit  False
-"reify/true"  reifyE True  = kLit  True
+"reify/()"    reifyEP ()    = kLit  ()
+"reify/false" reifyEP False = kLit  False
+"reify/true"  reifyEP True  = kLit  True
  
   #-}
 
@@ -559,7 +561,7 @@ evalEP = evalE
 
 reifyEP :: a -> EP a
 reifyEP = reifyE
-{-# INLINE reifyEP #-}
+{-# NOINLINE reifyEP #-}
 
 -- If reifyEP doesn't get inlined, change the reifyE prim rules below to
 -- reifyEP.
