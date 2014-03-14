@@ -8,7 +8,7 @@
 -- TODO: Restore the following pragmas
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
-{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -89,13 +89,6 @@ apps f ts es
 tyArity :: Id -> Int
 tyArity = length . fst . splitForAllTys . varType
 
--- | Variant of GHC's 'collectArgs'
-collectTypeArgs :: CoreExpr -> ([Type], CoreExpr)
-collectTypeArgs expr = go [] expr
-  where
-    go ts (App f (Type t)) = go (t:ts) f
-    go ts                e = (reverse ts, e)
-
 collectForalls :: Type -> ([Var], Type)
 collectForalls ty = go [] ty
   where
@@ -113,14 +106,6 @@ subst ps = substExpr (error "subst: no SDoc") (foldr add emptySubst ps)
 {--------------------------------------------------------------------
     KURE utilities
 --------------------------------------------------------------------}
-
--- | Transformation while focused on a snoc path
-snocPathIn :: ( Eq crumb, Functor m, ReadPath c crumb
-              , MonadCatch m, Walker c b ) =>
-              Translate c m b (SnocPath crumb) -> Unop (Rewrite c m b)
-snocPathIn mkP r = mkP >>= flip localPathR r
-
--- TODO: remove snocPathIn if unused
 
 {--------------------------------------------------------------------
     HERMIT utilities
@@ -150,21 +135,6 @@ apps' :: ( Functor m, HasDynFlags m, MonadThings m, MonadCatch m
          String -> [Type] -> [CoreExpr] -> Translate c m a CoreExpr
 apps' s ts es = (\ i -> apps i ts es) <$> findIdT s
 
--- defR :: RewriteH Id -> RewriteH CoreExpr -> RewriteH Core
--- defR rewI rewE = prunetdR (  promoteDefR (defAllR rewI rewE)
---                           <+ promoteBindR (nonRecAllR rewI rewE) )
-
--- rhsR :: RewriteH CoreExpr -> RewriteH Core
--- rhsR = defR idR
-
--- The set of variables in a HERMIT context
-isLocal :: ReadBindings c => c -> (Var -> Bool)
-isLocal = flip boundIn
-
--- | Extract just the lambda-bound variables in a HERMIT context
-isLocalT :: (ReadBindings c, Applicative m) => Translate c m a (Var -> Bool)
-isLocalT = contextonlyT (pure . isLocal)
-
 type InCoreTC t = Injection t CoreTC
 
 observing :: Bool
@@ -193,22 +163,6 @@ uqVarName = uqName . varName
 anybuER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) =>
            Rewrite c m CoreExpr -> Rewrite c m g
 anybuER r = anybuR (promoteExprR r)
-
-anytdER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) =>
-           Rewrite c m CoreExpr -> Rewrite c m g
-anytdER r = anytdR (promoteExprR r)
-
--- Apply a rewriter inside type lambdas, type-eta-expanding if necessary.
-inTyLams :: Unop ReExpr
-inTyLams r = r'
- where
-   r' = readerT $ \ e ->
-          if | isTyLam e               -> lamAllR idR r'
-             | isForAllTy (exprType e) -> etaExpandR "eta" >>> r'
-             | otherwise               -> r
-   isTyLam :: CoreExpr -> Bool
-   isTyLam (Lam v _) = isTyVar v
-   isTyLam _         = False
 
 -- Fully type-eta-expand.
 typeEtaLong :: ReExpr
@@ -249,8 +203,8 @@ type ReExpr = RewriteH CoreExpr
 lamName :: Unop String
 lamName = ("LambdaCCC.Lambda." ++)
 
-findIdE :: String -> TranslateH a Id
-findIdE = findIdT . lamName
+-- findIdE :: String -> TranslateH a Id
+-- findIdE = findIdT . lamName
 
 findTyConE :: String -> TranslateH a TyCon
 findTyConE = findTyConT . lamName
@@ -388,6 +342,18 @@ reifyProg :: RewriteH CoreProg
 reifyProg = progBindsT (const (tryR reifyDef >>> letFloatToProg)) concatProgs
 
 #else
+
+-- Apply a rewriter inside type lambdas, type-eta-expanding if necessary.
+inTyLams :: Unop ReExpr
+inTyLams r = r'
+ where
+   r' = readerT $ \ e ->
+          if | isTyLam e               -> lamAllR idR r'
+             | isForAllTy (exprType e) -> etaExpandR "eta" >>> r'
+             | otherwise               -> r
+   isTyLam :: CoreExpr -> Bool
+   isTyLam (Lam v _) = isTyVar v
+   isTyLam _         = False
 
 -- e --> eval (reify e) in preparation for rewriting reify e.
 -- Fail if e is already an eval or if it has IO or EP type.
