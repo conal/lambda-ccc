@@ -45,7 +45,7 @@ import HERMIT.Monad (HermitM,newIdH)
 import HERMIT.Context
   (HermitC,ReadBindings(..),hermitBindings,HermitBinding(..),HermitBindingSite(..)
   ,lookupHermitBinding,boundIn,BoundVars,HasGlobalRdrEnv(..)) -- ,AddBindings
-import HERMIT.Core (Crumb(..),localFreeIdsExpr,CoreProg)
+import HERMIT.Core (Crumb(..),localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
 import HERMIT.External
 import HERMIT.GHC hiding (mkStringExpr)
 import HERMIT.Kure hiding (apply)
@@ -57,9 +57,10 @@ import HERMIT.Dictionary.AlphaConversion (unshadowR)
 import HERMIT.Dictionary.Common
 import HERMIT.Dictionary.Composite (simplifyR)
 import HERMIT.Dictionary.Debug (observeR)
-import HERMIT.Dictionary.Rules (rulesR) -- ruleR,
+import HERMIT.Dictionary.Rules (rulesR)
 import HERMIT.Dictionary.Inline (inlineR,inlineNameR) -- , inlineNamesR
-import HERMIT.Dictionary.Local (letIntroR,letFloatArgR,letFloatTopR)
+import HERMIT.Dictionary.Local.Let (letNonRecIntroR)
+import HERMIT.Dictionary.Local (letIntroR,letFloatArgR,letFloatTopR,betaReducePlusR)
 import HERMIT.Dictionary.Navigation (rhsOfT,parentOfT,bindingGroupOfT)
 -- import HERMIT.Dictionary.Composite (simplifyR)
 import HERMIT.Dictionary.Unfold (cleanupUnfoldR) -- unfoldNameR,
@@ -117,6 +118,8 @@ snocPathIn :: ( Eq crumb, Functor m, ReadPath c crumb
               , MonadCatch m, Walker c b ) =>
               Translate c m b (SnocPath crumb) -> Unop (Rewrite c m b)
 snocPathIn mkP r = mkP >>= flip localPathR r
+
+-- TODO: remove snocPathIn if unused
 
 {--------------------------------------------------------------------
     HERMIT utilities
@@ -317,33 +320,44 @@ filterR :: (a -> Bool) -> RewriteH a
 filterR p = do a <- idR
                if p a then return a else fail "filterR: condition failed"
 
+-- TODO: Use Kure utility in place of filterR:
+-- -- | Look at the argument to a 'Rewrite', and choose to be either 'idR' or a failure.
+-- acceptR :: Monad m => (a -> Bool) -> Rewrite c m a
+
+-- TODO: look for opportunities to use readerT.
+
 -- e --> eval (reify e) in preparation for rewriting reify e.
 -- Fail if e is already an eval or if it has IO or EP type.
-reifyRhs :: ReExpr
-reifyRhs = unlessTC "IO" >>> unlessTC "EP" >>> unlessEval >>>
-           reifyR >>> evalR
+reifyRhs :: String -> ReExpr
+reifyRhs nm = unlessTC "IO" >>> unlessTC "EP" >>> unlessEval
+          >>> reifyR >>> letIntroR (nm ++ "_reified") >>> evalR
+          >>> letFloatArgR
 
 reifyDef :: RewriteH CoreBind
-reifyDef = nonRecAllR idR reifyRhs
+reifyDef = do NonRec v _ <- idR
+              nonRecAllR idR (reifyRhs (uqVarName v))
+
+letFloatToProg :: TranslateH CoreBind CoreProg
+letFloatToProg = arr (flip ProgCons ProgNil) >>> tryR letFloatTopR
+
+concatProgs :: [CoreProg] -> CoreProg
+concatProgs = bindsToProg . concatMap progToBinds
+
+reifyProg :: RewriteH CoreProg
+reifyProg = progBindsT (const (tryR reifyDef >>> letFloatToProg)) concatProgs
 
 reifyModGuts :: RewriteH ModGuts
-reifyModGuts = modGutsR (tryR (progBindsAnyR (const reifyDef)))
+reifyModGuts = modGutsR reifyProg
 
--- The tryR above is for when there are no applicable definitions remaining,
--- e.g., if GHC has already inlined all that remained after export culling.
+-- TODO: How to float the local bindings as well?
 
-progTest :: RewriteH CoreProg
-progTest = progBindsAnyR (const idR)
-
--- inlineLocal :: ReExpr
--- inlineLocal = do Var v <- idR
---                  True  <- contextonlyT (return . boundIn v)
---                  inlineR
+-- TODO: Use arr instead of (consT (return (f ...)))
 
 -- Inline if doing so yields an eval
 inlineEval :: ReExpr
 inlineEval = inlineR >>> filterR isEval
 
+-- Rewrite inside of reify applications
 inReify :: Unop ReExpr
 inReify = reifyR <~ unReify
 
@@ -440,8 +454,8 @@ externals =
         (inlineCleanup :: String -> RewriteH Core)
         ["inline a named definition, and clean-up beta-redexes"]
     , external "reify-rhs"
-        (promoteExprR reifyRhs :: RewriteH Core)
-        ["reifyE the RHS of a definition"]
+        (promoteExprR . reifyRhs :: String -> RewriteH Core)
+        ["reifyE the RHS of a definition, giving a let-intro name"]
     , external "reify-def"
         (promoteBindR reifyDef :: RewriteH Core)
         ["reifyE a definition"]
@@ -463,6 +477,4 @@ externals =
         (promoteExprR reifyCase :: RewriteH Core) ["reify case"]
     , external "reify-module"
         (promoteModGutsR reifyModGuts :: RewriteH Core) ["reify all top-level definitions"]
-    , external "prog-test"
-        (promoteProgR progTest :: RewriteH Core) ["mumble"]
     ]
