@@ -295,17 +295,19 @@ varSubst vs = do vs' <- mapM varEval vs
 
 reifyLam :: ReExpr
 reifyLam = do Lam v e <- unReify
-              sub     <- varSubst [v]
-              e'      <- reifyOf (sub e)
-              appsE "lamvP#" [varType v, exprType e] [varLitE v,e']
+              if  isTyVar v then
+                 fail "reifyLam: Given type lambda"
+               else do sub     <- varSubst [v]
+                       e'      <- reifyOf (sub e)
+                       appsE "lamvP#" [varType v, exprType e] [varLitE v,e']
 
 -- Pass through unless an IO
 unlessTC :: String -> ReExpr
-unlessTC name = filterR (not . hasTC name . exprType)
+unlessTC name = acceptR (not . hasTC name . exprType)
 
 -- Pass through unless an eval application
 unlessEval :: ReExpr
-unlessEval = filterR (not . isEval)
+unlessEval = acceptR (not . isEval)
 
 hasTC :: String -> Type -> Bool
 hasTC name (TyConApp tc [_]) = uqName (tyConName tc) == name
@@ -314,15 +316,6 @@ hasTC _ _                    = False
 isEval :: CoreExpr -> Bool
 isEval (App (App (Var v) (Type _)) _) = uqVarName v == evalS
 isEval _                              = False
-
--- Pass through if condition satisfied
-filterR :: (a -> Bool) -> RewriteH a
-filterR p = do a <- idR
-               if p a then return a else fail "filterR: condition failed"
-
--- TODO: Use Kure utility in place of filterR:
--- -- | Look at the argument to a 'Rewrite', and choose to be either 'idR' or a failure.
--- acceptR :: Monad m => (a -> Bool) -> Rewrite c m a
 
 -- TODO: look for opportunities to use readerT.
 
@@ -354,9 +347,11 @@ reifyProg = progBindsT (const (tryR reifyDef >>> letFloatToProg)) concatProgs
 
 -- e --> eval (reify e) in preparation for rewriting reify e.
 -- Fail if e is already an eval or if it has IO or EP type.
+-- If there are any type lambdas, skip over them.
 reifyRhs :: ReExpr
-reifyRhs = unlessTC "IO" >>> unlessTC "EP" >>> unlessEval >>>
-           reifyR >>> evalR
+reifyRhs = inTyLams $
+             unlessEval >>> unlessTC "IO" >>> unlessTC "EP" >>>
+             reifyR >>> evalR
 
 reifyDef :: RewriteH CoreBind
 reifyDef = nonRecAllR idR reifyRhs
@@ -365,6 +360,15 @@ reifyProg :: RewriteH CoreProg
 reifyProg = progBindsAnyR (const reifyDef)
 
 #endif
+
+-- Apply a rewriter inside type lambdas.
+inTyLams :: Unop ReExpr
+inTyLams r = r'
+ where
+   r' = lamAllR (acceptR isTyVar) r' <+ r
+
+-- TODO: if r fails at a non-type-lambda, so that the parent lamAllR call fails,
+-- then this definition will try to apply r to the type lambda.
 
 reifyModGuts :: RewriteH ModGuts
 reifyModGuts = modGutsR reifyProg
@@ -375,7 +379,7 @@ reifyModGuts = modGutsR reifyProg
 
 -- Inline if doing so yields an eval
 inlineEval :: ReExpr
-inlineEval = inlineR >>> filterR isEval
+inlineEval = inlineR >>> acceptR isEval
 
 -- Rewrite inside of reify applications
 inReify :: Unop ReExpr
