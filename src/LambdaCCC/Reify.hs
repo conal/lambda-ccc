@@ -198,9 +198,6 @@ anytdER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) 
            Rewrite c m CoreExpr -> Rewrite c m g
 anytdER r = anytdR (promoteExprR r)
 
-tryRulesBU :: [String] -> RewriteH Core
-tryRulesBU = tryR . anybuER . rulesR
-
 -- Apply a rewriter inside type lambdas, type-eta-expanding if necessary.
 inTyLams :: Unop ReExpr
 inTyLams r = r'
@@ -473,8 +470,8 @@ reifyMisc = tries [ ("reifyEval"   , reifyEval)
                   -- To come: case, lamT, appT
                   ]
 
-reifyRules :: RewriteH Core
-reifyRules = tryRulesBU $ map ("reify/" ++)
+reifyRules :: RewriteH CoreExpr
+reifyRules = rulesR $ map ("reify/" ++)
   ["not","(&&)","(||)","xor","(+)","exl","exr","pair","inl","inr","if","false","true"]
 
 -- or: words $ "not (&&) (||) xor ..."
@@ -501,7 +498,7 @@ plugin = hermitPlugin (phase 0 . interactive externals)
 externals :: [External]
 externals =
     [ external "reify-rules"
-        (reifyRules :: RewriteH Core)
+        (promoteExprR reifyRules :: RewriteH Core)
         ["convert some non-local vars to consts"]
     , external "inline-cleanup"
         (inlineCleanup :: [String] -> RewriteH Core)

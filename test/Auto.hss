@@ -1,6 +1,18 @@
 reify-module
-repeat (any-td reify-misc)
-any-td (inline-cleanup reifyEP)  -- why necessary?
-reify-rules ; simplify
+try (repeat (any-td reify-misc >>> try simplify))
+-- try (repeat (any-td reify-misc))
+
+-- The try simplify there is for polymorphic eval inlinings. I'd rather
+-- simplify them when created, but I don't know how to do traversals like
+-- innermostR on CoreExpr. I've asked for help.
+
+-- any-td (inline-cleanup [reifyEP,evalEP])  -- why necessary?
+try (any-bu reify-rules)
+
 -- binding-of main
-binding-of reified
+-- binding-of reified
+-- binding-of notNot
+try simplify
+down  -- from top to show whole program
+
+-- set-pp-type Show
