@@ -343,6 +343,7 @@ type Env = [Bind]
 
 reifyE :: a -> E p a
 reifyE _ = error (printf "reifyE: Oops -- not eliminated.")
+{-# NOINLINE reifyE #-}  -- to give reify/eval rules a chance
 
 {-# RULES
 
