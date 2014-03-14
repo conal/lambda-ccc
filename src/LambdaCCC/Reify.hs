@@ -7,7 +7,7 @@
 
 -- TODO: Restore the following pragmas
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -25,26 +25,13 @@
 module LambdaCCC.Reify (plugin) where
 
 import Data.Functor ((<$>))
-import Control.Applicative (Applicative(..))
-import Control.Monad ((<=<),guard)
+import Control.Monad ((<=<))
 import Control.Arrow (arr,(>>>))
 import Data.List (intercalate)
-import qualified Data.Map as M
-import qualified Data.Set as S
-import Data.Maybe (fromMaybe)
 import Text.Printf (printf)
 
--- import qualified Language.Haskell.TH as TH (Name) -- ,mkName
--- import qualified Language.Haskell.TH.Syntax as TH (showName)
-
--- GHC API
--- import PrelNames (unitTyConKey,boolTyConKey,intTyConKey)
-
-import qualified Language.KURE.Translate as Kure
-import HERMIT.Monad (HermitM,newIdH)
-import HERMIT.Context
-  (HermitC,ReadBindings(..),hermitBindings,HermitBinding(..),HermitBindingSite(..)
-  ,lookupHermitBinding,boundIn,BoundVars,HasGlobalRdrEnv(..)) -- ,AddBindings
+import HERMIT.Monad (newIdH)
+import HERMIT.Context (BoundVars,HasGlobalRdrEnv(..))
 import HERMIT.Core (Crumb(..),localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
 import HERMIT.External
 import HERMIT.GHC hiding (mkStringExpr)
@@ -53,24 +40,16 @@ import HERMIT.Plugin
 
 -- Note: All of the Dictionary submodules are now re-exported by HERMIT.Dictionary,
 --       so if you prefer you could import all these via that module, rather than seperately.
-import HERMIT.Dictionary.AlphaConversion (unshadowR)
+-- import HERMIT.Dictionary.AlphaConversion (unshadowR)
 import HERMIT.Dictionary.Common
 import HERMIT.Dictionary.Composite (simplifyR)
 import HERMIT.Dictionary.Debug (observeR)
 import HERMIT.Dictionary.Rules (rulesR)
 import HERMIT.Dictionary.Inline (inlineR,inlineNamesR)
-import HERMIT.Dictionary.Local.Let (letNonRecIntroR,letNonRecSubstSafeR)
-import HERMIT.Dictionary.Local
-  (letIntroR,letFloatArgR,letFloatTopR,betaReducePlusR,etaExpandR,betaReduceR)
-import HERMIT.Dictionary.Navigation (rhsOfT,parentOfT,bindingGroupOfT)
--- import HERMIT.Dictionary.Composite (simplifyR)
+import HERMIT.Dictionary.Local (letFloatTopR)
 import HERMIT.Dictionary.Unfold (cleanupUnfoldR) -- unfoldNameR,
 
 import LambdaCCC.Misc (Unop,(<~)) -- ,Binop
--- import qualified LambdaCCC.Ty as T
--- import qualified LambdaCCC.Prim as P
--- import qualified LambdaCCC.Lambda as E
--- import LambdaCCC.MkStringExpr (mkStringExpr)
 
 {--------------------------------------------------------------------
     Core utilities
