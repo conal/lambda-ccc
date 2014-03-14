@@ -200,6 +200,16 @@ anytdER r = anytdR (promoteExprR r)
 tryRulesBU :: [String] -> RewriteH Core
 tryRulesBU = tryR . anybuER . rulesR
 
+-- Apply a rewriter inside type lambdas.
+inTyLams :: Unop ReExpr
+inTyLams r = r'
+ where
+   r' = readerT $ \ e -> if isTyLam e then lamAllR idR r' else r
+
+isTyLam :: CoreExpr -> Bool
+isTyLam (Lam v _) = isTyVar v
+isTyLam _         = False
+
 {--------------------------------------------------------------------
     Reification
 --------------------------------------------------------------------}
@@ -295,11 +305,10 @@ varSubst vs = do vs' <- mapM varEval vs
 
 reifyLam :: ReExpr
 reifyLam = do Lam v e <- unReify
-              if  isTyVar v then
-                 fail "reifyLam: Given type lambda"
-               else do sub     <- varSubst [v]
-                       e'      <- reifyOf (sub e)
-                       appsE "lamvP#" [varType v, exprType e] [varLitE v,e']
+              guardMsg (not (isTyVar v)) "reifyLam: Given type lambda"
+              sub     <- varSubst [v]
+              e'      <- reifyOf (sub e)
+              appsE "lamvP#" [varType v, exprType e] [varLitE v,e']
 
 -- Pass through unless an IO
 unlessTC :: String -> ReExpr
@@ -361,15 +370,6 @@ reifyProg = progBindsAnyR (const reifyDef)
 
 #endif
 
--- Apply a rewriter inside type lambdas.
-inTyLams :: Unop ReExpr
-inTyLams r = r'
- where
-   r' = lamAllR (acceptR isTyVar) r' <+ r
-
--- TODO: if r fails at a non-type-lambda, so that the parent lamAllR call fails,
--- then this definition will try to apply r to the type lambda.
-
 reifyModGuts :: RewriteH ModGuts
 reifyModGuts = modGutsR reifyProg
 
@@ -380,6 +380,12 @@ reifyModGuts = modGutsR reifyProg
 -- Inline if doing so yields an eval
 inlineEval :: ReExpr
 inlineEval = inlineR >>> acceptR isEval
+
+
+
+-- WORKING HERE. Handle reify of *type-applied* inlined eval.
+
+
 
 -- Rewrite inside of reify applications
 inReify :: Unop ReExpr
