@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell, TypeOperators, GADTs, KindSignatures #-}
 {-# LANGUAGE ViewPatterns, PatternGuards, LambdaCase #-}
 {-# LANGUAGE FlexibleContexts, ConstraintKinds #-}
-{-# LANGUAGE MagicHash, CPP #-}
+{-# LANGUAGE MagicHash, MultiWayIf, CPP #-}
 {-# LANGUAGE Rank2Types #-}
 {-# OPTIONS_GHC -Wall #-}
 
@@ -58,9 +58,10 @@ import HERMIT.Dictionary.Common
 import HERMIT.Dictionary.Composite (simplifyR)
 import HERMIT.Dictionary.Debug (observeR)
 import HERMIT.Dictionary.Rules (rulesR)
-import HERMIT.Dictionary.Inline (inlineR,inlineNameR) -- , inlineNamesR
-import HERMIT.Dictionary.Local.Let (letNonRecIntroR)
-import HERMIT.Dictionary.Local (letIntroR,letFloatArgR,letFloatTopR,betaReducePlusR)
+import HERMIT.Dictionary.Inline (inlineR,inlineNamesR)
+import HERMIT.Dictionary.Local.Let (letNonRecIntroR,letNonRecSubstSafeR)
+import HERMIT.Dictionary.Local
+  (letIntroR,letFloatArgR,letFloatTopR,betaReducePlusR,etaExpandR,betaReduceR)
 import HERMIT.Dictionary.Navigation (rhsOfT,parentOfT,bindingGroupOfT)
 -- import HERMIT.Dictionary.Composite (simplifyR)
 import HERMIT.Dictionary.Unfold (cleanupUnfoldR) -- unfoldNameR,
@@ -200,15 +201,36 @@ anytdER r = anytdR (promoteExprR r)
 tryRulesBU :: [String] -> RewriteH Core
 tryRulesBU = tryR . anybuER . rulesR
 
--- Apply a rewriter inside type lambdas.
+-- Apply a rewriter inside type lambdas, type-eta-expanding if necessary.
 inTyLams :: Unop ReExpr
 inTyLams r = r'
  where
-   r' = readerT $ \ e -> if isTyLam e then lamAllR idR r' else r
+   r' = readerT $ \ e ->
+          if | isTyLam e               -> lamAllR idR r'
+             | isForAllTy (exprType e) -> etaExpandR "eta" >>> r'
+             | otherwise               -> r
+   isTyLam :: CoreExpr -> Bool
+   isTyLam (Lam v _) = isTyVar v
+   isTyLam _         = False
 
-isTyLam :: CoreExpr -> Bool
-isTyLam (Lam v _) = isTyVar v
-isTyLam _         = False
+-- TODO: Try rewriting more gracefully, testing isForAllTy first and
+-- maybeEtaExpandR
+
+-- Apply a rewriter inside type lambdas.
+inAppTys :: Unop ReExpr
+inAppTys r = r'
+ where
+   r' = readerT $ \ e -> if isAppTy e then appAllR r' idR else r
+
+isAppTy :: CoreExpr -> Bool
+isAppTy (App _ (Type _)) = True
+isAppTy _                = False
+
+letFloatToProg :: TranslateH CoreBind CoreProg
+letFloatToProg = arr (flip ProgCons ProgNil) >>> tryR letFloatTopR
+
+concatProgs :: [CoreProg] -> CoreProg
+concatProgs = bindsToProg . concatMap progToBinds
 
 {--------------------------------------------------------------------
     Reification
@@ -238,10 +260,6 @@ appsE = apps' . lamName
 appsE1 :: String -> [Type] -> CoreExpr -> TranslateU CoreExpr
 appsE1 str ts e = appsE str ts [e]
 
-epOf :: Type -> TranslateH a Type
-epOf t = do epTC <- findTyConE "EP"
-            return (TyConApp epTC [t])
-
 evalS, reifyS :: String
 evalS = "evalEP"
 reifyS = "reifyEP"
@@ -250,6 +268,13 @@ varPS, letS, varPatS :: String
 varPS   = "varP#"
 letS    = "lettP"
 varPatS = "varPat#"
+
+epS :: String
+epS = "EP"
+
+epOf :: Type -> TranslateH a Type
+epOf t = do epTC <- findTyConE epS
+            return (TyConApp epTC [t])
 
 -- reify u --> u
 unReify :: ReExpr
@@ -275,7 +300,7 @@ evalOf e = appsE evalS [dropEP (exprType e)] [e]
 
 dropEP :: Type -> Type
 dropEP (TyConApp (uqName . tyConName -> name) [t]) =
-  if name == "EP" then t
+  if name == epS then t
   else error ("dropEP: not an EP: " ++ show name)
 dropEP _ = error "dropEP: not a TyConApp"
 
@@ -326,28 +351,33 @@ isEval :: CoreExpr -> Bool
 isEval (App (App (Var v) (Type _)) _) = uqVarName v == evalS
 isEval _                              = False
 
--- TODO: look for opportunities to use readerT.
+isTyLamsEval :: CoreExpr -> Bool
+isTyLamsEval = isEval . snd . collectTyBinders
 
--- #define SplitEval
+#define SplitEval
 
 #ifdef SplitEval
 
 -- e --> eval (reify e) in preparation for rewriting reify e.
 -- Fail if e is already an eval or if it has IO or EP type.
 reifyRhs :: String -> ReExpr
-reifyRhs nm = unlessTC "IO" >>> unlessTC "EP" >>> unlessEval
-          >>> reifyR >>> letIntroR (nm ++ "_reified") >>> evalR
-          >>> letFloatArgR
+reifyRhs nm =
+  do (tvs,body) <- collectTyBinders <$> idR
+     eTy        <- epOf (exprType body)
+     v          <- constT $ newIdH (nm ++ "_reified") (mkForAllTys tvs eTy)
+     reified    <- mkLams tvs <$> reifyOf body
+     evald      <- evalOf (mkCoreApps (Var v) ((Type . TyVarTy) <$> tvs))
+     return $
+       Let (NonRec v reified) (mkLams tvs evald)
+
+-- reifyRhs nm = inTyLams $
+--                     unlessTC "IO" >>> unlessTC epS >>> unlessEval
+--                 >>> reifyR >>> letIntroR (nm ++ "_reified") >>> evalR
+--                 >>> letFloatArgR
 
 reifyDef :: RewriteH CoreBind
 reifyDef = do NonRec v _ <- idR
               nonRecAllR idR (reifyRhs (uqVarName v))
-
-letFloatToProg :: TranslateH CoreBind CoreProg
-letFloatToProg = arr (flip ProgCons ProgNil) >>> tryR letFloatTopR
-
-concatProgs :: [CoreProg] -> CoreProg
-concatProgs = bindsToProg . concatMap progToBinds
 
 reifyProg :: RewriteH CoreProg
 reifyProg = progBindsT (const (tryR reifyDef >>> letFloatToProg)) concatProgs
@@ -359,7 +389,7 @@ reifyProg = progBindsT (const (tryR reifyDef >>> letFloatToProg)) concatProgs
 -- If there are any type lambdas, skip over them.
 reifyRhs :: ReExpr
 reifyRhs = inTyLams $
-             unlessEval >>> unlessTC "IO" >>> unlessTC "EP" >>>
+             unlessEval >>> unlessTC "IO" >>> unlessTC epS >>>
              reifyR >>> evalR
 
 reifyDef :: RewriteH CoreBind
@@ -379,13 +409,14 @@ reifyModGuts = modGutsR reifyProg
 
 -- Inline if doing so yields an eval
 inlineEval :: ReExpr
-inlineEval = inlineR >>> acceptR isEval
-
-
-
--- WORKING HERE. Handle reify of *type-applied* inlined eval.
-
-
+inlineEval = inAppTys (inlineR >>> acceptR isTyLamsEval) -- >>> simplifyE
+ where
+   -- After inlining type lambdas, beta reduce.
+   -- TODO: See whether it works with two type variables.
+   -- It doesn't, because the outermost form isn't a beta redex:
+   -- (\ a \ b -> ...) u v
+   simplifyE :: ReExpr
+   simplifyE = repeatR (betaReduceR >>> letNonRecSubstSafeR)
 
 -- Rewrite inside of reify applications
 inReify :: Unop ReExpr
@@ -432,23 +463,15 @@ reifyBranch wild (DataAlt (isTupleTyCon.dataConTyCon -> True), vars@[_,_], rhs) 
 
 reifyBranch _ _ = fail "reifyBranch: Only handles pair patterns so far."
 
-
 reifyMisc :: ReExpr
 reifyMisc = tries [ ("reifyEval"   , reifyEval)
                   , ("reifyApp"    , reifyApp)
                   , ("reifyLam"    , reifyLam)
-                  , ("reifyLet"    , reifyLetToRedex >>> reifyMisc)  -- experimental
+                  , ("reifyLet"    , reifyLetToRedex)
                   , ("reifyCase"   , reifyCase)
-                  , ("reifyInline" , reifyInline     >>> reifyMisc)  -- experimental
+                  , ("reifyInline" , reifyInline)
                   -- To come: case, lamT, appT
                   ]
-
--- Note: the ">>> reifyMisc" comes from the intent to use (anytdR reifyMisc),
--- which apparently does not revisit the current node after rewriting. To do:
--- Ask Andy whether I should be using a different combinator.
-
--- reifyExprC :: RewriteH Core
--- reifyExprC = tryR unshadowR >>> anytdR reifyDef >>> anytdR (promoteExprR reifyMisc)
 
 reifyRules :: RewriteH Core
 reifyRules = tryRulesBU $ map ("reify/" ++)
@@ -465,8 +488,8 @@ callNameLam = callNameT . lamName
 -- TODO: reifyEval replaced with tryRulesBU ["reify'/eval","eval/reify'"], and
 -- even those rules are no longer invoked explicitly.
 
-inlineCleanup :: String -> RewriteH Core
-inlineCleanup nm = tryR $ anybuER (inlineNameR nm) >>> anybuER cleanupUnfoldR
+inlineCleanup :: [String] -> RewriteH Core
+inlineCleanup nms = tryR $ anybuER (inlineNamesR nms) >>> anybuER cleanupUnfoldR
 
 {--------------------------------------------------------------------
     Plugin
@@ -481,7 +504,7 @@ externals =
         (reifyRules :: RewriteH Core)
         ["convert some non-local vars to consts"]
     , external "inline-cleanup"
-        (inlineCleanup :: String -> RewriteH Core)
+        (inlineCleanup :: [String] -> RewriteH Core)
         ["inline a named definition, and clean-up beta-redexes"]
     , external "reify-rhs"
 #ifdef SplitEval
@@ -507,8 +530,14 @@ externals =
     , external "eval-it" (promoteExprR evalR :: RewriteH Core) ["apply eval"]
     , external "reify-let-to-redex"
         (promoteExprR reifyLetToRedex :: RewriteH Core) ["let to redex"]
+    , external "reify-eval"
+        (promoteExprR reifyEval :: RewriteH Core) ["reify eval"]
     , external "reify-case"
         (promoteExprR reifyCase :: RewriteH Core) ["reify case"]
     , external "reify-module"
         (promoteModGutsR reifyModGuts :: RewriteH Core) ["reify all top-level definitions"]
+--     , external "inline-app-ty"
+--         (promoteExprR inlineAppTy :: RewriteH Core) ["temp test"]
+    , external "inline-eval"
+        (promoteExprR inlineEval :: RewriteH Core) ["temp test"]
     ]
