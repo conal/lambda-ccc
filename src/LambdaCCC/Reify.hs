@@ -326,6 +326,10 @@ filterR p = do a <- idR
 
 -- TODO: look for opportunities to use readerT.
 
+-- #define SplitEval
+
+#ifdef SplitEval
+
 -- e --> eval (reify e) in preparation for rewriting reify e.
 -- Fail if e is already an eval or if it has IO or EP type.
 reifyRhs :: String -> ReExpr
@@ -345,6 +349,22 @@ concatProgs = bindsToProg . concatMap progToBinds
 
 reifyProg :: RewriteH CoreProg
 reifyProg = progBindsT (const (tryR reifyDef >>> letFloatToProg)) concatProgs
+
+#else
+
+-- e --> eval (reify e) in preparation for rewriting reify e.
+-- Fail if e is already an eval or if it has IO or EP type.
+reifyRhs :: ReExpr
+reifyRhs = unlessTC "IO" >>> unlessTC "EP" >>> unlessEval >>>
+           reifyR >>> evalR
+
+reifyDef :: RewriteH CoreBind
+reifyDef = nonRecAllR idR reifyRhs
+
+reifyProg :: RewriteH CoreProg
+reifyProg = progBindsAnyR (const reifyDef)
+
+#endif
 
 reifyModGuts :: RewriteH ModGuts
 reifyModGuts = modGutsR reifyProg
@@ -454,7 +474,11 @@ externals =
         (inlineCleanup :: String -> RewriteH Core)
         ["inline a named definition, and clean-up beta-redexes"]
     , external "reify-rhs"
+#ifdef SplitEval
         (promoteExprR . reifyRhs :: String -> RewriteH Core)
+#else
+        (promoteExprR reifyRhs :: RewriteH Core)
+#endif
         ["reifyE the RHS of a definition, giving a let-intro name"]
     , external "reify-def"
         (promoteBindR reifyDef :: RewriteH Core)
