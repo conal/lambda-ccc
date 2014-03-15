@@ -1,9 +1,6 @@
+-- set-pp-type Show
 reify-module
 try (repeat (any-td reify-misc))
-
-try (any-bu reify-rules)
-
-try simplify
-down          -- from top to show whole program
-
--- set-pp-type Show
+try (any-bu reify-rules) ; try simplify -- See that everything reifies
+try unshadow                            -- useful?
+down                                    -- To definitions
