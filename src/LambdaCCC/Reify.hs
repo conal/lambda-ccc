@@ -7,8 +7,8 @@
 
 -- TODO: Restore the following pragmas
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -40,6 +40,7 @@ import HERMIT.Kure hiding (apply)
 import HERMIT.Dictionary
   ( observeR,findIdT,callNameT
   , rulesR,inlineR,inlineNamesR,simplifyR,letFloatTopR,cleanupUnfoldR
+  , etaExpandR
   -- , unshadowR   -- May need this one later
   )
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
@@ -76,6 +77,10 @@ subst :: [(Id,CoreExpr)] -> CoreExpr -> CoreExpr
 subst ps = substExpr (error "subst: no SDoc") (foldr add emptySubst ps)
  where
    add (v,new) sub = extendIdSubst sub v new
+
+isLam :: CoreExpr -> Bool
+isLam (Lam {}) = True
+isLam _        = False
 
 {--------------------------------------------------------------------
     KURE utilities
@@ -142,13 +147,23 @@ anybuER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) 
            Rewrite c m CoreExpr -> Rewrite c m g
 anybuER r = anybuR (promoteExprR r)
 
--- Fully type-eta-expand.
+-- Fully type-eta-expand, i.e., ensure that every leading forall has a matching
+-- (type) lambdas.
 typeEtaLong :: ReExpr
-typeEtaLong = expand >>> tryR simplifyE
+typeEtaLong = readerT $ \ e@(exprType -> t) ->
+                 if not (isForAllTy t) then
+                   idR
+                 else
+                   if isLam e then
+                     lamAllR idR typeEtaLong
+                   else
+                     expand
  where
-   -- e --> \ a ... z . e a ... z
+   -- Add foralls.
    expand = do e@(collectForalls . exprType -> (tvs,_)) <- idR
                return $ mkLams tvs (mkApps e ((Type . TyVarTy) <$> tvs))
+
+-- TODO: Remove the idR case, and get its behavior from expand.
 
 simplifyE :: RewriteH CoreExpr
 simplifyE = extractR simplifyR
@@ -363,10 +378,17 @@ inReify = reifyR <~ unReify
 reifyInline :: ReExpr
 reifyInline = inReify inlineEval
 
+-- reifyLetToRedex :: ReExpr
+-- reifyLetToRedex = inReify toRedex
+--  where
+--    toRedex = do Let (NonRec v rhs) body <- idR
+--                 return (Lam v body `App` rhs)
+
 reifyLetToRedex :: ReExpr
-reifyLetToRedex = inReify toRedex
- where
-   toRedex = do Let (NonRec v rhs) body <- idR
+reifyLetToRedex = inReify letToRedex
+
+letToRedex :: ReExpr
+letToRedex = do Let (NonRec v rhs) body <- idR
                 return (Lam v body `App` rhs)
 
 -- TODO: restrict to monomorphic bindings, leaving polymorphic bindings to
@@ -467,7 +489,9 @@ externals =
     , external "reify-it" (promoteExprR reifyR :: RewriteH Core) ["apply reify"]
     , external "eval-it" (promoteExprR evalR :: RewriteH Core) ["apply eval"]
     , external "reify-let-to-redex"
-        (promoteExprR reifyLetToRedex :: RewriteH Core) ["let to redex"]
+        (promoteExprR reifyLetToRedex :: RewriteH Core) ["reify: let to redex"]
+    , external "let-to-redex"
+        (promoteExprR letToRedex :: RewriteH Core) ["let to redex"]
     , external "reify-eval"
         (promoteExprR reifyEval :: RewriteH Core) ["reify eval"]
     , external "reify-case"
