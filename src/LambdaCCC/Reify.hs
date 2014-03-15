@@ -151,19 +151,14 @@ anybuER r = anybuR (promoteExprR r)
 -- (type) lambdas.
 typeEtaLong :: ReExpr
 typeEtaLong = readerT $ \ e@(exprType -> t) ->
-                 if not (isForAllTy t) then
-                   idR
+                 if isForAllTy t && isLam e then
+                   lamAllR idR typeEtaLong
                  else
-                   if isLam e then
-                     lamAllR idR typeEtaLong
-                   else
-                     expand
+                   expand
  where
-   -- Add foralls.
+   -- Eta-expand enough for lambdas to match foralls.
    expand = do e@(collectForalls . exprType -> (tvs,_)) <- idR
                return $ mkLams tvs (mkApps e ((Type . TyVarTy) <$> tvs))
-
--- TODO: Remove the idR case, and get its behavior from expand.
 
 simplifyE :: RewriteH CoreExpr
 simplifyE = extractR simplifyR
