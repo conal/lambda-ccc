@@ -25,7 +25,7 @@
 module LambdaCCC.Reify (plugin) where
 
 import Data.Functor ((<$>))
-import Control.Monad ((<=<))
+import Control.Monad ((<=<),liftM)
 import Control.Arrow (arr,(>>>))
 import Data.List (intercalate)
 import Text.Printf (printf)
@@ -33,23 +33,18 @@ import Text.Printf (printf)
 import HERMIT.Monad (newIdH)
 import HERMIT.Context (BoundVars,HasGlobalRdrEnv(..))
 import HERMIT.Core (Crumb(..),localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
-import HERMIT.External
+import HERMIT.External (External,external)
 import HERMIT.GHC hiding (mkStringExpr)
 import HERMIT.Kure hiding (apply)
-import HERMIT.Plugin
+-- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
+import HERMIT.Dictionary
+  ( observeR,findIdT,callNameT
+  , rulesR,inlineR,inlineNamesR,simplifyR,letFloatTopR,cleanupUnfoldR
+  -- , unshadowR   -- May need this one later
+  )
+import HERMIT.Plugin (hermitPlugin,phase,interactive)
 
--- Note: All of the Dictionary submodules are now re-exported by HERMIT.Dictionary,
---       so if you prefer you could import all these via that module, rather than seperately.
--- import HERMIT.Dictionary.AlphaConversion (unshadowR)
-import HERMIT.Dictionary.Common
-import HERMIT.Dictionary.Composite (simplifyR)
-import HERMIT.Dictionary.Debug (observeR)
-import HERMIT.Dictionary.Rules (rulesR)
-import HERMIT.Dictionary.Inline (inlineR,inlineNamesR)
-import HERMIT.Dictionary.Local (letFloatTopR)
-import HERMIT.Dictionary.Unfold (cleanupUnfoldR) -- unfoldNameR,
-
-import LambdaCCC.Misc (Unop,(<~)) -- ,Binop
+import LambdaCCC.Misc (Unop,(<~))
 
 {--------------------------------------------------------------------
     Core utilities
@@ -90,29 +85,33 @@ subst ps = substExpr (error "subst: no SDoc") (foldr add emptySubst ps)
     HERMIT utilities
 --------------------------------------------------------------------}
 
--- Next two from Andy G:
+-- Common context & monad constraints
+type OkCM c m =
+  (HasDynFlags m, MonadThings m, MonadCatch m, BoundVars c, HasGlobalRdrEnv c)
+
+type TranslateU b = forall c m a. OkCM c m => Translate c m a b
+
+-- Next two borrowed from Andy Gill and modified:
 
 -- | Lookup the name in the context first, then, failing that, in GHC's global
 -- reader environment.
-findTyConT :: ( BoundVars c, HasGlobalRdrEnv c, HasDynFlags m
-              , MonadThings m, MonadCatch m) =>
-              String -> Translate c m a TyCon
-findTyConT nm = prefixFailMsg ("Cannot resolve name " ++ nm ++ ", ") $
-                contextonlyT (findTyConMG nm)
+findTyConT :: String -> TranslateU TyCon
+findTyConT nm =
+  prefixFailMsg ("Cannot resolve name " ++ nm ++ ", ") $
+  contextonlyT (findTyConMG nm)
 
-findTyConMG :: (BoundVars c, HasGlobalRdrEnv c, HasDynFlags m, MonadThings m) => String -> c -> m TyCon
+findTyConMG :: OkCM c m => String -> c -> m TyCon
 findTyConMG nm c =
     case filter isTyConName $ findNamesFromString (hermitGlobalRdrEnv c) nm of
       [n] -> lookupTyCon n
       ns  -> do dynFlags <- getDynFlags
-                fail $ "multiple matches found:\n" ++ intercalate ", " (map (showPpr dynFlags) ns)
+                fail $ "multiple matches found:\n"
+                     ++ intercalate ", " (showPpr dynFlags <$> ns)
 
 -- apps :: Id -> [Type] -> [CoreExpr] -> CoreExpr
 
-apps' :: ( Functor m, HasDynFlags m, MonadThings m, MonadCatch m
-         , BoundVars c, HasGlobalRdrEnv c ) =>
-         String -> [Type] -> [CoreExpr] -> Translate c m a CoreExpr
-apps' s ts es = (\ i -> apps i ts es) <$> findIdT s
+apps' :: String -> [Type] -> [CoreExpr] -> TranslateU CoreExpr
+apps' s ts es = (\ i -> apps i ts es) `liftM` findIdT s
 
 type InCoreTC t = Injection t CoreTC
 
@@ -188,18 +187,14 @@ lamName = ("LambdaCCC.Lambda." ++)
 findTyConE :: String -> TranslateH a TyCon
 findTyConE = findTyConT . lamName
 
-type OkCM c m =
-  ( Functor m, HasDynFlags m, MonadThings m, MonadCatch m
-  , BoundVars c, HasGlobalRdrEnv c )
-
-type TranslateU b = forall c m a. OkCM c m => Translate c m a b
-
 appsE :: String -> [Type] -> [CoreExpr] -> TranslateU CoreExpr
 appsE = apps' . lamName
 
 -- A handy form for composition via <=<
 appsE1 :: String -> [Type] -> CoreExpr -> TranslateU CoreExpr
 appsE1 str ts e = appsE str ts [e]
+
+-- Some names
 
 evalS, reifyS :: String
 evalS = "evalEP"
@@ -213,6 +208,7 @@ varPatS = "varPat#"
 epS :: String
 epS = "EP"
 
+-- t --> EP t
 epOf :: Type -> TranslateH a Type
 epOf t = do epTC <- findTyConE epS
             return (TyConApp epTC [t])
@@ -229,9 +225,6 @@ unEval  = do (_evalE, [Type _, body]) <- callNameLam evalS
 -- reify (eval e) --> e
 reifyEval :: ReExpr
 reifyEval = unReify >>> unEval
-
--- reifyOf :: (Functor m, HasGlobalRdrEnv c, BoundVars c, MonadCatch m, MonadThings m, HasDynFlags m) =>
---            CoreExpr -> Translate c m a CoreExpr
 
 reifyOf :: CoreExpr -> TranslateU CoreExpr
 reifyOf e = appsE reifyS [exprType e] [e]
