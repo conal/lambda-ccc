@@ -300,6 +300,10 @@ reifyPolyLet = unReify >>>
                do Let (NonRec (isForAllTy . varType -> True) _) _ <- idR
                   letAllR reifyDef reifyR >>> letFloatLetR
 
+-- reifyDef introduces foo_reified binding, which the letFloatLetR then moves up
+-- one level. Typically (always??) the "foo = eval foo_reified" definition gets
+-- inlined and then eliminated by the letElimR in reifyMisc.
+
 monoLetToRedex :: ReExpr
 monoLetToRedex = do Let (NonRec v@(isForAllTy . varType -> False) rhs) body <- idR
                     return (Lam v body `App` rhs)
