@@ -159,7 +159,7 @@ typeEtaLong = readerT $ \ e ->
    expand = do e@(collectForalls . exprType -> (tvs,_)) <- idR
                return $ mkLams tvs (mkApps e ((Type . TyVarTy) <$> tvs))
 
-simplifyE :: RewriteH CoreExpr
+simplifyE :: ReExpr
 simplifyE = extractR simplifyR
 
 -- TODO: Try rewriting more gracefully, testing isForAllTy first and
@@ -382,13 +382,18 @@ reifyRuleNames :: [String]
 reifyRuleNames = map ("reify/" ++)
   ["not","(&&)","(||)","xor","(+)","exl","exr","pair","inl","inr","if","false","true"]
 
-reifyRules :: RewriteH CoreExpr
+reifyRules :: ReExpr
 reifyRules = rulesR reifyRuleNames >>> tryR simplifyE
 
 -- reifyRules = rulesR reifyRuleNames >>> tryR (extractR tidy)
 --  where
 --    tidy :: ReCore
 --    tidy = anybuR (promoteR (betaReduceR >>> letNonRecSubstSafeR))
+
+typeBetaReduceR :: ReExpr
+typeBetaReduceR =
+  do (isTyLam -> True) `App` _ <- idR
+     betaReduceR >>> letNonRecSubstSafeR
 
 reifyCase :: ReExpr
 reifyCase = do Case scrut@(exprType -> scrutT) wild bodyT [branch] <- unReify
@@ -425,16 +430,17 @@ reifyBranch _ _ = fail "reifyBranch: Only handles pair patterns so far."
 -- Keep for now, to help us see that whether reify applications vanish.
 
 reifyMisc :: ReExpr
-reifyMisc = tries [ ("reifyEval"   , reifyEval)
-                  , ("reifyApp"    , reifyApp)
-                  , ("reifyLam"    , reifyLam)
-                  , ("reifyPolyLet"    , reifyPolyLet)
+reifyMisc = tries [ ("reifyEval"    , reifyEval)
+                  , ("reifyApp"     , reifyApp)
+                  , ("reifyLam"     , reifyLam)
+                  , ("reifyPolyLet" , reifyPolyLet)
+                  , ("reifyCase"    , reifyCase)
+                  , ("reifyInline"  , reifyInline)
+                  , ("reifyRules"   , reifyRules)
+                  -- Helpers:
                   , ("monoLetToRedex" , monoLetToRedex)
-                  , ("reifyCase"   , reifyCase)
-                  , ("reifyInline" , reifyInline)
-                  , ("reifyRules"  , reifyRules )
-                  -- To come: case, lamT, appT
-                  , ("letElim"     , letElimR)  -- *
+                  , ("typeBetaReduceR", typeBetaReduceR)
+                  , ("letElim"        , letElimR)  -- *
                   ]
 
 -- * letElim is handy with reifyPolyLet to eliminate the "foo = eval
