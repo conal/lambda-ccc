@@ -1,9 +1,11 @@
 {-# LANGUAGE TypeOperators, FlexibleContexts, ConstraintKinds #-}
 {-# LANGUAGE RebindableSyntax, CPP #-}
-{-# OPTIONS_GHC -Wall -fno-warn-unused-imports #-}
+{-# OPTIONS_GHC -Wall #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
-{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+-- For qualified LambdaCCC.Lambda import :(
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
+
+-- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -20,20 +22,13 @@
 --   
 ----------------------------------------------------------------------
 
-module Simple where
+module Simple  where
 
 import Prelude
 
-import LambdaCCC.Misc (Unop,Binop)
-import LambdaCCC.Lambda (EP,reifyEP,reifyEP,xor,ifThenElse)
-import LambdaCCC.ToCCC (toCCC')
-import LambdaCCC.CCC ((:->),convertC)
+import LambdaCCC.Lambda (EP,reifyEP,xor)
 
-import Circat.Category (unUnitFun)
-import Circat.Circuit (IsSourceP2,(:>),outGWith)
-import Circat.Netlist (outV)
-
--- Needed for resolving names. Bug? Is there an alternative?
+-- Needed for resolving names. Is there an alternative?
 import qualified LambdaCCC.Lambda
 
 ident :: a -> a
@@ -64,42 +59,42 @@ bar' x = (y, not y)
 baz :: (Bool,Bool)
 baz = (x,x) where x = True
 
-swap1 :: (Bool,Bool) -> (Bool,Bool)
-swap1 (x,y) = (y,x)
-
-swap2 :: (Bool,Bool) -> (Bool,Bool)
-swap2 (a,b) = (not b, not a)
-
+-- Polymorphic
 swap :: (a,b) -> (b,a)
 swap (x,y) = (y,x)
 
+-- Monomorphic
+swap1 :: (Bool,()) -> ((),Bool)
+swap1 = swap
+
+-- Alias for swap
 swapZ :: (a,b) -> (b,a)
 swapZ = swap
 
+-- Compute and swap
+swap2 :: (Bool,Bool) -> (Bool,Bool)
+swap2 (a,b) = swap (not b, not a)
+
+-- Alias with local definition
+-- (Binding gets simplified away.)
 swap3 :: (Bool,Bool) -> (Bool,Bool)
 swap3 = swap'
  where
    swap' (x,y) = (y,x)
 
-swap4 :: (Bool,Bool) -> (Bool,Bool)
-swap4 = swap'
- where
-   swap' :: (a,b) -> (b,a)
-   swap' (x,y) = (y,x)
-
-swap5 :: (Bool,Int) -> (Int,Bool)
-swap5 = swap
-
-swap6 :: (Bool,Bool) -> (Bool,Bool)
+-- Monomorphic and used twice
+swap6 :: (Bool,()) -> (Bool,())
 swap6 = \ p -> swap' (swap' p)
         -- swap' . swap'
  where
    swap' :: (a,b) -> (b,a)
    swap' (x,y) = (y,x)
 
+-- Twice swapped
 swap7 :: (Bool,Bool) -> (Bool,Bool)
 swap7 p = swap (swap p)
 
+-- Eta-expanded alias
 swap8 :: (Bool,Bool) -> (Bool,Bool)
 swap8 p = swap p
 
@@ -129,5 +124,8 @@ halfAddH (a,b) = (h (&&), h xor)
 -- reified :: EP ((Bool, Bool) -> (Bool, Bool))
 -- reified = reifyEP halfAdd
 
-reified :: EP (Bool -> (Bool,Bool))
-reified = reifyEP bar'
+-- reified :: EP (Bool -> (Bool,Bool))
+-- reified = reifyEP bar'
+
+reified :: EP ((Bool,()) -> (Bool,()))
+reified = reifyEP swap6
