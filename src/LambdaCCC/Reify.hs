@@ -301,7 +301,7 @@ reifyPolyLet = unReify >>>
                   letAllR reifyDef reifyR >>> letFloatLetR
 
 -- reifyDef introduces foo_reified binding, which the letFloatLetR then moves up
--- one level. Typically (always??) the "foo = eval foo_reified" definition gets
+-- one level. Typically (always?) the "foo = eval foo_reified" definition gets
 -- inlined and then eliminated by the letElimR in reifyMisc.
 
 monoLetToRedex :: ReExpr

@@ -82,7 +82,6 @@ swap3 = swap'
  where
    swap' (x,y) = (y,x)
 
--- Monomorphic and used twice
 swap6 :: (Bool,()) -> (Bool,())
 swap6 = \ p -> swap' (swap' p)
         -- swap' . swap'
