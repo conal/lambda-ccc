@@ -39,8 +39,8 @@ import HERMIT.Kure hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary
   ( observeR,findIdT,callNameT
-  , rulesR,inlineR,inlineNamesR,simplifyR,letFloatTopR,cleanupUnfoldR
-  , etaExpandR
+  , rulesR,inlineR,inlineNamesR,simplifyR,letFloatLetR,letFloatTopR,letElimR,cleanupUnfoldR
+  , etaExpandR, betaReduceR, letNonRecSubstSafeR
   -- , unshadowR   -- May need this one later
   )
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
@@ -78,9 +78,9 @@ subst ps = substExpr (error "subst: no SDoc") (foldr add emptySubst ps)
  where
    add (v,new) sub = extendIdSubst sub v new
 
-isLam :: CoreExpr -> Bool
-isLam (Lam {}) = True
-isLam _        = False
+isTyLam :: CoreExpr -> Bool
+isTyLam (Lam v _) = isTyVar v
+isTyLam _         = False
 
 {--------------------------------------------------------------------
     KURE utilities
@@ -89,6 +89,9 @@ isLam _        = False
 {--------------------------------------------------------------------
     HERMIT utilities
 --------------------------------------------------------------------}
+
+type ReExpr = RewriteH CoreExpr
+type ReCore = RewriteH Core
 
 -- Common context & monad constraints
 type OkCM c m =
@@ -143,15 +146,11 @@ varLitE = Lit . mkMachString . uqVarName
 uqVarName :: Var -> String
 uqVarName = uqName . varName
 
-anybuER :: (MonadCatch m, Walker c g, ExtendPath c Crumb, Injection CoreExpr g) =>
-           Rewrite c m CoreExpr -> Rewrite c m g
-anybuER r = anybuR (promoteExprR r)
-
 -- Fully type-eta-expand, i.e., ensure that every leading forall has a matching
 -- (type) lambdas.
 typeEtaLong :: ReExpr
-typeEtaLong = readerT $ \ e@(exprType -> t) ->
-                 if isForAllTy t && isLam e then
+typeEtaLong = readerT $ \ e ->
+                 if isTyLam e then
                    lamAllR idR typeEtaLong
                  else
                    expand
@@ -185,8 +184,6 @@ concatProgs = bindsToProg . concatMap progToBinds
 {--------------------------------------------------------------------
     Reification
 --------------------------------------------------------------------}
-
-type ReExpr = RewriteH CoreExpr
 
 lamName :: Unop String
 lamName = ("LambdaCCC.Lambda." ++)
@@ -229,8 +226,8 @@ unReify = do (_reifyE, [Type _, arg]) <- callNameLam reifyS
              return arg
 -- eval e --> e
 unEval :: ReExpr
-unEval  = do (_evalE, [Type _, body]) <- callNameLam evalS
-             return body
+unEval = do (_evalE, [Type _, body]) <- callNameLam evalS
+            return body
 
 -- reify (eval e) --> e
 reifyEval :: ReExpr
@@ -298,6 +295,17 @@ isEval _                              = False
 isTyLamsEval :: CoreExpr -> Bool
 isTyLamsEval = isEval . snd . collectTyBinders
 
+reifyPolyLet :: ReExpr
+reifyPolyLet = unReify >>>
+               do Let (NonRec (isForAllTy . varType -> True) _) _ <- idR
+                  letAllR reifyDef reifyR >>> letFloatLetR
+
+monoLetToRedex :: ReExpr
+monoLetToRedex = do Let (NonRec v@(isForAllTy . varType -> False) rhs) body <- idR
+                    return (Lam v body `App` rhs)
+
+-- TODO: Perhaps combine reifyPolyLet and monoLetToRedex into reifyLet
+
 #define SplitEval
 
 #ifdef SplitEval
@@ -333,9 +341,6 @@ inTyLams r = r'
           if | isTyLam e               -> lamAllR idR r'
              | isForAllTy (exprType e) -> etaExpandR "eta" >>> r'
              | otherwise               -> r
-   isTyLam :: CoreExpr -> Bool
-   isTyLam (Lam v _) = isTyVar v
-   isTyLam _         = False
 
 -- e --> eval (reify e) in preparation for rewriting reify e.
 -- Fail if e is already an eval or if it has IO or EP type.
@@ -373,22 +378,17 @@ inReify = reifyR <~ unReify
 reifyInline :: ReExpr
 reifyInline = inReify inlineEval
 
--- reifyLetToRedex :: ReExpr
--- reifyLetToRedex = inReify toRedex
+reifyRuleNames :: [String]
+reifyRuleNames = map ("reify/" ++)
+  ["not","(&&)","(||)","xor","(+)","exl","exr","pair","inl","inr","if","false","true"]
+
+reifyRules :: RewriteH CoreExpr
+reifyRules = rulesR reifyRuleNames >>> tryR simplifyE
+
+-- reifyRules = rulesR reifyRuleNames >>> tryR (extractR tidy)
 --  where
---    toRedex = do Let (NonRec v rhs) body <- idR
---                 return (Lam v body `App` rhs)
-
-reifyLetToRedex :: ReExpr
-reifyLetToRedex = inReify letToRedex
-
-letToRedex :: ReExpr
-letToRedex = do Let (NonRec v rhs) body <- idR
-                return (Lam v body `App` rhs)
-
--- TODO: restrict to monomorphic bindings, leaving polymorphic bindings to
--- another treatment. Or maybe convert anyway, and deal with the resulting type
--- abstractions and applications.
+--    tidy :: ReCore
+--    tidy = anybuR (promoteR (betaReduceR >>> letNonRecSubstSafeR))
 
 reifyCase :: ReExpr
 reifyCase = do Case scrut@(exprType -> scrutT) wild bodyT [branch] <- unReify
@@ -418,33 +418,30 @@ reifyBranch wild (DataAlt (isTupleTyCon.dataConTyCon -> True), vars@[_,_], rhs) 
 
 reifyBranch _ _ = fail "reifyBranch: Only handles pair patterns so far."
 
-reifyMisc :: ReExpr
-reifyMisc = tries [ ("reifyEval"   , reifyEval)
-                  , ("reifyApp"    , reifyApp)
-                  , ("reifyLam"    , reifyLam)
-                  , ("reifyLet"    , reifyLetToRedex)
-                  , ("reifyCase"   , reifyCase)
-                  , ("reifyInline" , reifyInline)
-                  -- To come: case, lamT, appT
-                  ]
-
-reifyRules :: RewriteH CoreExpr
-reifyRules = rulesR $ map ("reify/" ++)
-  ["not","(&&)","(||)","xor","(+)","exl","exr","pair","inl","inr","if","false","true"]
-
 -- or: words $ "not (&&) (||) xor ..."
 
 -- TODO: Is there a way not to redundantly specify this rule list?
 -- Yes -- trust GHC to apply the rules later.
+-- Keep for now, to help us see that whether reify applications vanish.
+
+reifyMisc :: ReExpr
+reifyMisc = tries [ ("reifyEval"   , reifyEval)
+                  , ("reifyApp"    , reifyApp)
+                  , ("reifyLam"    , reifyLam)
+                  , ("reifyPolyLet"    , reifyPolyLet)
+                  , ("monoLetToRedex" , monoLetToRedex)
+                  , ("reifyCase"   , reifyCase)
+                  , ("reifyInline" , reifyInline)
+                  , ("reifyRules"  , reifyRules )
+                  -- To come: case, lamT, appT
+                  , ("letElim"     , letElimR)  -- *
+                  ]
+
+-- * letElim is handy with reifyPolyLet to eliminate the "foo = eval
+-- foo_reified", which is usually inaccessible.
 
 callNameLam :: String -> TranslateH CoreExpr (CoreExpr, [CoreExpr])
 callNameLam = callNameT . lamName
-
--- TODO: reifyEval replaced with tryRulesBU ["reify'/eval","eval/reify'"], and
--- even those rules are no longer invoked explicitly.
-
-inlineCleanup :: [String] -> RewriteH Core
-inlineCleanup nms = tryR $ anybuER (inlineNamesR nms) >>> anybuER cleanupUnfoldR
 
 {--------------------------------------------------------------------
     Plugin
@@ -456,47 +453,48 @@ plugin = hermitPlugin (phase 0 . interactive externals)
 externals :: [External]
 externals =
     [ external "reify-rules"
-        (promoteExprR reifyRules :: RewriteH Core)
+        (promoteExprR reifyRules :: ReCore)
         ["convert some non-local vars to consts"]
-    , external "inline-cleanup"
-        (inlineCleanup :: [String] -> RewriteH Core)
-        ["inline a named definition, and clean-up beta-redexes"]
     , external "reify-rhs"
 #ifdef SplitEval
-        (promoteExprR . reifyRhs :: String -> RewriteH Core)
+        (promoteExprR . reifyRhs :: String -> ReCore)
 #else
-        (promoteExprR reifyRhs :: RewriteH Core)
+        (promoteExprR reifyRhs :: ReCore)
 #endif
         ["reifyE the RHS of a definition, giving a let-intro name"]
     , external "reify-def"
-        (promoteBindR reifyDef :: RewriteH Core)
+        (promoteBindR reifyDef :: ReCore)
         ["reifyE a definition"]
     , external "reify-misc"
-        (promoteExprR reifyMisc :: RewriteH Core)
+        (promoteExprR reifyMisc :: ReCore)
         ["Simplify 'reify e'"]  -- use with any-td
     -- for debugging
     , external "unreify"
-        (promoteExprR unReify :: RewriteH Core)
+        (promoteExprR unReify :: ReCore)
         ["Drop reify"]
     , external "reify-inline"
-        (promoteExprR reifyInline :: RewriteH Core)
+        (promoteExprR reifyInline :: ReCore)
         ["inline names where reified"]
-    , external "reify-it" (promoteExprR reifyR :: RewriteH Core) ["apply reify"]
-    , external "eval-it" (promoteExprR evalR :: RewriteH Core) ["apply eval"]
-    , external "reify-let-to-redex"
-        (promoteExprR reifyLetToRedex :: RewriteH Core) ["reify: let to redex"]
+    , external "reify-it" (promoteExprR reifyR :: ReCore) ["apply reify"]
+    , external "eval-it" (promoteExprR evalR :: ReCore) ["apply eval"]
+    , external "reify-let"
+        (promoteExprR reifyPolyLet :: ReCore) ["reify polymorphic let"]
     , external "let-to-redex"
-        (promoteExprR letToRedex :: RewriteH Core) ["let to redex"]
+        (promoteExprR monoLetToRedex :: ReCore) ["monomorphic let to redex"]
     , external "reify-eval"
-        (promoteExprR reifyEval :: RewriteH Core) ["reify eval"]
+        (promoteExprR reifyEval :: ReCore) ["reify eval"]
     , external "reify-case"
-        (promoteExprR reifyCase :: RewriteH Core) ["reify case"]
+        (promoteExprR reifyCase :: ReCore) ["reify case"]
     , external "reify-module"
-        (promoteModGutsR reifyModGuts :: RewriteH Core) ["reify all top-level definitions"]
+        (promoteModGutsR reifyModGuts :: ReCore) ["reify all top-level definitions"]
 --     , external "inline-app-ty"
---         (promoteExprR inlineAppTy :: RewriteH Core) ["temp test"]
+--         (promoteExprR inlineAppTy :: ReCore) ["temp test"]
     , external "inline-eval"
-        (promoteExprR inlineEval :: RewriteH Core) ["inline to an eval"]
+        (promoteExprR inlineEval :: ReCore) ["inline to an eval"]
     , external "type-eta-long"
-        (promoteExprR typeEtaLong :: RewriteH Core) ["type-eta-long form"]
+        (promoteExprR typeEtaLong :: ReCore) ["type-eta-long form"]
+    , external "reify-poly-let"
+        (promoteExprR reifyPolyLet :: ReCore) ["reify polymorphic 'let' expression"]
+--     , external "foo"
+--         (promoteExprR foo :: ReCore) ["experiment"]
     ]
