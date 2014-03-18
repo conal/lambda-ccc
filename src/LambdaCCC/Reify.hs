@@ -442,8 +442,8 @@ unEitherTy (TyConApp tc [a,b]) =
      return (a,b)
 unEitherTy _ = fail "unEitherTy: wrong shape"
 
--- reify (case scrut of { Left lv -> le ; Right rv -> re })
--- --> eitherE (reify (\ lv -> le)) (reify (\ rv -> re)) (reify scrut)
+-- reify (case scrut of { Left lv -> le ; Right rv -> re })  --> 
+-- eitherE (reify (\ lv -> le)) (reify (\ rv -> re)) (reify scrut)
 
 reifyCaseSum :: ReExpr
 reifyCaseSum =
@@ -456,7 +456,7 @@ reifyCaseSum =
      appsE "appP" [bodyT,t] [e,scrut']
  where
    reifyBranch :: Var -> CoreAlt -> TranslateU CoreExpr
-   reifyBranch _ (DataAlt _, [var], rhs) = reifyOf (Lam var rhs)
+   reifyBranch _wild (DataAlt _, [var], rhs) = reifyOf (Lam var rhs)
    reifyBranch _ _ = error "reifyCaseSum: bad branch"
 
 -- TODO: check for wild in rhs
