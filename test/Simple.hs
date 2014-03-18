@@ -5,7 +5,7 @@
 -- For qualified LambdaCCC.Lambda import :(
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -22,7 +22,7 @@
 --   
 ----------------------------------------------------------------------
 
-module Simple  where
+module Simple where
 
 import Prelude
 
@@ -115,6 +115,10 @@ halfAddH (a,b) = (h (&&), h xor)
  where
    h :: (Bool -> Bool -> Bool) -> Bool
    h f = f a b
+
+idOrNot :: Either Bool Bool -> Bool
+idOrNot (Left  a) = a
+idOrNot (Right a) = not a
 
 --------
 
