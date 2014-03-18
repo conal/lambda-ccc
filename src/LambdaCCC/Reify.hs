@@ -254,7 +254,6 @@ evalR = idR >>= evalOf
 -- reify (u v) --> reify u `appP` reify v
 reifyApp :: ReExpr
 reifyApp = do App u v <- unReify
-              _ <- observeR' "reifyApp"
               Just (a,b) <- constT (return (splitFunTy_maybe (exprType u)))
               u' <- reifyOf u
               v' <- reifyOf v
@@ -271,7 +270,7 @@ varSubst vs = do vs' <- mapM varEval vs
 
 reifyLam :: ReExpr
 reifyLam = do Lam v e <- unReify
-              guardMsg (not (isTyVar v)) "reifyLam: Given type lambda"
+              guardMsg (not (isTyVar v)) "reifyLam: doesn't handle type lambda"
               sub     <- varSubst [v]
               e'      <- reifyOf (sub e)
               appsE "lamvP#" [varType v, exprType e] [varLitE v,e']
@@ -386,6 +385,12 @@ reifyRuleNames :: [String]
 reifyRuleNames = map ("reify/" ++)
   ["not","(&&)","(||)","xor","(+)","exl","exr","pair","inl","inr","if","false","true"]
 
+-- or: words "not (&&) (||) xor ..."
+
+-- TODO: Is there a way not to redundantly specify this rule list?
+-- Yes -- trust GHC to apply the rules later.
+-- Keep for now, to help us see that whether reify applications vanish.
+
 reifyRules :: ReExpr
 reifyRules = rulesR reifyRuleNames >>> tryR simplifyE
 
@@ -395,52 +400,76 @@ reifyRules = rulesR reifyRuleNames >>> tryR simplifyE
 --    tidy = anybuR (promoteR (betaReduceR >>> letNonRecSubstSafeR))
 
 typeBetaReduceR :: ReExpr
-typeBetaReduceR =
-  do (isTyLam -> True) `App` _ <- idR
-     betaReduceR >>> letNonRecSubstSafeR
+typeBetaReduceR = do (isTyLam -> True) `App` _ <- idR
+                     betaReduceR >>> letNonRecSubstSafeR
 
-reifyCase :: ReExpr
-reifyCase = do Case scrut@(exprType -> scrutT) wild bodyT [branch] <- unReify
-               _ <- observeR' "Reifying case"
-               (patE,rhs) <- reifyBranch wild branch
-               scrut'     <- reifyOf scrut
-               appsE letS [scrutT,bodyT] [patE,scrut',rhs]
-
--- Reify a case alternative, yielding a reified pattern and a reified
--- alternative body (RHS).
--- Only pair patterns for now.
-reifyBranch :: Var -> CoreAlt -> TranslateU (CoreExpr,CoreExpr)
-reifyBranch wild (DataAlt (isTupleTyCon.dataConTyCon -> True), vars@[_,_], rhs) =
-  do vPats <- mapM varPatT# vars
-     sub   <- varSubst (wild : vars)
-     pat   <- appsE ":#" (varType <$> vars) vPats
-     pat'  <- if wild `elemVarSet` localFreeIdsExpr rhs
-                then -- WARNING: untested as of 2014-03-11
-                  appsE "asPat#" [varType wild] [varLitE wild,pat]
-                else
-                  return pat
-     rhs'  <- reifyOf (sub rhs)
-     return (pat', rhs')
+reifyCasePair :: ReExpr
+reifyCasePair =
+  do Case scrut@(exprType -> scrutT) wild bodyT [branch] <- unReify
+     (patE,rhs) <- reifyBranch wild branch
+     scrut'     <- reifyOf scrut
+     appsE letS [scrutT,bodyT] [patE,scrut',rhs]
  where
-   varPatT# :: Var -> TranslateU CoreExpr
-   varPatT# v = appsE varPatS [varType v] [varLitE v]
+   -- Reify a case alternative, yielding a reified pattern and a reified
+   -- alternative body (RHS). Only pair patterns for now.
+   reifyBranch :: Var -> CoreAlt -> TranslateU (CoreExpr,CoreExpr)
+   reifyBranch wild (DataAlt ( isTupleTyCon . dataConTyCon -> True)
+                             , vars@[_,_], rhs ) =
+     do vPats <- mapM varPatT vars
+        sub   <- varSubst (wild : vars)
+        pat   <- appsE ":#" (varType <$> vars) vPats
+        pat'  <- if wild `elemVarSet` localFreeIdsExpr rhs
+                   then -- WARNING: untested as of 2014-03-11
+                     appsE "asPat#" [varType wild] [varLitE wild,pat]
+                   else
+                     return pat
+        rhs'  <- reifyOf (sub rhs)
+        return (pat', rhs')
+    where
+      varPatT :: Var -> TranslateU CoreExpr
+      varPatT v = appsE varPatS [varType v] [varLitE v]
+   reifyBranch _ _ = fail "reifyBranch: Only handles pair patterns so far."
 
-reifyBranch _ _ = fail "reifyBranch: Only handles pair patterns so far."
+eitherTy :: Type -> Type -> TranslateU Type
+eitherTy a b = do tc <- findTyConT "Either"
+                  return (TyConApp tc [a,b])
 
--- or: words $ "not (&&) (||) xor ..."
+unEitherTy :: Type -> TranslateU (Type,Type)
+unEitherTy (TyConApp tc [a,b]) =
+  do etc <- findTyConT "Either"
+     guardMsg (tyConName tc == tyConName etc)
+              "unEitherTy: not an Either"
+     return (a,b)
+unEitherTy _ = fail "unEitherTy: wrong shape"
 
--- TODO: Is there a way not to redundantly specify this rule list?
--- Yes -- trust GHC to apply the rules later.
--- Keep for now, to help us see that whether reify applications vanish.
+-- reify (case scrut of { Left lv -> le ; Right rv -> re })
+-- --> eitherE (reify (\ lv -> le)) (reify (\ rv -> re)) (reify scrut)
+
+reifyCaseSum :: ReExpr
+reifyCaseSum =
+  do Case scrut wild bodyT alts@[_,_] <- unReify
+     (lt,rt) <- unEitherTy (exprType scrut)
+     [le,re] <- mapM (reifyBranch wild) alts
+     e       <- appsE "eitherEP" [lt,rt,bodyT] [le,re]
+     t       <- eitherTy lt rt
+     scrut'  <- reifyOf scrut
+     appsE "appP" [bodyT,t] [e,scrut']
+ where
+   reifyBranch :: Var -> CoreAlt -> TranslateU CoreExpr
+   reifyBranch _ (DataAlt _, [var], rhs) = reifyOf (Lam var rhs)
+   reifyBranch _ _ = error "reifyCaseSum: bad branch"
+
+-- TODO: check for wild in rhs
 
 reifyMisc :: ReExpr
-reifyMisc = tries [ ("reifyEval"    , reifyEval)
-                  , ("reifyApp"     , reifyApp)
-                  , ("reifyLam"     , reifyLam)
-                  , ("reifyPolyLet" , reifyPolyLet)
-                  , ("reifyCase"    , reifyCase)
-                  , ("reifyInline"  , reifyInline)
-                  , ("reifyRules"   , reifyRules)
+reifyMisc = tries [ ("reifyEval"     , reifyEval)
+                  , ("reifyApp"      , reifyApp)
+                  , ("reifyLam"      , reifyLam)
+                  , ("reifyPolyLet"  , reifyPolyLet)
+                  , ("reifyCasePair" , reifyCasePair)
+                  , ("reifyCaseSum"  , reifyCaseSum)
+                  , ("reifyInline"   , reifyInline)
+                  , ("reifyRules"    , reifyRules)
                   -- Helpers:
                   , ("monoLetToRedex" , monoLetToRedex)
                   , ("typeBetaReduceR", typeBetaReduceR)
@@ -494,7 +523,7 @@ externals =
     , external "reify-eval"
         (promoteExprR reifyEval :: ReCore) ["reify eval"]
     , external "reify-case"
-        (promoteExprR reifyCase :: ReCore) ["reify case"]
+        (promoteExprR reifyCasePair :: ReCore) ["reify case on pairs"]
     , external "reify-module"
         (promoteModGutsR reifyModGuts :: ReCore) ["reify all top-level definitions"]
 --     , external "inline-app-ty"
