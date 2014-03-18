@@ -1,3 +1,4 @@
+set-pp-renderer ascii
 -- set-pp-type Show
 try reify-module
 try (repeat (any-td reify-misc))
