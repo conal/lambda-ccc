@@ -33,7 +33,7 @@ module LambdaCCC.Lambda
   , vars, vars2
   -- Temporary less polymorphic variants.
   -- Remove when I can dig up Prim as a type in Core
-  , EP, appP, lamP, lettP , varP#, lamvP#, casevP#, evalEP, reifyEP
+  , EP, appP, lamP, lettP , varP#, lamvP#, casevP#, eitherEP, evalEP, reifyEP
   ) where
 
 import Data.Functor ((<$>))
@@ -554,6 +554,9 @@ lamvP# = lamv#
 
 casevP# :: forall a b c. Addr# -> EP c -> Addr# -> EP c -> EP (a :+ b) -> EP c
 casevP# = casev#
+
+eitherEP :: forall a b c . EP (a -> c) -> EP (b -> c) -> EP (a :+ b -> c)
+eitherEP = eitherE
 
 evalEP :: EP a -> a
 evalEP = evalE
