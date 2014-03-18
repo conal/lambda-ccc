@@ -443,7 +443,7 @@ unEitherTy (TyConApp tc [a,b]) =
 unEitherTy _ = fail "unEitherTy: wrong shape"
 
 -- reify (case scrut of { Left lv -> le ; Right rv -> re })  --> 
--- eitherE (reify (\ lv -> le)) (reify (\ rv -> re)) (reify scrut)
+-- appE (eitherE (reify (\ lv -> le)) (reify (\ rv -> re))) (reify scrut)
 
 reifyCaseSum :: ReExpr
 reifyCaseSum =
@@ -459,7 +459,8 @@ reifyCaseSum =
    reifyBranch _wild (DataAlt _, [var], rhs) = reifyOf (Lam var rhs)
    reifyBranch _ _ = error "reifyCaseSum: bad branch"
 
--- TODO: check for wild in rhs
+-- TODO: check for wild in rhs. In that case, I guess I'll have to reify the Lam
+-- manually in order to get the as pattern. Hm.
 
 reifyMisc :: ReExpr
 reifyMisc = tries [ ("reifyEval"     , reifyEval)
