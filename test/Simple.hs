@@ -130,5 +130,5 @@ idOrNot (Right a) = not a
 -- reified :: EP (Bool -> (Bool,Bool))
 -- reified = reifyEP bar'
 
-reified :: EP ((Bool,()) -> (Bool,()))
-reified = reifyEP swap6
+reified :: EP ((Bool,Bool) -> (Bool,Bool))
+reified = reifyEP halfAddH
