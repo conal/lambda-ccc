@@ -463,14 +463,14 @@ reifyCaseSum =
 -- manually in order to get the as pattern. Hm.
 
 reifyMisc :: ReExpr
-reifyMisc = tries [ ("reifyEval"     , reifyEval)
-                  , ("reifyApp"      , reifyApp)
-                  , ("reifyLam"      , reifyLam)
-                  , ("reifyPolyLet"  , reifyPolyLet)
-                  , ("reifyCasePair" , reifyCasePair)
-                  , ("reifyCaseSum"  , reifyCaseSum)
-                  , ("reifyInline"   , reifyInline)
-                  , ("reifyRules"    , reifyRules)
+reifyMisc = tries [ ("reifyEval"      , reifyEval)
+                  , ("reifyApp"       , reifyApp)
+                  , ("reifyLam"       , reifyLam)
+                  , ("reifyPolyLet"   , reifyPolyLet)
+                  , ("reifyCasePair"  , reifyCasePair)
+                  , ("reifyCaseSum"   , reifyCaseSum)
+                  , ("reifyInline"    , reifyInline)
+                  , ("reifyRules"     , reifyRules)
                   -- Helpers:
                   , ("monoLetToRedex" , monoLetToRedex)
                   , ("typeBetaReduceR", typeBetaReduceR)
