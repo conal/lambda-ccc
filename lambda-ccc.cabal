@@ -26,7 +26,6 @@ Library
   Build-Depends:    base < 5
                   , ghc >= 7.6
                   , ghc-prim
-                  , template-haskell
                   , containers
                   , constraints
                   , kure   >= 0.4.0.0
@@ -35,15 +34,15 @@ Library
                   , circat >= 0.2.7
   Exposed-Modules:  LambdaCCC.Misc
                     LambdaCCC.ShowUtils
-                    LambdaCCC.Ty
                     LambdaCCC.Prim
                     LambdaCCC.Lambda
                     LambdaCCC.CCC
                     LambdaCCC.ToCCC
-                    LambdaCCC.MkStringExpr
-                    LambdaCCC.ReifyLambda
                     LambdaCCC.Reify
 
+--                     LambdaCCC.Ty
+--                     LambdaCCC.MkStringExpr
+--                     LambdaCCC.ReifyLambda
 --                     LambdaCCC.ToCircuit
 
 
