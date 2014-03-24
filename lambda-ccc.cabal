@@ -22,7 +22,6 @@ source-repository head
 
 Library
   hs-Source-Dirs:   src
-  Include-Dirs:     src
   Build-Depends:    base < 5
                   , ghc >= 7.6
                   , ghc-prim
