@@ -493,48 +493,48 @@ plugin = hermitPlugin (phase 0 . interactive externals)
 externals :: [External]
 externals =
     [ external "reify-rules"
-        (promoteExprR reifyRules :: ReCore)
+        (promoteR reifyRules :: ReCore)
         ["convert some non-local vars to consts"]
     , external "reify-rhs"
 #ifdef SplitEval
-        (promoteExprR . reifyRhs :: String -> ReCore)
+        (promoteR . reifyRhs :: String -> ReCore)
 #else
-        (promoteExprR reifyRhs :: ReCore)
+        (promoteR reifyRhs :: ReCore)
 #endif
         ["reifyE the RHS of a definition, giving a let-intro name"]
     , external "reify-def"
-        (promoteBindR reifyDef :: ReCore)
+        (promoteR reifyDef :: ReCore)
         ["reifyE a definition"]
     , external "reify-misc"
-        (promoteExprR reifyMisc :: ReCore)
+        (promoteR reifyMisc :: ReCore)
         ["Simplify 'reify e'"]  -- use with any-td
     -- for debugging
     , external "unreify"
-        (promoteExprR unReify :: ReCore)
+        (promoteR unReify :: ReCore)
         ["Drop reify"]
     , external "reify-inline"
-        (promoteExprR reifyInline :: ReCore)
+        (promoteR reifyInline :: ReCore)
         ["inline names where reified"]
-    , external "reify-it" (promoteExprR reifyR :: ReCore) ["apply reify"]
-    , external "eval-it" (promoteExprR evalR :: ReCore) ["apply eval"]
+    , external "reify-it" (promoteR reifyR :: ReCore) ["apply reify"]
+    , external "eval-it" (promoteR evalR :: ReCore) ["apply eval"]
     , external "reify-let"
-        (promoteExprR reifyPolyLet :: ReCore) ["reify polymorphic let"]
+        (promoteR reifyPolyLet :: ReCore) ["reify polymorphic let"]
     , external "let-to-redex"
-        (promoteExprR monoLetToRedex :: ReCore) ["monomorphic let to redex"]
+        (promoteR monoLetToRedex :: ReCore) ["monomorphic let to redex"]
     , external "reify-eval"
-        (promoteExprR reifyEval :: ReCore) ["reify eval"]
+        (promoteR reifyEval :: ReCore) ["reify eval"]
     , external "reify-case"
-        (promoteExprR reifyCasePair :: ReCore) ["reify case on pairs"]
+        (promoteR reifyCasePair :: ReCore) ["reify case on pairs"]
     , external "reify-module"
         (promoteModGutsR reifyModGuts :: ReCore) ["reify all top-level definitions"]
 --     , external "inline-app-ty"
---         (promoteExprR inlineAppTy :: ReCore) ["temp test"]
+--         (promoteR inlineAppTy :: ReCore) ["temp test"]
     , external "inline-eval"
-        (promoteExprR inlineEval :: ReCore) ["inline to an eval"]
+        (promoteR inlineEval :: ReCore) ["inline to an eval"]
     , external "type-eta-long"
-        (promoteExprR typeEtaLong :: ReCore) ["type-eta-long form"]
+        (promoteR typeEtaLong :: ReCore) ["type-eta-long form"]
     , external "reify-poly-let"
-        (promoteExprR reifyPolyLet :: ReCore) ["reify polymorphic 'let' expression"]
+        (promoteR reifyPolyLet :: ReCore) ["reify polymorphic 'let' expression"]
 --     , external "foo"
---         (promoteExprR foo :: ReCore) ["experiment"]
+--         (promoteR foo :: ReCore) ["experiment"]
     ]
