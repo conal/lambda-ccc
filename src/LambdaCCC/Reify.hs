@@ -33,9 +33,9 @@ import Text.Printf (printf)
 import HERMIT.Monad (newIdH)
 import HERMIT.Context (BoundVars,HasGlobalRdrEnv(..))
 import HERMIT.Core (Crumb(..),localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
-import HERMIT.External (External,external)
+import HERMIT.External (External,external,ExternalName,ExternalHelp)
 import HERMIT.GHC hiding (mkStringExpr)
-import HERMIT.Kure hiding (apply)
+import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary
   ( observeR,findIdT,callNameT
@@ -403,21 +403,27 @@ typeBetaReduceR :: ReExpr
 typeBetaReduceR = do (isTyLam -> True) `App` _ <- idR
                      betaReduceR >>> letNonRecSubstSafeR
 
-reifyCasePair :: ReExpr
-reifyCasePair =
+reifyTupCase :: ReExpr
+reifyTupCase =
   do Case scrut@(exprType -> scrutT) wild bodyT [branch] <- unReify
      (patE,rhs) <- reifyBranch wild branch
      scrut'     <- reifyOf scrut
      appsE letS [scrutT,bodyT] [patE,scrut',rhs]
  where
    -- Reify a case alternative, yielding a reified pattern and a reified
-   -- alternative body (RHS). Only pair patterns for now.
+   -- alternative body (RHS). Only unit and pair patterns. Others are
+   -- transformed away in the type-encode plugin.
    reifyBranch :: Var -> CoreAlt -> TranslateU (CoreExpr,CoreExpr)
    reifyBranch wild (DataAlt ( isTupleTyCon . dataConTyCon -> True)
-                             , vars@[_,_], rhs ) =
-     do vPats <- mapM varPatT vars
+                             , vars, rhs ) =
+     do guardMsg (length vars `elem` [0,2])
+          "Only handles unit and pair patterns"
+        vPats <- mapM varPatT vars
         sub   <- varSubst (wild : vars)
-        pat   <- appsE ":#" (varType <$> vars) vPats
+        pat   <- if null vars then
+                   appsE "UnitPat" [] []
+                  else
+                   appsE ":#" (varType <$> vars) vPats
         pat'  <- if wild `elemVarSet` localFreeIdsExpr rhs
                    then -- WARNING: untested as of 2014-03-11
                      appsE "asPat#" [varType wild] [varLitE wild,pat]
@@ -445,6 +451,10 @@ unEitherTy _ = fail "unEitherTy: wrong shape"
 -- reify (case scrut of { Left lv -> le ; Right rv -> re })  --> 
 -- appE (eitherE (reify (\ lv -> le)) (reify (\ rv -> re))) (reify scrut)
 
+#if 0
+
+-- Now removed in the type-encode plugin
+
 reifyCaseSum :: ReExpr
 reifyCaseSum =
   do Case scrut wild bodyT alts@[_,_] <- unReify
@@ -462,13 +472,14 @@ reifyCaseSum =
 -- TODO: check for wild in rhs. In that case, I guess I'll have to reify the Lam
 -- manually in order to get the as pattern. Hm.
 
+#endif
+
 reifyMisc :: ReExpr
 reifyMisc = tries [ ("reifyEval"      , reifyEval)
                   , ("reifyApp"       , reifyApp)
                   , ("reifyLam"       , reifyLam)
                   , ("reifyPolyLet"   , reifyPolyLet)
-                  , ("reifyCasePair"  , reifyCasePair)
-                  , ("reifyCaseSum"   , reifyCaseSum)
+                  , ("reifyTupCase"   , reifyTupCase)
                   , ("reifyInline"    , reifyInline)
                   , ("reifyRules"     , reifyRules)
                   -- Helpers:
@@ -476,6 +487,9 @@ reifyMisc = tries [ ("reifyEval"      , reifyEval)
                   , ("typeBetaReduceR", typeBetaReduceR)
                   , ("letElim"        , letElimR)  -- *
                   ]
+
+                  -- , ("reifyCaseSum"   , reifyCaseSum)
+
 
 -- * letElim is handy with reifyPolyLet to eliminate the "foo = eval
 -- foo_reified", which is usually inaccessible.
@@ -490,11 +504,14 @@ callNameLam = callNameT . lamName
 plugin :: Plugin
 plugin = hermitPlugin (phase 0 . interactive externals)
 
+externC :: Injection a Core =>
+           ExternalName -> RewriteH a -> String -> External
+externC name rew help = external name (promoteR rew :: ReCore) [help]
+
 externals :: [External]
 externals =
-    [ external "reify-rules"
-        (promoteR reifyRules :: ReCore)
-        ["convert some non-local vars to consts"]
+    [ externC "reify-rules" reifyRules
+        "convert some non-local vars to consts"
     , external "reify-rhs"
 #ifdef SplitEval
         (promoteR . reifyRhs :: String -> ReCore)
@@ -502,39 +519,19 @@ externals =
         (promoteR reifyRhs :: ReCore)
 #endif
         ["reifyE the RHS of a definition, giving a let-intro name"]
-    , external "reify-def"
-        (promoteR reifyDef :: ReCore)
-        ["reifyE a definition"]
-    , external "reify-misc"
-        (promoteR reifyMisc :: ReCore)
-        ["Simplify 'reify e'"]  -- use with any-td
-    -- for debugging
-    , external "unreify"
-        (promoteR unReify :: ReCore)
-        ["Drop reify"]
-    , external "reify-inline"
-        (promoteR reifyInline :: ReCore)
-        ["inline names where reified"]
-    , external "reify-it" (promoteR reifyR :: ReCore) ["apply reify"]
-    , external "eval-it" (promoteR evalR :: ReCore) ["apply eval"]
-    , external "reify-let"
-        (promoteR reifyPolyLet :: ReCore) ["reify polymorphic let"]
-    , external "let-to-redex"
-        (promoteR monoLetToRedex :: ReCore) ["monomorphic let to redex"]
-    , external "reify-eval"
-        (promoteR reifyEval :: ReCore) ["reify eval"]
-    , external "reify-case"
-        (promoteR reifyCasePair :: ReCore) ["reify case on pairs"]
-    , external "reify-module"
-        (promoteModGutsR reifyModGuts :: ReCore) ["reify all top-level definitions"]
---     , external "inline-app-ty"
---         (promoteR inlineAppTy :: ReCore) ["temp test"]
-    , external "inline-eval"
-        (promoteR inlineEval :: ReCore) ["inline to an eval"]
-    , external "type-eta-long"
-        (promoteR typeEtaLong :: ReCore) ["type-eta-long form"]
-    , external "reify-poly-let"
-        (promoteR reifyPolyLet :: ReCore) ["reify polymorphic 'let' expression"]
---     , external "foo"
---         (promoteR foo :: ReCore) ["experiment"]
+    , externC "reify-def"  reifyDef "reifyE a definition"
+    , externC "reify-misc" reifyMisc "Simplify 'reify e'"
+    -- For debugging
+    , externC "unreify" unReify "Drop reify"
+    , externC "reify-inline" reifyInline "inline names where reified"
+    , externC "reify-it" reifyR "apply reify"
+    , externC "eval-it" evalR "apply eval"
+    , externC "reify-let" reifyPolyLet "reify polymorphic let"
+    , externC "let-to-redex" monoLetToRedex "monomorphic let to redex"
+    , externC "reify-eval" reifyEval "reify eval"
+    , externC "reify-tup-case" reifyTupCase "reify case with unit or pair pattern"
+    , externC "reify-module" reifyModGuts "reify all top-level definitions"
+    , externC "inline-eval" inlineEval "inline to an eval"
+    , externC "type-eta-long" typeEtaLong "type-eta-long form"
+    , externC "reify-poly-let" reifyPolyLet "reify polymorphic 'let' expression"
     ]
