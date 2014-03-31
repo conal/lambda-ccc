@@ -8,7 +8,7 @@
 -- TODO: Restore the following pragmas
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
-{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -436,6 +436,8 @@ reifyTupCase =
       varPatT v = appsE varPatS [varType v] [varLitE v]
    reifyBranch _ _ = fail "reifyBranch: Only handles pair patterns so far."
 
+#if 0
+
 eitherTy :: Type -> Type -> TranslateU Type
 eitherTy a b = do tc <- findTyConT "Either"
                   return (TyConApp tc [a,b])
@@ -450,8 +452,6 @@ unEitherTy _ = fail "unEitherTy: wrong shape"
 
 -- reify (case scrut of { Left lv -> le ; Right rv -> re })  --> 
 -- appE (eitherE (reify (\ lv -> le)) (reify (\ rv -> re))) (reify scrut)
-
-#if 0
 
 -- Now removed in the type-encode plugin
 
