@@ -7,7 +7,7 @@
 
 -- TODO: Restore the following pragmas
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -32,15 +32,15 @@ import Text.Printf (printf)
 
 import HERMIT.Monad (newIdH)
 import HERMIT.Context (BoundVars,HasGlobalRdrEnv(..))
-import HERMIT.Core (Crumb(..),localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
-import HERMIT.External (External,external,ExternalName,ExternalHelp)
+import HERMIT.Core (localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
+import HERMIT.External (External,external,ExternalName)
 import HERMIT.GHC hiding (mkStringExpr)
 import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary
   ( observeR,findIdT,callNameT
-  , rulesR,inlineR,inlineNamesR,simplifyR,letFloatLetR,letFloatTopR,letElimR,cleanupUnfoldR
-  , etaExpandR, betaReduceR, letNonRecSubstSafeR
+  , rulesR,inlineR,simplifyR,letFloatLetR,letFloatTopR,letElimR
+  , betaReduceR, letNonRecSubstSafeR
   -- , unshadowR   -- May need this one later
   )
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
