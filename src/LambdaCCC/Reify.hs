@@ -26,7 +26,7 @@ module LambdaCCC.Reify (plugin) where
 
 import Data.Functor ((<$>))
 import Control.Monad ((<=<))
-import Control.Arrow (arr,(>>>))
+import Control.Arrow (Arrow(..),(>>>))
 
 import HERMIT.Monad (newIdH)
 import HERMIT.Core (localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
@@ -389,7 +389,31 @@ reifyTupCase =
       varPatT v = appsE varPatS [varType v] [varLitE v]
    reifyBranch _ _ = fail "reifyBranch: Only handles pair patterns so far."
 
-#if 0
+reifyEither :: ReExpr
+
+#if 1
+
+splitTysVals :: [Expr b] -> ([Type], [Expr b])
+splitTysVals (Type ty : rest) = first (ty :) (splitTysVals rest)
+splitTysVals rest             = ([],rest)
+
+callNameSplitT :: MonadCatch m => String
+               -> Translate c m CoreExpr (CoreExpr, [Type], [Expr CoreBndr])
+callNameSplitT name = do (f,args) <- callNameT name
+                         let (tyArgs,valArgs) = splitTysVals args
+                         return (f,tyArgs,valArgs)
+
+-- TODO: Move splitTysVals and callNameSplitT
+
+reifyEither = unReify >>>
+              do (_either, tys, funs@[_,_]) <- callNameSplitT "either"
+                 funs' <- mapM reifyOf funs
+                 appsE "eitherEP" tys funs'
+
+-- Since 'either f g' has a function type, there could be more parameters.
+-- I only want two. The others will get removed by reifyApp.
+
+#else
 
 eitherTy :: Type -> Type -> TranslateU Type
 eitherTy a b = do tc <- findTyConT "Either"
@@ -408,8 +432,7 @@ unEitherTy _ = fail "unEitherTy: wrong shape"
 
 -- Now removed in the type-encode plugin
 
-reifyCaseSum :: ReExpr
-reifyCaseSum =
+reifyEither =
   do Case scrut wild bodyT alts@[_,_] <- unReify
      (lt,rt) <- unEitherTy (exprType scrut)
      [le,re] <- mapM (reifyBranch wild) alts
@@ -420,7 +443,10 @@ reifyCaseSum =
  where
    reifyBranch :: Var -> CoreAlt -> TranslateU CoreExpr
    reifyBranch _wild (DataAlt _, [var], rhs) = reifyOf (Lam var rhs)
-   reifyBranch _ _ = error "reifyCaseSum: bad branch"
+   reifyBranch _ _ = error "reifyEither: bad branch"
+
+-- Important: reifyEither must come before reifyApp in reifyMisc, so that we can
+-- see 'either' applied.
 
 -- TODO: check for wild in rhs. In that case, I guess I'll have to reify the Lam
 -- manually in order to get the as pattern. Hm.
@@ -429,6 +455,7 @@ reifyCaseSum =
 
 reifyMisc :: ReExpr
 reifyMisc = tries [ ("reifyEval"      , reifyEval)
+                  , ("reifyEither"    , reifyEither)  -- before App
                   , ("reifyApp"       , reifyApp)
                   , ("reifyLam"       , reifyLam)
                   , ("reifyPolyLet"   , reifyPolyLet)
@@ -442,8 +469,6 @@ reifyMisc = tries [ ("reifyEval"      , reifyEval)
                   -- Data type encoding
                   -- , ("encodeTypesR"   , encodeTypesR)
                   ]
-
-                  -- , ("reifyCaseSum"   , reifyCaseSum)
 
 
 -- * letElim is handy with reifyPolyLet to eliminate the "foo = eval
