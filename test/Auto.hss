@@ -1,5 +1,10 @@
-set-pp-renderer ascii                   -- TODO: Can I set from command line?
--- set-pp-type Show
+-- TODO: Can I set these options from the command line?
+set-pp-renderer ascii
+set-pp-width 80
+set-pp-type Show
+-- set-pp-type Omit
+
+try (any-bu encode-types)
 try reify-module
 try (repeat (any-td reify-misc))
 down                                    -- To definitions
