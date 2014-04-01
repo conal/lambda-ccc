@@ -25,20 +25,17 @@
 module LambdaCCC.Reify (plugin) where
 
 import Data.Functor ((<$>))
-import Control.Monad ((<=<),liftM)
+import Control.Monad ((<=<))
 import Control.Arrow (arr,(>>>))
-import Data.List (intercalate)
-import Text.Printf (printf)
 
 import HERMIT.Monad (newIdH)
-import HERMIT.Context (BoundVars,HasGlobalRdrEnv(..))
 import HERMIT.Core (localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
 import HERMIT.External (External,external,ExternalName)
 import HERMIT.GHC hiding (mkStringExpr)
 import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary
-  ( observeR,findIdT,callNameT
+  ( observeR,callNameT
   , rulesR,inlineR,simplifyR,letFloatLetR,letFloatTopR,letElimR
   , betaReduceR, letNonRecSubstSafeR
   -- , unshadowR   -- May need this one later
@@ -47,22 +44,13 @@ import HERMIT.Plugin (hermitPlugin,phase,interactive)
 
 import LambdaCCC.Misc (Unop,(<~))
 
+import TypeEncode.Plugin
+  ( apps', ReExpr ,ReCore, TranslateU, findTyConT
+  , reCaseR, reConstructR, encodeTypesR )
+
 {--------------------------------------------------------------------
     Core utilities
 --------------------------------------------------------------------}
-
-apps :: Id -> [Type] -> [CoreExpr] -> CoreExpr
-apps f ts es
-  | tyArity f /= length ts =
-      error $ printf "apps: Id %s wants %d type arguments but got %d."
-                     (var2String f) arity ntys
-  | otherwise = mkCoreApps (varToCoreExpr f) (map Type ts ++ es)
- where
-   arity = tyArity f
-   ntys  = length ts
-
-tyArity :: Id -> Int
-tyArity = length . fst . splitForAllTys . varType
 
 collectForalls :: Type -> ([Var], Type)
 collectForalls ty = go [] ty
@@ -83,43 +71,8 @@ isTyLam (Lam v _) = isTyVar v
 isTyLam _         = False
 
 {--------------------------------------------------------------------
-    KURE utilities
---------------------------------------------------------------------}
-
-{--------------------------------------------------------------------
     HERMIT utilities
 --------------------------------------------------------------------}
-
-type ReExpr = RewriteH CoreExpr
-type ReCore = RewriteH Core
-
--- Common context & monad constraints
-type OkCM c m =
-  (HasDynFlags m, MonadThings m, MonadCatch m, BoundVars c, HasGlobalRdrEnv c)
-
-type TranslateU b = forall c m a. OkCM c m => Translate c m a b
-
--- Next two borrowed from Andy Gill and modified:
-
--- | Lookup the name in the context first, then, failing that, in GHC's global
--- reader environment.
-findTyConT :: String -> TranslateU TyCon
-findTyConT nm =
-  prefixFailMsg ("Cannot resolve name " ++ nm ++ ", ") $
-  contextonlyT (findTyConMG nm)
-
-findTyConMG :: OkCM c m => String -> c -> m TyCon
-findTyConMG nm c =
-    case filter isTyConName $ findNamesFromString (hermitGlobalRdrEnv c) nm of
-      [n] -> lookupTyCon n
-      ns  -> do dynFlags <- getDynFlags
-                fail $ "multiple matches found:\n"
-                     ++ intercalate ", " (showPpr dynFlags <$> ns)
-
--- apps :: Id -> [Type] -> [CoreExpr] -> CoreExpr
-
-apps' :: String -> [Type] -> [CoreExpr] -> TranslateU CoreExpr
-apps' s ts es = (\ i -> apps i ts es) `liftM` findIdT s
 
 type InCoreTC t = Injection t CoreTC
 
@@ -486,6 +439,8 @@ reifyMisc = tries [ ("reifyEval"      , reifyEval)
                   , ("monoLetToRedex" , monoLetToRedex)
                   , ("typeBetaReduceR", typeBetaReduceR)
                   , ("letElim"        , letElimR)  -- *
+                  -- Data type encoding
+                  -- , ("encodeTypesR"   , encodeTypesR)
                   ]
 
                   -- , ("reifyCaseSum"   , reifyCaseSum)
@@ -534,4 +489,8 @@ externals =
     , externC "inline-eval" inlineEval "inline to an eval"
     , externC "type-eta-long" typeEtaLong "type-eta-long form"
     , externC "reify-poly-let" reifyPolyLet "reify polymorphic 'let' expression"
+    , externC "encode-types" encodeTypesR
+       "encode case expressions and constructor applications"
+    , externC "re-construct" reConstructR "encode constructor application"
+    , externC "re-case" reCaseR "encode case expression"
     ]
