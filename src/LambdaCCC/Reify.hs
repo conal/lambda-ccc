@@ -413,6 +413,9 @@ reifyEither = unReify >>>
 -- Since 'either f g' has a function type, there could be more parameters.
 -- I only want two. The others will get removed by reifyApp.
 
+-- Important: reifyEither must come before reifyApp in reifyMisc, so that we can
+-- see 'either' applied.
+
 #else
 
 eitherTy :: Type -> Type -> TranslateU Type
@@ -444,9 +447,6 @@ reifyEither =
    reifyBranch :: Var -> CoreAlt -> TranslateU CoreExpr
    reifyBranch _wild (DataAlt _, [var], rhs) = reifyOf (Lam var rhs)
    reifyBranch _ _ = error "reifyEither: bad branch"
-
--- Important: reifyEither must come before reifyApp in reifyMisc, so that we can
--- see 'either' applied.
 
 -- TODO: check for wild in rhs. In that case, I guess I'll have to reify the Lam
 -- manually in order to get the as pattern. Hm.
