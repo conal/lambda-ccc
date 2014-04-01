@@ -1,12 +1,12 @@
 Name:               lambda-ccc
-Version:            0.1.1
+Version:            0.2
 Cabal-Version:      >= 1.6
 Synopsis:           Convert lambda expressions to CCC combinators
 Category:           categories
 Description:        Convert lambda expressions to CCC combinators
 Author:             Conal Elliott
 Maintainer:         conal@tabula.com
-Copyright:          (c) 2013 by Tabula, Inc
+Copyright:          (c) 2013-2014 by Tabula, Inc
 License:            BSD3
 License-File:       COPYING
 Stability:          experimental
@@ -31,6 +31,7 @@ Library
                   , hermit >= 0.4.0.0
                   , ty >= 0.1.5
                   , circat >= 0.2.7
+                  , type-encode
   Exposed-Modules:  LambdaCCC.Misc
                     LambdaCCC.ShowUtils
                     LambdaCCC.Prim
