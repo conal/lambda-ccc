@@ -288,8 +288,10 @@ a # b = ConstE pairP @^ a @^ b
 
 -- Handle surjectivity in @^ rather than here.
 
-eitherE :: forall a b c p . E p (a -> c) -> E p (b -> c) -> E p (a :+ b -> c)
+eitherE :: forall p a c b . E p (a -> c) -> E p (b -> c) -> E p (a :+ b -> c)
 eitherE = Either  -- for now
+
+-- The order a c b matches either
 
 -- | Encode a case expression on 'Left' & 'Right'.
 caseEither :: forall a b c p . (PrimBasics p, Eq1' p) =>
@@ -555,8 +557,10 @@ lamvP# = lamv#
 casevP# :: forall a b c. Addr# -> EP c -> Addr# -> EP c -> EP (a :+ b) -> EP c
 casevP# = casev#
 
-eitherEP :: forall a b c . EP (a -> c) -> EP (b -> c) -> EP (a :+ b -> c)
+eitherEP :: forall a c b . EP (a -> c) -> EP (b -> c) -> EP (a :+ b -> c)
 eitherEP = eitherE
+
+-- The order a c b matches either
 
 evalEP :: EP a -> a
 evalEP = evalE
