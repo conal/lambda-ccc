@@ -54,7 +54,7 @@ convert (ConstE x)   _ = unitArrow x . it
 convert (Var v)      p = convertVar v p
 convert (u :^ v)     p = apply . (convert u p &&& convert v p)
 convert (Lam q e)    p = curry (convert e (p :# q))
-convert (Either f g) p = curry ((convert' f ||| convert' g) . ldistribS)
+convert (Either f g) p = curry ((convert' f ||| convert' g) . distl)
  where
    convert' :: E prim (c :=> d) -> ((a :* c) `k` d)
    convert' h = uncurry (convert h p)
