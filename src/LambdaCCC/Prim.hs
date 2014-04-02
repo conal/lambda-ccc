@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses, ViewPatterns, PatternGuards, CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE UndecidableInstances #-} -- see below
 {-# OPTIONS_GHC -Wall #-}
 
@@ -34,6 +35,8 @@ import Circat.Category
 import Circat.Classes (BoolCat(not,and,or))
 import qualified Circat.Classes as C
 import Circat.Circuit ((:>),IsSourceP,constC) -- :( . Disentangle!
+
+import TypeEncode.Encode (EncodeCat(..))
 
 -- TODO: sort out the two uses of xor and simplify the Circat.Classes imports
 -- and uses.
@@ -112,63 +115,72 @@ data Prim :: * -> * where
   AddP          :: Num  a => Prim (a -> a -> a)
   ExlP          :: Prim (a :* b -> a)
   ExrP          :: Prim (a :* b -> b)
-  PairP         :: Prim (a -> b -> a :* b)
-  CondP         :: Prim (Bool :* (a :* a) -> a)
   InlP          :: Prim (a -> a :+ b)
   InrP          :: Prim (b -> a :+ b)
+  PairP         :: Prim (a -> b -> a :* b)
+  CondP         :: Prim (Bool :* (a :* a) -> a)
+  EncodeP       :: Prim (a -> b)
+  DecodeP       :: Prim (b -> a)
   -- More here
 
 instance Eq' (Prim a) (Prim b) where
-  LitP a === LitP b = a === b
-  NotP   === NotP   = True
-  AndP   === AndP   = True
-  OrP    === OrP    = True
-  XorP   === XorP   = True
-  AddP   === AddP   = True
-  ExlP   === ExlP   = True
-  ExrP   === ExrP   = True
-  PairP  === PairP  = True
-  CondP  === CondP  = True
-  _      === _      = False
+  LitP a  === LitP b  = a === b
+  NotP    === NotP    = True
+  AndP    === AndP    = True
+  OrP     === OrP     = True
+  XorP    === XorP    = True
+  AddP    === AddP    = True
+  ExlP    === ExlP    = True
+  ExrP    === ExrP    = True
+  InlP    === InlP    = True
+  InrP    === InrP    = True
+  PairP   === PairP   = True
+  CondP   === CondP   = True
+  EncodeP === EncodeP = True
+  DecodeP === DecodeP = True
+  _       === _       = False
 
 instance Eq (Prim a) where (==) = (===)
 
 instance Show (Prim a) where
-  showsPrec p (LitP a)   = showsPrec p a
-  showsPrec _ NotP       = showString "not"
-  showsPrec _ AndP       = showString "(&&)"
-  showsPrec _ OrP        = showString "(||)"
-  showsPrec _ XorP       = showString "xor"
-  showsPrec _ AddP       = showString "add"
-  showsPrec _ ExlP       = showString "exl"
-  showsPrec _ ExrP       = showString "exr"
-  showsPrec _ PairP      = showString "(,)"
-  showsPrec _ InlP       = showString "Left"
-  showsPrec _ InrP       = showString "Right"
-  showsPrec _ CondP      = showString "cond"
+  showsPrec p (LitP a) = showsPrec p a
+  showsPrec _ NotP     = showString "not"
+  showsPrec _ AndP     = showString "(&&)"
+  showsPrec _ OrP      = showString "(||)"
+  showsPrec _ XorP     = showString "xor"
+  showsPrec _ AddP     = showString "add"
+  showsPrec _ ExlP     = showString "exl"
+  showsPrec _ InlP     = showString "Left"
+  showsPrec _ InrP     = showString "Right"
+  showsPrec _ ExrP     = showString "exr"
+  showsPrec _ PairP    = showString "(,)"
+  showsPrec _ CondP    = showString "cond"
+  showsPrec _ EncodeP  = showString "encode"
+  showsPrec _ DecodeP  = showString "decode"
 
 instance Show' Prim where showsPrec' = showsPrec
 
-instance (BiCCC k, BoolCat k, HasUnitArrow k Lit) =>
+instance (BiCCC k, BoolCat k, EncodeCat k, HasUnitArrow k Lit) =>
          HasUnitArrow k Prim where
-  unitArrow NotP  = unitFun not
-  unitArrow AndP  = unitFun (curry and)
-  unitArrow OrP   = unitFun (curry or)
-  unitArrow XorP  = unitFun (curry C.xor)
-  unitArrow ExlP  = unitFun exl
-  unitArrow ExrP  = unitFun exr
-  unitArrow PairP = unitFun (curry id)
-  unitArrow InlP  = unitFun inl
-  unitArrow InrP  = unitFun inr
+  unitArrow NotP    = unitFun not
+  unitArrow AndP    = unitFun (curry and)
+  unitArrow OrP     = unitFun (curry or)
+  unitArrow XorP    = unitFun (curry C.xor)
+  unitArrow ExlP    = unitFun exl
+  unitArrow ExrP    = unitFun exr
+  unitArrow InlP    = unitFun inl
+  unitArrow InrP    = unitFun inr
+  unitArrow PairP   = unitFun (curry id)
+  unitArrow EncodeP = unitFun encode
+  unitArrow DecodeP = unitFun decode
   -- unitArrow CondP = condC
   -- unitArrow AddP  = curry (namedC "add")
   unitArrow (LitP l) = unitArrow l
-  unitArrow p     = error $ "unitArrow: not yet handled: " ++ show p
+  unitArrow p        = error $ "unitArrow: not yet handled: " ++ show p
 
 --     Variable `k' occurs more often than in the instance head
 --       in the constraint: BiCCC k
 --     (Use -XUndecidableInstances to permit this)
-
 
 instance Evalable (Prim a) where
   type ValT (Prim a) = a
@@ -180,10 +192,14 @@ instance Evalable (Prim a) where
   eval AddP          = (+)
   eval ExlP          = fst
   eval ExrP          = snd
-  eval PairP         = (,)
   eval InlP          = Left
   eval InrP          = Right
+  eval PairP         = (,)
   eval CondP         = cond
+  eval EncodeP       = encode
+  eval DecodeP       = decode
+
+-- TODO: replace fst with exl, etc.
 
 -- TODO: Split LitP out of Prim, and make Prim have domain and range. Then
 -- revisit 'HasConstArrow', and implement Evalable (Prim a b) homomorphically.

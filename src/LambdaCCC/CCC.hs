@@ -37,6 +37,8 @@ import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 -- import LambdaCCC.Ty
 import LambdaCCC.Prim (Prim(..),Lit(..)) -- ,cond,ifThenElse
 
+import TypeEncode.Encode (EncodeCat(..))
+
 import Circat.Category
 import Circat.Classes
 
@@ -289,15 +291,15 @@ instance Show (a :-> b) where
   showsPrec _ (Id  :&&& Id )   = showString "dup"
   showsPrec _ (Exr :&&& Exl)   = showString "swapP"
   showsPrec p ((decompR -> f :. Exl) :&&& (decompR -> g :. Exr))
-    | Id        <- g           = showsApp1 "first"  p f
-    | Id        <- f           = showsApp1 "second" p g
-    | f === g                 = showsApp1 "twiceP" p f
+    | Id <- g                  = showsApp1 "first"  p f
+    | Id <- f                  = showsApp1 "second" p g
+    | f === g                  = showsApp1 "twiceP" p f
     | otherwise                = showsOp2'  "***" (3,AssocRight) p f g
   showsPrec _ (Id  :||| Id )   = showString "jam"
   showsPrec _ (Inr :||| Inl)   = showString "swapC"
-  showsPrec p (f :. Exl :||| g :. Exr)
-    | Id        <- g           = showsApp1 "left"  p f
-    | Id        <- f           = showsApp1 "right" p g
+  showsPrec p ((decompR -> f :. Inl) :&&& (decompR -> g :. Inr))
+    | Id <- g                  = showsApp1 "left"  p f
+    | Id <- f                  = showsApp1 "right" p g
     | f === g                  = showsApp1 "twiceC" p f
     | otherwise                = showsOp2'  "+++" (2,AssocRight) p f g
 #endif
@@ -325,6 +327,10 @@ instance Show (a :-> b) where
 --   and, or, xor :: (Bool :* Bool) `k` Bool
 
 -- prim :: Prim (a -> b) -> (a :-> b)
+
+instance EncodeCat (:->) where
+  encode = prim EncodeP
+  decode = prim DecodeP
 
 instance BoolCat (:->) where
   not = prim NotP

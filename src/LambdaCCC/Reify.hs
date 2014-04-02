@@ -336,7 +336,8 @@ reifyInline = inReify inlineEval
 
 reifyRuleNames :: [String]
 reifyRuleNames = map ("reify/" ++)
-  ["not","(&&)","(||)","xor","(+)","exl","exr","pair","inl","inr","if","false","true"]
+  [ "not","(&&)","(||)","xor","(+)","exl","exr","pair","inl","inr"
+  , "if","false","decode","encode","true" ]
 
 -- or: words "not (&&) (||) xor ..."
 

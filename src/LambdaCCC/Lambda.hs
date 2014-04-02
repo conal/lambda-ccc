@@ -48,6 +48,8 @@ import GHC.Prim (Addr#)
 
 import Data.Proof.EQ
 
+import TypeEncode.Encode (encodeF,decodeF)
+
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
 import LambdaCCC.ShowUtils
 import LambdaCCC.Prim
@@ -301,11 +303,11 @@ caseEither p u q v ab = (lam p u `eitherE` lam q v) @^ ab
 instance (HasOpInfo prim, Show' prim, PrimBasics prim, Eq1' prim)
   => Show (E prim a) where
 #ifdef Sugared
-  showsPrec p (Either (Lam q a) (Lam r b) :^ ab) =
-    showParen (p > 0) $
-    showString "case " . showsPrec 0 ab . showString " of { "
-                       . showsPrec 0 q . showString " -> " . showsPrec 0 a . showString " ; "
-                       . showsPrec 0 r . showString " -> " . showsPrec 0 b . showString " } "
+--   showsPrec p (Either (Lam q a) (Lam r b) :^ ab) =
+--     showParen (p > 0) $
+--     showString "case " . showsPrec 0 ab . showString " of { "
+--                        . showsPrec 0 q . showString " -> " . showsPrec 0 a . showString " ; "
+--                        . showsPrec 0 r . showString " -> " . showsPrec 0 b . showString " } "
   showsPrec p (Lam q body :^ rhs) =  -- beta redex as "let"
     showParen (p > 0) $
     showString "let " . showsPrec 0 q . showString " = " . showsPrec 0 rhs
@@ -455,21 +457,23 @@ kLit = kPrim . litP
 
 {-# RULES
  
-"reify/not"   reifyEP not   = kPrim NotP
-"reify/(&&)"  reifyEP (&&)  = kPrim AndP
-"reify/(||)"  reifyEP (||)  = kPrim OrP
-"reify/xor"   reifyEP xor   = kPrim XorP
-"reify/(+)"   reifyEP (+)   = kPrim AddP
-"reify/exl"   reifyEP fst   = kPrim ExlP
-"reify/exr"   reifyEP snd   = kPrim ExrP
-"reify/pair"  reifyEP (,)   = kPrim PairP
-"reify/inl"   reifyEP Left  = kPrim InlP
-"reify/inr"   reifyEP Right = kPrim InrP
-"reify/if"    reifyEP cond  = kPrim CondP
+"reify/not"    reifyEP not     = kPrim NotP
+"reify/(&&)"   reifyEP (&&)    = kPrim AndP
+"reify/(||)"   reifyEP (||)    = kPrim OrP
+"reify/xor"    reifyEP xor     = kPrim XorP
+"reify/(+)"    reifyEP (+)     = kPrim AddP
+"reify/exl"    reifyEP fst     = kPrim ExlP
+"reify/exr"    reifyEP snd     = kPrim ExrP
+"reify/pair"   reifyEP (,)     = kPrim PairP
+"reify/inl"    reifyEP Left    = kPrim InlP
+"reify/inr"    reifyEP Right   = kPrim InrP
+"reify/if"     reifyEP cond    = kPrim CondP
+"reify/encode" reifyEP encodeF = kPrim EncodeP
+"reify/decode" reifyEP decodeF = kPrim DecodeP
  
-"reify/()"    reifyEP ()    = kLit  ()
-"reify/false" reifyEP False = kLit  False
-"reify/true"  reifyEP True  = kLit  True
+"reify/()"     reifyEP ()      = kLit  ()
+"reify/false"  reifyEP False   = kLit  False
+"reify/true"   reifyEP True    = kLit  True
  
   #-}
 

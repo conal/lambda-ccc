@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeOperators, FlexibleContexts, ConstraintKinds #-}
 {-# LANGUAGE CPP #-}
--- {-# LANGUAGE RebindableSyntax #-}
+{-# LANGUAGE RebindableSyntax #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- For qualified LambdaCCC.Lambda import :(
@@ -23,11 +23,11 @@
 --   
 ----------------------------------------------------------------------
 
-module Simple (case4) where
+module Simple (reified) where
 
 import Prelude
 
-import LambdaCCC.Lambda (EP,reifyEP,xor)
+import LambdaCCC.Lambda (EP,reifyEP,xor,ifThenElse)
 
 -- Needed for resolving names. Is there an alternative?
 import qualified LambdaCCC.Lambda
@@ -126,17 +126,23 @@ halfAddH (a,b) = (h (&&), h xor)
 
 #if 1
 
--- Case expressions
+-- Constructor applications and case expressions
 
 case0 :: () -> Bool
 case0 () = False
 
 data G a = G a
 
+con1 :: G Bool
+con1 = G True
+
 case1 :: G Bool -> Bool
 case1 (G x) = not x
 
 data E a = E a a
+
+con2 :: E Bool
+con2 = E False True
 
 case2 :: E Bool -> Bool
 case2 (E q r) = q || r
@@ -149,11 +155,14 @@ caseQ T = True
 
 data A = B Integer | C () Bool () Integer | Y Integer | Z
 
-case4 :: A -> Integer
-case4 (B n)        = n
-case4 (C () b _ n) = if b then n else 7
-case4 (Y m)        = m
-case4 Z            = 85
+con4 :: Integer -> A
+con4 n = C () True () n
+
+case4 :: A -> Bool
+case4 (B _)        = True
+case4 (C () b _ _) = not b
+case4 (Y _)        = False
+case4 Z            = True
 
 #endif
 
@@ -161,8 +170,8 @@ case4 Z            = 85
 
 -- Reification example for exporting
 
-reified :: EP ((Bool, Bool) -> (Bool, Bool))
-reified = reifyEP halfAdd
+-- reified :: EP ((Bool, Bool) -> (Bool, Bool))
+-- reified = reifyEP halfAdd
 
 -- reified :: EP (Bool -> (Bool,Bool))
 -- reified = reifyEP bar'
@@ -170,5 +179,8 @@ reified = reifyEP halfAdd
 -- reified :: EP ((Bool,Bool) -> (Bool,Bool))
 -- reified = reifyEP halfAddH
 
--- reified :: EP (() -> Bool)
--- reified = reifyEP ofU
+-- reified :: EP (Boo -> Bool)
+-- reified = reifyEP caseQ
+
+reified :: EP (A -> Bool)
+reified = reifyEP case4

@@ -5,7 +5,7 @@ Synopsis:           Convert lambda expressions to CCC combinators
 Category:           categories
 Description:        Convert lambda expressions to CCC combinators
 Author:             Conal Elliott
-Maintainer:         conal@tabula.com
+Maintainer:         conal@conal.net
 Copyright:          (c) 2013-2014 by Tabula, Inc
 License:            BSD3
 License-File:       COPYING

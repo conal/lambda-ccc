@@ -22,6 +22,8 @@
 import Simple
 -- import Squimple (reified)
 
+-- #define MakeCircuit
+
 import Prelude
 
 import LambdaCCC.Misc (Unop)
@@ -29,13 +31,18 @@ import LambdaCCC.Lambda (reifyEP)
 import LambdaCCC.ToCCC (toCCC')
 import LambdaCCC.CCC (convertC,(:->))
 
+#ifdef MakeCircuit
 import Circat.Circuit (IsSourceP2,(:>),outGWith)
 import Circat.Netlist (outV)
+#endif
+
 
 main :: IO ()
 main = do print e
           print (idCT (toCCC' e))
+#ifdef MakeCircuit
           outGV "test" (toCCC' e)
+#endif
  where
    e       = reified           -- Works
 --    e       = reifyEP halfAdd   -- Doesn't
@@ -57,7 +64,11 @@ idCT = id
 -- toCCCTerm' :: EP (a -> b) -> (a :-> b)
 -- toCCCTerm' = toCCC'
 
+#ifdef MakeCircuit
+
 -- Diagram and Verilog
 outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()
 outGV s c = do outGWith ("pdf","") s c
                outV                s c
+
+#endif
