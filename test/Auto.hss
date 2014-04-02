@@ -4,7 +4,11 @@ set-pp-width 80
 -- set-pp-type Show
 set-pp-type Omit
 
+try unshadow
+
 try (any-bu encode-types)
 try reify-module
 try (repeat (any-td reify-misc))
 down                                    -- To definitions
+
+try unshadow
