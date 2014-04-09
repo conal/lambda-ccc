@@ -466,13 +466,13 @@ reifyMisc = tries [ ("reifyEval"      , reifyEval)
                   -- Helpers:
                   , ("monoLetToRedex" , monoLetToRedex)
                   , ("typeBetaReduceR", typeBetaReduceR)
-                  , ("letElim"        , letElimR)  -- *
+                  , ("letElim"        , letElimR)  -- Note
                   -- Data type encoding
                   -- , ("encodeTypesR"   , encodeTypesR)
                   ]
 
 
--- * letElim is handy with reifyPolyLet to eliminate the "foo = eval
+-- Note: letElim is handy with reifyPolyLet to eliminate the "foo = eval
 -- foo_reified", which is usually inaccessible.
 
 callNameLam :: String -> TranslateH CoreExpr (CoreExpr, [CoreExpr])
