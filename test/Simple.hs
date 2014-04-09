@@ -1,6 +1,8 @@
 {-# LANGUAGE TypeOperators, FlexibleContexts, ConstraintKinds #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RebindableSyntax #-}
+{-# LANGUAGE DataKinds, GADTs, KindSignatures #-}
+
 {-# OPTIONS_GHC -Wall #-}
 
 -- For qualified LambdaCCC.Lambda import :(
@@ -164,14 +166,32 @@ case4 (C () b _ _) = not b
 case4 (Y _)        = False
 case4 Z            = True
 
+-- GADT
+
+data Nat = Zero | Succ Nat
+
+infixr 5 :<
+
+data Vec :: Nat -> * -> * where
+  VecZ :: Vec Zero a
+  (:<) :: a -> Vec n a -> Vec (Succ n) a
+
+-- | Type-safe head for vectors
+headV :: Vec (Succ n) a -> a
+headV (a :< _) = a
+
+-- | Type-safe tail for vectors
+tailV :: Vec (Succ n) a -> Vec n a
+tailV (_ :< as') = as'
+
 #endif
 
 --------
 
 -- Reification example for exporting
 
--- reified :: EP ((Bool, Bool) -> (Bool, Bool))
--- reified = reifyEP halfAdd
+reified :: EP ((Bool, Bool) -> (Bool, Bool))
+reified = reifyEP halfAdd
 
 -- reified :: EP (Bool -> (Bool,Bool))
 -- reified = reifyEP bar'
@@ -182,5 +202,8 @@ case4 Z            = True
 -- reified :: EP (Boo -> Bool)
 -- reified = reifyEP caseQ
 
-reified :: EP (A -> Bool)
-reified = reifyEP case4
+-- reified :: EP (A -> Bool)
+-- reified = reifyEP case4
+
+-- reified :: EP (Vec (Succ n) a -> Vec n a)
+-- reified = reifyEP tailV

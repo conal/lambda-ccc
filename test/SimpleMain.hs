@@ -22,7 +22,7 @@
 import Simple
 -- import Squimple (reified)
 
--- #define MakeCircuit
+#define MakeCircuit
 
 import Prelude
 
