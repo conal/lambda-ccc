@@ -1,5 +1,7 @@
 Convert lambda expressions to CCC combinators and then to circuits.
 
+See the [project notes](doc/notes.md).
+
 See instructions in test/Tests.hs.
 
 Dependencies:
