@@ -23,7 +23,7 @@
 
 module LambdaCCC.Prim
   ( Lit(..), HasLit(..), litSS
-  , Prim(..),litP,xor,ifThenElse,cond
+  , Prim(..),litP,xor, condBool -- ,cond -- ,ifThenElse
   ) where
 
 import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
@@ -31,7 +31,7 @@ import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
 -- import Control.Arrow ((&&&))
 import Data.Constraint (Dict(..))
 
-import Circat.Category
+import Circat.Category hiding (CondCat(..))
 import Circat.Classes (BoolCat(not,and,or))
 import qualified Circat.Classes as C
 import Circat.Circuit ((:>),IsSourceP,constC) -- :( . Disentangle!
@@ -118,7 +118,7 @@ data Prim :: * -> * where
   InlP          :: Prim (a -> a :+ b)
   InrP          :: Prim (b -> a :+ b)
   PairP         :: Prim (a -> b -> a :* b)
-  CondP         :: Prim (Bool :* (a :* a) -> a)
+  CondBP        :: Prim (Bool :* (Bool :* Bool) -> Bool)  -- cond on Bool
   EncodeP       :: Prim (a -> b)
   DecodeP       :: Prim (b -> a)
   -- More here
@@ -135,7 +135,7 @@ instance Eq' (Prim a) (Prim b) where
   InlP    === InlP    = True
   InrP    === InrP    = True
   PairP   === PairP   = True
-  CondP   === CondP   = True
+  CondBP  === CondBP  = True
   EncodeP === EncodeP = True
   DecodeP === DecodeP = True
   _       === _       = False
@@ -154,7 +154,7 @@ instance Show (Prim a) where
   showsPrec _ InrP     = showString "Right"
   showsPrec _ ExrP     = showString "exr"
   showsPrec _ PairP    = showString "(,)"
-  showsPrec _ CondP    = showString "cond"
+  showsPrec _ CondBP   = showString "cond"
   showsPrec _ EncodeP  = showString "encode"
   showsPrec _ DecodeP  = showString "decode"
 
@@ -173,7 +173,7 @@ instance (BiCCC k, BoolCat k, EncodeCat k, HasUnitArrow k Lit) =>
   unitArrow PairP   = unitFun (curry id)
   unitArrow EncodeP = unitFun encode
   unitArrow DecodeP = unitFun decode
-  -- unitArrow CondP = condC
+  -- unitArrow CondBP= condC
   -- unitArrow AddP  = curry (namedC "add")
   unitArrow (LitP l) = unitArrow l
   unitArrow p        = error $ "unitArrow: not yet handled: " ++ show p
@@ -195,7 +195,7 @@ instance Evalable (Prim a) where
   eval InlP          = Left
   eval InrP          = Right
   eval PairP         = (,)
-  eval CondP         = cond
+  eval CondBP        = cond
   eval EncodeP       = encode
   eval DecodeP       = decode
 
@@ -211,14 +211,19 @@ xor :: Binop Bool
 xor = (/=)
 {-# NOINLINE xor #-}
 
--- For desugaring if-then-else expressions (assuming RebindableSyntax)
-ifThenElse :: Bool -> Binop a
-ifThenElse i t e = cond (i,(e,t)) -- note t/e swap
-{-# INLINE ifThenElse #-}
+-- -- For desugaring if-then-else expressions (assuming RebindableSyntax)
+-- ifThenElse :: Bool -> Binop a
+-- ifThenElse i t e = cond (i,(e,t)) -- note t/e swap
+-- {-# INLINE ifThenElse #-}
 
--- cond :: (Bool, (a,a)) -> a
--- cond (True ,(a,_)) = a
--- cond (False,(_,b)) = b
+-- | Conditional on boolean values, uncurried and with then/else swapped (for
+-- trie consistency).
+condBool :: (Bool,(Bool,Bool)) -> Bool
+condBool (i,(e,t)) = (i && t) || (not i && e)  -- note then/else swap
+
+-- | Conditional, uncurried and with then/else swapped (for trie consistency)
+cond :: (Bool,(a,a)) -> a
+cond (i,(e,t)) = if i then t else e
 -- {-# NOINLINE cond #-}
 
 litP :: HasLit a => a -> Prim a

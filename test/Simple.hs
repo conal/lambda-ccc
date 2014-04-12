@@ -25,17 +25,39 @@
 --   
 ----------------------------------------------------------------------
 
-module Simple (reified) where
+module Simple (con5) where
 
 import Prelude
 
-import LambdaCCC.Lambda (EP,reifyEP,xor,ifThenElse)
+import LambdaCCC.Lambda (EP,reifyEP,xor,condBool)
+import LambdaCCC.Lambda (condBool)  -- TEMP
 
 -- Needed for resolving names. Is there an alternative?
 import qualified LambdaCCC.Lambda
 import GHC.Tuple ()
 import Data.Either ()
 import qualified TypeEncode.Encode
+
+{--------------------------------------------------------------------
+    Utilities to be moved elsewhere
+--------------------------------------------------------------------}
+
+class HasIf a where
+  ifThenElse :: Bool -> a -> a -> a
+
+instance HasIf Bool where
+  ifThenElse i t e = condBool (i,(e,t))  -- note swap
+
+instance (HasIf a, HasIf b) => HasIf (a,b) where
+  ifThenElse i (t,t') (e,e') = (ifThenElse i t e,ifThenElse i t' e')
+
+-- instance (HasIf a, HasIf b) => HasIf (a,b) where
+--   if i then (t,t') else (e,e') = (if i then t else e, if i then t' else e')
+
+
+{--------------------------------------------------------------------
+    Examples
+--------------------------------------------------------------------}
 
 ident :: a -> a
 ident x = x
@@ -126,6 +148,12 @@ halfAddH (a,b) = (h (&&), h xor)
 -- idOrNot (Left  a) = a
 -- idOrNot (Right a) = not a
 
+if1 :: Bool -> Bool
+if1 x = condBool (x,(False,True))
+
+if2 :: Bool -> Bool
+if2 x = if x then False else True
+
 #if 1
 
 -- Constructor applications and case expressions
@@ -165,6 +193,13 @@ case4 (B _)        = True
 case4 (C () b _ _) = not b
 case4 (Y _)        = False
 case4 Z            = True
+
+-- newtype
+
+newtype NT = NT Bool
+
+con5 :: NT
+con5 = NT True
 
 -- GADT
 

@@ -22,8 +22,7 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.Lambda
-  ( xor, ifThenElse  -- From Prim
-  , Name
+  ( Name
   , V(..), Pat(..), E(..)
   , occursVP, occursVE, occursPE
   , (@^), lam, lett
@@ -31,6 +30,7 @@ module LambdaCCC.Lambda
   , var#, lamv#, varPat#, asPat#, casev#
   , reifyE, evalE
   , vars, vars2
+  , xor, condBool   -- from Prim
   -- Temporary less polymorphic variants.
   -- Remove when I can dig up Prim as a type in Core
   , EP, appP, lamP, lettP , varP#, lamvP#, casevP#, eitherEP, evalEP, reifyEP
@@ -457,24 +457,24 @@ kLit = kPrim . litP
 
 {-# RULES
  
-"reify/not"    reifyEP not     = kPrim NotP
-"reify/(&&)"   reifyEP (&&)    = kPrim AndP
-"reify/(||)"   reifyEP (||)    = kPrim OrP
-"reify/xor"    reifyEP xor     = kPrim XorP
-"reify/(+)"    reifyEP (+)     = kPrim AddP
-"reify/exl"    reifyEP fst     = kPrim ExlP
-"reify/exr"    reifyEP snd     = kPrim ExrP
-"reify/pair"   reifyEP (,)     = kPrim PairP
-"reify/inl"    reifyEP Left    = kPrim InlP
-"reify/inr"    reifyEP Right   = kPrim InrP
-"reify/if"     reifyEP cond    = kPrim CondP
-"reify/encode" reifyEP encodeF = kPrim EncodeP
-"reify/decode" reifyEP decodeF = kPrim DecodeP
+"reify/not"     reifyEP not      = kPrim NotP
+"reify/(&&)"    reifyEP (&&)     = kPrim AndP
+"reify/(||)"    reifyEP (||)     = kPrim OrP
+"reify/xor"     reifyEP xor      = kPrim XorP
+"reify/(+)"     reifyEP (+)      = kPrim AddP
+"reify/exl"     reifyEP fst      = kPrim ExlP
+"reify/exr"     reifyEP snd      = kPrim ExrP
+"reify/pair"    reifyEP (,)      = kPrim PairP
+"reify/inl"     reifyEP Left     = kPrim InlP
+"reify/inr"     reifyEP Right    = kPrim InrP
+"reify/if"      reifyEP condBool = kPrim CondBP
+"reify/encode"  reifyEP encodeF  = kPrim EncodeP
+"reify/decode"  reifyEP decodeF  = kPrim DecodeP
  
-"reify/()"     reifyEP ()      = kLit  ()
-"reify/false"  reifyEP False   = kLit  False
-"reify/true"   reifyEP True    = kLit  True
- 
+"reify/()"      reifyEP ()       = kLit  ()
+"reify/false"   reifyEP False    = kLit  False
+"reify/true"    reifyEP True     = kLit  True
+
   #-}
 
 {-# RULES
@@ -487,9 +487,21 @@ kLit = kPrim . litP
  #-}
 
 #if 0
+ 
+-- "reify/if-bool" reifyEP cond     = reifyEP condBool
+-- "reify/if-pair" reifyEP cond     = reifyEP condPair
+
+condBool :: (Bool,(Bool,Bool)) -> Bool
+condBool (i,(e,t)) = (i && t) || (not i && e)  -- note then/else swap
+
+-- condBool (i,(e,t)) = if i then t else e
 
 condPair :: (Bool,((a,b),(a,b))) -> (a,b)
 condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))
+
+#endif
+
+#if 0
 
 -- TODO: if-splitting has gone through a few incarnations. Re-examine, and
 -- prune away unused code.
@@ -586,17 +598,17 @@ reifyEP = reifyE
 -- instance Eq1' Prim where (====) = (===)
 
 instance Eq1' Prim where
-  LitP a ==== LitP b = a ==== b
-  NotP   ==== NotP   = True
-  AndP   ==== AndP   = True
-  OrP    ==== OrP    = True
-  XorP   ==== XorP   = True
-  AddP   ==== AddP   = True
-  ExlP   ==== ExlP   = True
-  ExrP   ==== ExrP   = True
-  PairP  ==== PairP  = True
-  CondP  ==== CondP  = True
-  _      ==== _      = False
+  LitP a  ==== LitP b = a ==== b
+  NotP    ==== NotP   = True
+  AndP    ==== AndP   = True
+  OrP     ==== OrP    = True
+  XorP    ==== XorP   = True
+  AddP    ==== AddP   = True
+  ExlP    ==== ExlP   = True
+  ExrP    ==== ExrP   = True
+  PairP   ==== PairP  = True
+  CondBP  ==== CondBP = True
+  _       ==== _      = False
 
 instance Eq1' Lit where
   UnitL   ==== UnitL   = True
