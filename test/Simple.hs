@@ -25,7 +25,7 @@
 --   
 ----------------------------------------------------------------------
 
-module Simple (con5) where
+module Simple (reified) where
 
 import Prelude
 
