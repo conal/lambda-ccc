@@ -41,14 +41,14 @@ There are a few blog posts about the motivation and technical directions:
 *   [*Circuits as a bicartesian closed category*]
 
 
-# To do
+## To do
 
-## Documentation
+### Documentation
 
 *   Add more links to these notes, including `Control.Category` and friends.
 
 
-# Contributors
+## Contributors
 
 *   Conal Elliott: concept, design, implementation
 *   Andy Gill: many helpful conversations about the project; exploring additional applications
