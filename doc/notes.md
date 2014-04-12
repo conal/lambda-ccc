@@ -43,7 +43,7 @@ There are a few blog posts about the motivation and technical directions:
 
 ## To do
 
-### Documentation
+Documentation:
 
 *   Add more links to these notes, including `Control.Category` and friends.
 
