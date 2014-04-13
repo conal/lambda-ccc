@@ -68,7 +68,7 @@ Design & implementation:
 *   Finish separation of lambda expressions from the underlying primitives.
     There's a good start already, as the expression `E` (in [`LambdaCCC.Lambda`]) and the [conversion to biCCCs][`LambdaCCC.ToCCC`] are parametrized over a type constructor of primitives.
     The [reification plugin][`LambdaCCC.Reify`], however, doesn't yet know about this parametrization and so can only handle the primitives designed for [circat].
-    **Issue #4.**
+    *[Issue lambda-ccc#4]*
 *   Handle record field accessors, including type class methods.
 *   Do something sensible with unboxed types, even if just avoiding them.
     For instance, an `Int` literal `1` gets reified as `appP (reifyEP I#) (reifyEP 1)`.
