@@ -75,12 +75,12 @@ Design & implementation:
     For instance, an `Int` literal `1` gets reified as `appP (reifyEP I#) (reifyEP 1)`.
     With types shown, this sub-expression `(reifyEP 1)` becomes `(reifyEP @ Int# 1)` which is not well-kinded.
     (Similarly for the other `reifyEP` call.)
-    I think an easy fix would be having `reifyOf` in [`Lambda.Reify`] only if the argument type has kind `*`.
+    I think an easy fix would be having `reifyOf` in [`Lambda.Reify`] only apply if the argument type has kind `*`.
     *[Issue #6](https://github.com/conal/lambda-ccc/issues/6)*
 *   Coercions and casts
+    *[Issue #7](https://github.com/conal/lambda-ccc/issues/7)*
     *   Handle them in the representation and translation.
     *   Check handling of `newtype`s, which are represented via a coercion.
-    *[Issue #7](https://github.com/conal/lambda-ccc/issues/7)*
 *   Type-encoding, in which algebraic data types (LDTs) are converted to binary sums and products.
     (Sorry for the odd acronym. I like "ADT" to mean "abstract data type".)
     See the [type-encode] project.
