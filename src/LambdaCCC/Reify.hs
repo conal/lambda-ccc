@@ -28,6 +28,9 @@ import Data.Functor ((<$>))
 import Control.Monad ((<=<))
 import Control.Arrow (Arrow(..),(>>>))
 
+import PrelNames (liftedTypeKindTyConKey)
+import Unique(hasKey)
+
 import HERMIT.Monad (newIdH)
 import HERMIT.Core (localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
 import HERMIT.External (External,external,ExternalName)
@@ -69,6 +72,10 @@ subst ps = substExpr (error "subst: no SDoc") (foldr add emptySubst ps)
 isTyLam :: CoreExpr -> Bool
 isTyLam (Lam v _) = isTyVar v
 isTyLam _         = False
+
+kindIsStar :: Kind -> Bool
+kindIsStar (TyConApp tc []) = tc `hasKey` liftedTypeKindTyConKey
+kindIsStar _                = False
 
 {--------------------------------------------------------------------
     HERMIT utilities
@@ -187,7 +194,10 @@ reifyEval :: ReExpr
 reifyEval = unReify >>> unEval
 
 reifyOf :: CoreExpr -> TranslateU CoreExpr
-reifyOf e = appsE reifyS [exprType e] [e]
+reifyOf e = do guardMsg (kindIsStar (typeKind ty)) "reifyLam: doesn't handle type lambda"
+               appsE reifyS [exprType e] [e]
+ where
+   ty = exprType e
 
 evalOf :: CoreExpr -> TranslateU CoreExpr
 evalOf e = appsE evalS [dropEP (exprType e)] [e]
