@@ -70,14 +70,17 @@ Design & implementation:
     The [reification plugin][`LambdaCCC.Reify`], however, doesn't yet know about this parametrization and so can only handle the primitives designed for [circat].
     *[Issue #4]*
 *   Handle record field accessors, including type class methods.
+    *[Issue #5]*
 *   Do something sensible with unboxed types, even if just avoiding them.
     For instance, an `Int` literal `1` gets reified as `appP (reifyEP I#) (reifyEP 1)`.
     With types shown, this sub-expression `(reifyEP 1)` becomes `(reifyEP @ Int# 1)` which is not well-kinded.
     (Similarly for the other `reifyEP` call.)
     I think an easy fix would be having `reifyOf` in [`Lambda.Reify`] only if the argument type has kind `*`.
+    *[Issue #6]*
 *   Coercions and casts
     *   Handle them in the representation and translation.
     *   Check handling of `newtype`s, which are represented via a coercion.
+    *[Issue #6]*
 *   Type-encoding, in which algebraic data types (LDTs) are converted to binary sums and products.
     (Sorry for the odd acronym. I like "ADT" to mean "abstract data type".)
     See the [type-encode] project.
