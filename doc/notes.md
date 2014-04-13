@@ -68,19 +68,19 @@ Design & implementation:
 *   Finish separation of lambda expressions from the underlying primitives.
     There's a good start already, as the expression `E` (in [`LambdaCCC.Lambda`]) and the [conversion to biCCCs][`LambdaCCC.ToCCC`] are parametrized over a type constructor of primitives.
     The [reification plugin][`LambdaCCC.Reify`], however, doesn't yet know about this parametrization and so can only handle the primitives designed for [circat].
-    *[Issue #4]*
+    *[Issue #4](https://github.com/conal/lambda-ccc/issues/4)*
 *   Handle record field accessors, including type class methods.
-    *[Issue #5]*
+    *[Issue #5](https://github.com/conal/lambda-ccc/issues/5)*
 *   Do something sensible with unboxed types, even if just avoiding them.
     For instance, an `Int` literal `1` gets reified as `appP (reifyEP I#) (reifyEP 1)`.
     With types shown, this sub-expression `(reifyEP 1)` becomes `(reifyEP @ Int# 1)` which is not well-kinded.
     (Similarly for the other `reifyEP` call.)
     I think an easy fix would be having `reifyOf` in [`Lambda.Reify`] only if the argument type has kind `*`.
-    *[Issue #6]*
+    *[Issue #6](https://github.com/conal/lambda-ccc/issues/6)*
 *   Coercions and casts
     *   Handle them in the representation and translation.
     *   Check handling of `newtype`s, which are represented via a coercion.
-    *[Issue #6]*
+    *[Issue #7](https://github.com/conal/lambda-ccc/issues/7)*
 *   Type-encoding, in which algebraic data types (LDTs) are converted to binary sums and products.
     (Sorry for the odd acronym. I like "ADT" to mean "abstract data type".)
     See the [type-encode] project.
