@@ -194,7 +194,8 @@ reifyEval :: ReExpr
 reifyEval = unReify >>> unEval
 
 reifyOf :: CoreExpr -> TranslateU CoreExpr
-reifyOf e = do guardMsg (kindIsStar (typeKind ty)) "reifyLam: doesn't handle type lambda"
+reifyOf e = do guardMsg (kindIsStar (typeKind ty))
+                 "reifyLam: doesn't handle type lambda"
                appsE reifyS [exprType e] [e]
  where
    ty = exprType e
