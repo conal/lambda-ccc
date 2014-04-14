@@ -112,7 +112,7 @@ data Prim :: * -> * where
   LitP          :: Lit a -> Prim a
   NotP          :: Prim (Bool -> Bool)
   AndP,OrP,XorP :: Prim (Bool -> Bool -> Bool)
-  AddP          :: Num  a => Prim (a -> a -> a)
+  AddP          :: Prim (Int -> Int -> Int)
   ExlP          :: Prim (a :* b -> a)
   ExrP          :: Prim (a :* b -> b)
   InlP          :: Prim (a -> a :+ b)
@@ -122,6 +122,10 @@ data Prim :: * -> * where
   EncodeP       :: Prim (a -> b)
   DecodeP       :: Prim (b -> a)
   -- More here
+
+-- Was:
+-- 
+--  AddP          :: Num  a => Prim (a -> a -> a)
 
 instance Eq' (Prim a) (Prim b) where
   LitP a  === LitP b  = a === b
