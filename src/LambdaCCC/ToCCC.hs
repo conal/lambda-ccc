@@ -19,7 +19,7 @@
 -- Convert lambda expressions to CCC combinators
 ----------------------------------------------------------------------
 
-module LambdaCCC.ToCCC (toCCC, toCCC' {-, HasLambda(..) -}) where
+module LambdaCCC.ToCCC (toCCC, toCCC', HasLambda(..)) where
 
 import Prelude hiding (id,(.),curry,uncurry,const,not,and,or)
 
