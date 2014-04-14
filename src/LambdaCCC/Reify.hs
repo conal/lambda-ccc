@@ -28,9 +28,6 @@ import Data.Functor ((<$>))
 import Control.Monad ((<=<))
 import Control.Arrow (Arrow(..),(>>>))
 
-import PrelNames (liftedTypeKindTyConKey)
-import Unique(hasKey)
-
 import HERMIT.Monad (newIdH)
 import HERMIT.Core (localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
 import HERMIT.External (External,external,ExternalName)
@@ -49,7 +46,9 @@ import LambdaCCC.Misc (Unop,(<~))
 
 import TypeEncode.Plugin
   ( apps', ReExpr ,ReCore, TranslateU, findTyConT
-  , reCaseR, reConstructR, encodeTypesR )
+  , liftedKind, unliftedKind
+  , encodeTypesR )
+import qualified TypeEncode.Plugin as Enc
 
 {--------------------------------------------------------------------
     Core utilities
@@ -72,10 +71,6 @@ subst ps = substExpr (error "subst: no SDoc") (foldr add emptySubst ps)
 isTyLam :: CoreExpr -> Bool
 isTyLam (Lam v _) = isTyVar v
 isTyLam _         = False
-
-kindIsStar :: Kind -> Bool
-kindIsStar (TyConApp tc []) = tc `hasKey` liftedTypeKindTyConKey
-kindIsStar _                = False
 
 {--------------------------------------------------------------------
     HERMIT utilities
@@ -194,14 +189,26 @@ reifyEval :: ReExpr
 reifyEval = unReify >>> unEval
 
 reifyOf :: CoreExpr -> TranslateU CoreExpr
-reifyOf e = do guardMsg (kindIsStar (typeKind ty))
-                 "reifyLam: doesn't handle type lambda"
+reifyOf e = do guardMsg (not (unliftedKind ki))
+                 "reifyOf: no unlifted values (with type of kind #)"
+               guardMsg (liftedKind ki)
+                 ("reifyOf: Can only reify lifted values, but this one is "
+                  ++ kindStr ki)
                appsE reifyS [exprType e] [e]
  where
    ty = exprType e
+   ki = typeKind ty
+
+kindStr :: Kind -> String
+kindStr (TyConApp tc _) = "TyConApp " ++ uqName (tyConName tc) ++ "..."
+kindStr _               = "not a TyConApp" -- TODO: more detail here if needed
 
 evalOf :: CoreExpr -> TranslateU CoreExpr
 evalOf e = appsE evalS [dropEP (exprType e)] [e]
+
+isEP :: Type -> Bool
+isEP (TyConApp (tyConName -> name) [_]) = uqName name == epS
+isEP _                                  = False
 
 dropEP :: Unop Type
 dropEP (TyConApp (uqName . tyConName -> name) [t]) =
@@ -336,6 +343,11 @@ reifyModGuts = modGutsR reifyProg
 inlineEval :: ReExpr
 inlineEval = inAppTys (inlineR >>> acceptR isTyLamsEval) >>> tryR simplifyE
 
+-- Inline if not of type EP t
+inlineNonE :: ReExpr
+inlineNonE = acceptR (not . isEP . exprType) >>>
+             inAppTys inlineR -- >>> tryR simplifyE
+
 -- The simplifyE is for beta-reducing type applications.
 
 -- Rewrite inside of reify applications
@@ -343,7 +355,11 @@ inReify :: Unop ReExpr
 inReify = reifyR <~ unReify
 
 reifyInline :: ReExpr
-reifyInline = inReify inlineEval
+reifyInline = inReify inlineNonE
+-- reifyInline = inReify inlineEval
+
+reifyEncode :: ReExpr
+reifyEncode = inReify encodeTypesR
 
 reifyRuleNames :: [String]
 reifyRuleNames = map ("reify/" ++)
@@ -468,12 +484,13 @@ reifyEither =
 reifyMisc :: ReExpr
 reifyMisc = tries [ ("reifyEval"      , reifyEval)
                   , ("reifyEither"    , reifyEither)  -- before App
+                  , ("reifyEncode"    , reifyEncode)  -- before App
                   , ("reifyApp"       , reifyApp)
                   , ("reifyLam"       , reifyLam)
                   , ("reifyPolyLet"   , reifyPolyLet)
                   , ("reifyTupCase"   , reifyTupCase)
-                  , ("reifyInline"    , reifyInline)
                   , ("reifyRules"     , reifyRules)
+                  , ("reifyInline"    , reifyInline)
                   -- Helpers:
                   , ("monoLetToRedex" , monoLetToRedex)
                   , ("typeBetaReduceR", typeBetaReduceR)
@@ -519,6 +536,7 @@ externals =
     , externC "reify-it" reifyR "apply reify"
     , externC "eval-it" evalR "apply eval"
     , externC "reify-let" reifyPolyLet "reify polymorphic let"
+    , externC "reify-app" reifyApp "reify (u v) --> reify u `appP` reify v"
     , externC "let-to-redex" monoLetToRedex "monomorphic let to redex"
     , externC "reify-eval" reifyEval "reify eval"
     , externC "reify-tup-case" reifyTupCase "reify case with unit or pair pattern"
@@ -526,8 +544,8 @@ externals =
     , externC "inline-eval" inlineEval "inline to an eval"
     , externC "type-eta-long" typeEtaLong "type-eta-long form"
     , externC "reify-poly-let" reifyPolyLet "reify polymorphic 'let' expression"
+    , externC "reify-encode" reifyEncode "type-encode under reify"
     , externC "encode-types" encodeTypesR
        "encode case expressions and constructor applications"
-    , externC "re-construct" reConstructR "encode constructor application"
-    , externC "re-case" reCaseR "encode case expression"
-    ]
+    ] ++ Enc.externals
+
