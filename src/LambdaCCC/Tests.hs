@@ -48,7 +48,7 @@ binop op a b = ConstE op :^ a :^ b
 xorE  = binop XorP
 
 infixl 6 +@
-(+@) :: Num a => Binop (EP a)
+(+@) :: Binop (EP Int)
 (+@) = binop AddP
 
 -- TODO: Use Num and Boolean classes
