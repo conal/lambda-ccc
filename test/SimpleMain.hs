@@ -1,6 +1,8 @@
 {-# LANGUAGE TypeOperators, ConstraintKinds, FlexibleContexts #-}
 {-# LANGUAGE CPP #-}
+
 {-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -fcontext-stack=34 #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
@@ -16,7 +18,7 @@
 -- 
 -- Test conversion of Haskell source code into circuits. To run:
 -- 
---   hermit Simple.hs -v0 -opt=LambdaCCC.ReifyLambda +Simple Simple.hss resume && ghc -O --make SimpleMain.hs && ./SimpleMain
+--   hermit Simple.hs -v0 -opt=LambdaCCC.ReifyLambda Simple.hss resume && ghc -O --make SimpleMain.hs && ./SimpleMain
 ----------------------------------------------------------------------
 
 import Simple
