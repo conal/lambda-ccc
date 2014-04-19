@@ -21,7 +21,7 @@
 -- 
 -- Test conversion of Haskell source code into circuits. To run:
 -- 
---   hermit Simple.hs -v0 -opt=LambdaCCC.Reify +Simple Auto.hss resume && ghc -O2 --make SimpleMain.hs && ./SimpleMain
+--   hermit Simple.hs -v0 -opt=LambdaCCC.Reify Auto.hss resume && ghc -O2 --make SimpleMain.hs && ./SimpleMain
 --   
 ----------------------------------------------------------------------
 
@@ -38,22 +38,24 @@ import GHC.Tuple ()
 import Data.Either ()
 import qualified TypeEncode.Encode
 
+#define Classes
+
 {--------------------------------------------------------------------
     Utilities to be moved elsewhere
 --------------------------------------------------------------------}
+
+#ifdef Classes
 
 class HasIf a where
   ifThenElse :: Bool -> a -> a -> a
 
 instance HasIf Bool where
-  ifThenElse i t e = condBool (i,(e,t))  -- note swap
+  ifThenElse i t e = condBool (i,(t,e))
 
 instance (HasIf a, HasIf b) => HasIf (a,b) where
-  ifThenElse i (t,t') (e,e') = (ifThenElse i t e,ifThenElse i t' e')
+  ifThenElse i (t,t') (e,e') = (ifThenElse i t e, ifThenElse i t' e')
 
--- instance (HasIf a, HasIf b) => HasIf (a,b) where
---   if i then (t,t') else (e,e') = (if i then t else e, if i then t' else e')
-
+#endif
 
 {--------------------------------------------------------------------
     Examples
@@ -148,11 +150,15 @@ halfAddH (a,b) = (h (&&), h xor)
 -- idOrNot (Left  a) = a
 -- idOrNot (Right a) = not a
 
+#ifdef Classes
+
 if1 :: Bool -> Bool
 if1 x = condBool (x,(False,True))
 
 if2 :: Bool -> Bool
 if2 x = if x then False else True
+
+#endif
 
 #if 1
 
@@ -201,6 +207,48 @@ newtype NT = NT Bool
 con5 :: NT
 con5 = NT True
 
+#if 0
+newtype Boolean = Con Bool
+
+toBool :: Boolean -> Bool
+toBool (Con b) = b
+
+fromBool :: Bool -> Boolean
+fromBool b = Con b
+
+#endif
+
+#ifdef Classes
+
+-- Type classes
+
+-- Two methods, so I can see whether I get a data constructor.
+
+class Q a where
+  size  :: a -> Int
+  depth :: a -> Int
+
+instance (Q a, Q b) => Q (a,b) where
+  size  (a,b) = size  a + size  b
+  depth (a,b) = 1 + max (depth a) (depth b)
+
+instance Q Bool where
+  size  _ = 1
+  depth _ = 1
+
+sizeDepth :: (Int,Int)
+sizeDepth = (size x, depth x) where x = (True,False)
+
+#endif
+
+plusInt :: Int -> Int -> Int
+plusInt = (+)
+
+-- Int literals
+
+int1 :: Int
+int1 = 1
+
 -- GADT
 
 data Nat = Zero | Succ Nat
@@ -225,14 +273,14 @@ tailV (_ :< as') = as'
 
 -- Reification example for exporting
 
-reified :: EP ((Bool, Bool) -> (Bool, Bool))
-reified = reifyEP halfAdd
+-- reified :: EP ((Bool, Bool) -> (Bool, Bool))
+-- reified = reifyEP halfAdd
 
 -- reified :: EP (Bool -> (Bool,Bool))
 -- reified = reifyEP bar'
 
--- reified :: EP ((Bool,Bool) -> (Bool,Bool))
--- reified = reifyEP halfAddH
+reified :: EP ((Bool,Bool) -> (Bool,Bool))
+reified = reifyEP halfAddH
 
 -- reified :: EP (Boo -> Bool)
 -- reified = reifyEP caseQ
@@ -242,3 +290,12 @@ reified = reifyEP halfAdd
 
 -- reified :: EP (Vec (Succ n) a -> Vec n a)
 -- reified = reifyEP tailV
+
+-- reified :: EP (Bool -> Bool)
+-- reified = reifyEP if2
+
+-- reified :: EP ((Bool,Bool) -> (Int,Int))
+-- reified = reifyEP (\ bb -> (size bb, depth bb))
+
+-- reified :: EP (Int -> Int)
+-- reified = reifyEP (\ i -> i + 1)
