@@ -4,4 +4,6 @@ rm -f SimpleMain *.o *.hi
 hermit Simple.hs -v0 -opt=LambdaCCC.Reify Auto.hss # resume
 ghc SimpleMain.hs && ./SimpleMain
 
-# With resume in the second line, no transformation happens
+# With resume in the second line, no transformation happens. Setting
+# observing to True in LambdaCCC.Reify shows that rewrites fire
+# without resume and don't fire with resume.
