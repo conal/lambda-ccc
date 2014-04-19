@@ -31,9 +31,10 @@ module LambdaCCC.Lambda
   , reifyE, evalE
   , vars, vars2
   , xor, condBool   -- from Prim
+  , intL
   -- Temporary less polymorphic variants.
   -- Remove when I can dig up Prim as a type in Core
-  , EP, appP, lamP, lettP , varP#, lamvP#, casevP#, eitherEP, evalEP, reifyEP
+  , EP, appP, lamP, lettP , varP#, lamvP#, casevP#, eitherEP, evalEP, reifyEP, kPrimEP, oops
   ) where
 
 import Data.Functor ((<$>))
@@ -65,7 +66,7 @@ class PrimBasics p where
   pairP :: p (a :=> b :=> a :* b)
 
 instance PrimBasics Prim where
-  unitP = LitP UnitL
+  unitP = LitP (UnitL ())
   pairP = PairP
 
 class EvalableP p where evalP :: p a -> a
@@ -453,6 +454,11 @@ kPrim = ConstE
 kLit :: HasLit a => a -> EP a
 kLit = kPrim . litP
 
+-- Temporary monomorphic specialization of kLit, until I know how to synthesize
+-- dictionaries.
+intL :: Int -> EP Int
+intL = kLit
+
 -- TODO: change the following rules back to reifyE
 
 {-# RULES
@@ -470,12 +476,18 @@ kLit = kPrim . litP
 "reify/if"      reifyEP condBool = kPrim CondBP
 "reify/encode"  reifyEP encodeF  = kPrim EncodeP
 "reify/decode"  reifyEP decodeF  = kPrim DecodeP
- 
+
 "reify/()"      reifyEP ()       = kLit  ()
 "reify/false"   reifyEP False    = kLit  False
 "reify/true"    reifyEP True     = kLit  True
 
   #-}
+
+-- For literals, I'd like to say
+-- 
+--   "reify/lit"   forall a x. HasLit a => reifyEP x = kLit  x
+-- 
+-- but I don't think GHC likes constraints here.
 
 {-# RULES
 
@@ -492,9 +504,14 @@ kLit = kPrim . litP
 -- "reify/if-pair" reifyEP cond     = reifyEP condPair
 
 condBool :: (Bool,(Bool,Bool)) -> Bool
-condBool (i,(e,t)) = (i && t) || (not i && e)  -- note then/else swap
+condBool (i,(e,t)) = (i && t) || (not i && e)
 
--- condBool (i,(e,t)) = if i then t else e
+-- TODO: 
+-- Maybe ditch condBool in favor of mux on (->).
+-- Or maybe define condBool = eval CondBP.
+-- Hm. Might need dictionary argument.
+
+-- condBool (i,(t,e)) = if i then t else e
 
 condPair :: (Bool,((a,b),(a,b))) -> (a,b)
 condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))
@@ -523,6 +540,11 @@ condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))
   #-}
 
 #endif
+
+-- Use this rule only we do all the reification we can, in order to finish generating an EP.
+
+{-# RULES "reify/oops" forall e. reifyEP e = oops  #-}
+
 
 {--------------------------------------------------------------------
     Constructors that take Addr#, for ReifyLambda
@@ -589,6 +611,12 @@ reifyEP = reifyE
 -- If reifyEP doesn't get inlined, change the reifyE prim rules below to
 -- reifyEP.
 
+kPrimEP :: Prim a -> EP a
+kPrimEP = kPrim
+
+oops :: EP a
+oops = kPrim OopsP
+
 {--------------------------------------------------------------------
     Move elsewhere
 --------------------------------------------------------------------}
@@ -598,19 +626,23 @@ reifyEP = reifyE
 -- instance Eq1' Prim where (====) = (===)
 
 instance Eq1' Prim where
-  LitP a  ==== LitP b = a ==== b
-  NotP    ==== NotP   = True
-  AndP    ==== AndP   = True
-  OrP     ==== OrP    = True
-  XorP    ==== XorP   = True
-  AddP    ==== AddP   = True
-  ExlP    ==== ExlP   = True
-  ExrP    ==== ExrP   = True
-  PairP   ==== PairP  = True
-  CondBP  ==== CondBP = True
-  _       ==== _      = False
+  LitP a  ==== LitP b  = a ==== b
+  NotP    ==== NotP    = True
+  AndP    ==== AndP    = True
+  OrP     ==== OrP     = True
+  XorP    ==== XorP    = True
+  AddP    ==== AddP    = True
+  ExlP    ==== ExlP    = True
+  ExrP    ==== ExrP    = True
+  PairP   ==== PairP   = True
+  CondBP  ==== CondBP  = True
+  EncodeP ==== EncodeP = True
+  DecodeP ==== DecodeP = True
+  OopsP   ==== OopsP   = True
+  _       ==== _       = False
 
 instance Eq1' Lit where
-  UnitL   ==== UnitL   = True
+  UnitL x ==== UnitL y = x == y
   BoolL x ==== BoolL y = x == y
+  IntL  x ==== IntL  y = x == y
   _       ==== _       = False

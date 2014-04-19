@@ -4,7 +4,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE UndecidableInstances #-} -- see below
+
 {-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -fcontext-stack=34 #-}  -- for N32
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
@@ -32,7 +34,7 @@ import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
 import Data.Constraint (Dict(..))
 
 import Circat.Category hiding (CondCat(..))
-import Circat.Classes (BoolCat(not,and,or))
+import Circat.Classes (BoolCat(not,and,or),MuxCat(..),AddCat'(..))
 import qualified Circat.Classes as C
 import Circat.Circuit ((:>),IsSourceP,constC) -- :( . Disentangle!
 
@@ -50,12 +52,16 @@ import LambdaCCC.ShowUtils (Show'(..))
 
 -- | Literals
 data Lit :: * -> * where
-  UnitL  :: Lit ()
+  UnitL  :: Unit -> Lit Unit
   BoolL  :: Bool -> Lit Bool
+  IntL   :: Int  -> Lit Int
+
+-- The Unit argument is just for uniformity
 
 instance Eq' (Lit a) (Lit b) where
-  UnitL   === UnitL   = True
+  UnitL x === UnitL y = x == y
   BoolL x === BoolL y = x == y
+  IntL  x === IntL  y = x == y
   _       === _       = False
 
 instance Eq (Lit a) where (==) = (===)
@@ -63,27 +69,31 @@ instance Eq (Lit a) where (==) = (===)
 -- | Convenient 'Lit' construction
 class HasLit a where toLit :: a -> Lit a
 
-instance HasLit ()   where toLit = const UnitL
+instance HasLit ()   where toLit = UnitL
 instance HasLit Bool where toLit = BoolL
+instance HasLit Int  where toLit = IntL
 
 -- Proofs
 
 litHasShow :: Lit a -> Dict (Show a)
-litHasShow UnitL     = Dict
+litHasShow (UnitL _) = Dict
 litHasShow (BoolL _) = Dict
+litHasShow (IntL  _) = Dict
 
 #define LSh (litHasShow -> Dict)
 
 -- instance Show (Lit a) where
 --   showsPrec p UnitL     = showsPrec p ()
 --   showsPrec p (BoolL b) = showsPrec p b
+--   showsPrec p (IntL  b) = showsPrec p b
 
 instance Show (Lit a) where
   showsPrec p l@LSh = showsPrec p (eval l)
 
 litIsSourceP :: Lit a -> Dict (IsSourceP a)
-litIsSourceP UnitL     = Dict
+litIsSourceP (UnitL _) = Dict
 litIsSourceP (BoolL _) = Dict
+litIsSourceP (IntL  _) = Dict
 
 #define LSo (litIsSourceP -> Dict)
 
@@ -94,8 +104,9 @@ litSS l | (Dict,Dict) <- (litHasShow l,litIsSourceP l) = Dict
 
 instance Evalable (Lit a) where
   type ValT (Lit a) = a
-  eval UnitL     = ()
-  eval (BoolL b) = b
+  eval (UnitL x) = x
+  eval (BoolL x) = x
+  eval (IntL  x) = x
 
 instance HasUnitArrow (->) Lit where
   unitArrow x = const (eval x)
@@ -121,7 +132,10 @@ data Prim :: * -> * where
   CondBP        :: Prim (Bool :* (Bool :* Bool) -> Bool)  -- cond on Bool
   EncodeP       :: Prim (a -> b)
   DecodeP       :: Prim (b -> a)
+  OopsP         :: Prim a
   -- More here
+
+-- TODO: Curry CondBP to match AndP, etc.
 
 -- Was:
 -- 
@@ -142,6 +156,7 @@ instance Eq' (Prim a) (Prim b) where
   CondBP  === CondBP  = True
   EncodeP === EncodeP = True
   DecodeP === DecodeP = True
+  OopsP   === OopsP   = True
   _       === _       = False
 
 instance Eq (Prim a) where (==) = (===)
@@ -158,28 +173,30 @@ instance Show (Prim a) where
   showsPrec _ InrP     = showString "Right"
   showsPrec _ ExrP     = showString "exr"
   showsPrec _ PairP    = showString "(,)"
-  showsPrec _ CondBP   = showString "cond"
+  showsPrec _ CondBP   = showString "condBool"
   showsPrec _ EncodeP  = showString "encode"
   showsPrec _ DecodeP  = showString "decode"
+  showsPrec _ OopsP    = showString "<oops>"
 
 instance Show' Prim where showsPrec' = showsPrec
 
-instance (BiCCC k, BoolCat k, EncodeCat k, HasUnitArrow k Lit) =>
+instance ( BiCCC k, BoolCat k, MuxCat k, EncodeCat k, AddCat' k Int, HasUnitArrow k Lit
+         ) =>
          HasUnitArrow k Prim where
-  unitArrow NotP    = unitFun not
-  unitArrow AndP    = unitFun (curry and)
-  unitArrow OrP     = unitFun (curry or)
-  unitArrow XorP    = unitFun (curry C.xor)
-  unitArrow ExlP    = unitFun exl
-  unitArrow ExrP    = unitFun exr
-  unitArrow InlP    = unitFun inl
-  unitArrow InrP    = unitFun inr
-  unitArrow PairP   = unitFun (curry id)
-  unitArrow EncodeP = unitFun encode
-  unitArrow DecodeP = unitFun decode
-  -- unitArrow CondBP= condC
-  -- unitArrow AddP  = curry (namedC "add")
   unitArrow (LitP l) = unitArrow l
+  unitArrow NotP     = unitFun not
+  unitArrow AndP     = unitFun (curry and)
+  unitArrow OrP      = unitFun (curry or)
+  unitArrow XorP     = unitFun (curry C.xor)
+  unitArrow AddP     = unitFun (curry add)
+  unitArrow ExlP     = unitFun exl
+  unitArrow ExrP     = unitFun exr
+  unitArrow InlP     = unitFun inl
+  unitArrow InrP     = unitFun inr
+  unitArrow PairP    = unitFun (curry id)
+  unitArrow EncodeP  = unitFun encode
+  unitArrow DecodeP  = unitFun decode
+  unitArrow CondBP   = unitFun mux
   unitArrow p        = error $ "unitArrow: not yet handled: " ++ show p
 
 --     Variable `k' occurs more often than in the instance head
@@ -199,9 +216,10 @@ instance Evalable (Prim a) where
   eval InlP          = Left
   eval InrP          = Right
   eval PairP         = (,)
-  eval CondBP        = cond
+  eval CondBP        = mux
   eval EncodeP       = encode
   eval DecodeP       = decode
+  eval OopsP         = error "eval on Prim: Oops!"
 
 -- TODO: replace fst with exl, etc.
 
@@ -225,10 +243,10 @@ xor = (/=)
 condBool :: (Bool,(Bool,Bool)) -> Bool
 condBool (i,(e,t)) = (i && t) || (not i && e)  -- note then/else swap
 
--- | Conditional, uncurried and with then/else swapped (for trie consistency)
-cond :: (Bool,(a,a)) -> a
-cond (i,(e,t)) = if i then t else e
--- {-# NOINLINE cond #-}
+-- -- | Conditional, uncurried and with then/else swapped (for trie consistency)
+-- cond :: (Bool,(a,a)) -> a
+-- cond (i,(e,t)) = if i then t else e
+-- -- {-# NOINLINE cond #-}
 
 litP :: HasLit a => a -> Prim a
 litP = LitP . toLit

@@ -340,13 +340,19 @@ instance BoolCat (:->) where
 
 -- etc.
 
+instance MuxCat (:->) where
+  mux = prim CondBP
+
+instance AddCat' (:->) Int where
+  add = uncurry (prim AddP)
+
 -- TODO: reconcile curried vs uncurried, eliminating the conversions here.
 
 {--------------------------------------------------------------------
     Experiment: convert to other CCC
 --------------------------------------------------------------------}
 
-convertC :: (BiCCC k, BoolCat k, HasUnitArrow k Lit) =>
+convertC :: (BiCCC k, BoolCat k, MuxCat k, HasUnitArrow k Lit) =>
             (a :-> b) -> (a `k` b)
 convertC Id           = id
 convertC (g :. f)     = convertC g . convertC f
@@ -364,12 +370,13 @@ convertC Apply        = apply
 convertC (Curry   h)  = curry   (convertC h)
 convertC (Uncurry f)  = uncurry (convertC f)
 
-convertP :: (BiCCC k, BoolCat k) =>
+convertP :: (BiCCC k, BoolCat k, MuxCat k) =>
             Prim (a :=> b) -> (a `k` b)
 convertP NotP  = not
 convertP AndP  = curry and
 convertP OrP   = curry or
 convertP XorP  = curry xor
+convertP CondBP = mux
 convertP ExlP  = exl
 convertP ExrP  = exr
 convertP PairP = curry id
