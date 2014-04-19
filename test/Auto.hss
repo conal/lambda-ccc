@@ -6,9 +6,14 @@ set-pp-type Omit
 
 try unshadow
 
-try (any-bu encode-types)
 try reify-module
-try (repeat (any-td reify-misc))
+try (repeat (any-td (repeat reify-misc)))
+
 down                                    -- To definitions
+
+-- Use this rule only we do all the reification we can,
+-- in order to finish generating an EP.
+-- 
+--   any-td (apply-rule "reify/oops" ; cleanup-unfold)
 
 try unshadow
