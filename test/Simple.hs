@@ -38,7 +38,7 @@ import GHC.Tuple ()
 import Data.Either ()
 import qualified TypeEncode.Encode
 
-#define Classes
+-- #define Classes
 
 {--------------------------------------------------------------------
     Utilities to be moved elsewhere
