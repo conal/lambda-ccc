@@ -387,7 +387,7 @@ inlineEval = inAppTys (inlineR >>> acceptR isTyLamsEval) >>> tryR simplifyE
 
 -- Inline if not of type EP t
 inlineNonE :: ReExpr
-inlineNonE = rejectR (isEP . exprType) >>>
+inlineNonE = rejectTypeR isEP >>>
              inAppTys inlineR -- >>> tryR simplifyE
 
 -- The simplifyE is for beta-reducing type applications.
