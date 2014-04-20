@@ -142,6 +142,14 @@ letFloatToProg = arr (flip ProgCons ProgNil) >>> tryR letFloatTopR
 concatProgs :: [CoreProg] -> CoreProg
 concatProgs = bindsToProg . concatMap progToBinds
 
+-- | Reject if condition holds. Opposite of 'acceptR'
+rejectR :: Monad m => (a -> Bool) -> Rewrite c m a
+rejectR f = acceptR (not . f)
+
+-- | Reject if condition holds on an expression's type.
+rejectTypeR :: Monad m => (Type -> Bool) -> Rewrite c m CoreExpr
+rejectTypeR f = rejectR (f . exprType)
+
 {--------------------------------------------------------------------
     Reification
 --------------------------------------------------------------------}
@@ -277,11 +285,15 @@ reifyLam = do Lam v e <- unReify
 
 -- Pass through unless an IO
 unlessTC :: String -> ReExpr
-unlessTC name = acceptR (not . hasTC name . exprType)
+unlessTC name = rejectTypeR (hasTC name)
+
+-- Pass through unless a dictionary
+unlessDict :: ReExpr
+unlessDict = rejectTypeR isDictTy
 
 -- Pass through unless an eval application
 unlessEval :: ReExpr
-unlessEval = acceptR (not . isEval)
+unlessEval = rejectR isEval
 
 hasTC :: String -> Type -> Bool
 hasTC name (TyConApp tc [_]) = uqName (tyConName tc) == name
@@ -320,7 +332,7 @@ reifyMonoLet =
 -- Fail if e is already an eval or if it has IO or EP type.
 reifyRhs :: String -> ReExpr
 reifyRhs nm =
-  unlessTC "IO" >>> unlessTC epS >>> unlessEval >>>
+  unlessDict >>> unlessTC "IO" >>> unlessTC epS >>> unlessEval >>>
   typeEtaLong >>>
   do (tvs,body) <- collectTyBinders <$> idR
      eTy        <- epOf (exprType body)
@@ -353,7 +365,7 @@ inTyLams r = r'
 -- If there are any type lambdas, skip over them.
 reifyRhs :: ReExpr
 reifyRhs = inTyLams $
-             unlessEval >>> unlessTC "IO" >>> unlessTC epS >>>
+             unlessDict >>> unlessEval >>> unlessTC "IO" >>> unlessTC epS >>>
              reifyR >>> evalR
 
 reifyDef :: RewriteH CoreBind
@@ -375,7 +387,7 @@ inlineEval = inAppTys (inlineR >>> acceptR isTyLamsEval) >>> tryR simplifyE
 
 -- Inline if not of type EP t
 inlineNonE :: ReExpr
-inlineNonE = acceptR (not . isEP . exprType) >>>
+inlineNonE = rejectR (isEP . exprType) >>>
              inAppTys inlineR -- >>> tryR simplifyE
 
 -- The simplifyE is for beta-reducing type applications.
