@@ -20,13 +20,14 @@
 -- Reify a Core expression into GADT
 ----------------------------------------------------------------------
 
-#define OnlyLifted
+-- #define OnlyLifted
 
 module LambdaCCC.Reify (plugin) where
 
 import Data.Functor ((<$>))
 import Control.Monad ((<=<))
 import Control.Arrow (Arrow(..),(>>>))
+import Data.List (isPrefixOf)
 
 import HERMIT.Monad (newIdH)
 import HERMIT.Core (localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
@@ -36,8 +37,9 @@ import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary
   ( observeR, callT, callNameT
-  , rulesR,inlineR,simplifyR,letFloatLetR,letFloatTopR,letElimR
+  , rulesR,inlineR,inlineMatchingPredR, simplifyR,letFloatLetR,letFloatTopR,letElimR
   , betaReduceR, letNonRecSubstSafeR
+  , caseReduceUnfoldR
   -- , unshadowR   -- May need this one later
   )
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
@@ -287,13 +289,15 @@ reifyLam = do Lam v e <- unReify
 unlessTC :: String -> ReExpr
 unlessTC name = rejectTypeR (hasTC name)
 
--- Pass through unless a dictionary
+-- Pass through unless a dictionary construction
 unlessDict :: ReExpr
-unlessDict = rejectTypeR isDictTy
+unlessDict = rejectTypeR (isDictTy . snd . splitFunTys . dropForAlls)
 
 -- Pass through unless an eval application
 unlessEval :: ReExpr
 unlessEval = rejectR isEval
+
+-- TODO: rename "unless" to "reject"
 
 hasTC :: String -> Type -> Bool
 hasTC name (TyConApp tc [_]) = uqName (tyConName tc) == name
@@ -479,14 +483,38 @@ typeBetaReduceR :: ReExpr
 typeBetaReduceR = do (isTyLam -> True) `App` _ <- idR
                      betaReduceR >>> letNonRecSubstSafeR
 
--- Given reifyEP (m d), if m is a variable and d is a dictionary, then anytdR inline >>> simplify.
+-- Given reifyEP (m d), if m is a variable and d is a dictionary,
+-- then anytdR inline >>> simplify.
 reifyMethod :: ReExpr
-reifyMethod = inReify $
-              do (_, _,[d]) <- callSplitT
-                 guardMsg (isDictTy (exprType d)) "non-dictionary"
-                 anytdE inlineR >>> simplifyE
+reifyMethod = inReify inlineMethod
 
--- Note: Given reify (m d a .. z), we'll use reifyApp to whittle down to reify (m d)
+inlineMethod :: ReExpr
+inlineMethod = do (Var _, _,[d]) <- callSplitT
+                  guardMsg (isDictTy (exprType d)) "non-dictionary"
+                  anytdE inlineR >>> simplifyE
+
+-- TODO: Replace reifyMethod by inlineDict below.
+
+dictRelated :: Type -> Bool
+dictRelated ty = any isDictTy (ran:doms)
+ where
+   (doms,ran) = splitFunTys (dropForAlls ty)
+
+-- | Inline dictionary maker or consumer
+inlineDict :: ReExpr
+inlineDict = inlineMatchingPredR (dictRelated . varType)
+
+inlineWrapper :: ReExpr
+inlineWrapper = inlineMatchingPredR (("$W" `isPrefixOf`) . uqVarName)
+
+-- Note: Given reify (m d a .. z), reifyApp whittles down to reify (m d).
+
+-- TODO: Fix reifyMethod to work even when type arguments come after the
+-- dictionary. I didn't think it could happen, but it does with fmap on
+-- size-typed vectors. I think I want inlining *only* for the method and
+-- dictionary, unlike what I'm doing above.
+-- 
+-- Idea: inline any variable whose type consumes or produces a dictionary.
 
 -- reify of case on 0-tuple or 2-tuple
 reifyTupCase :: ReExpr
@@ -590,24 +618,26 @@ reifyCase :: ReExpr
 reifyCase = inReify reCaseR
 
 reifyMisc :: ReExpr
-reifyMisc = tries [ ("reifyRules"     , reifyRules)     -- before App
-                  , ("reifyEval"      , reifyEval)      -- ''
-                  , ("reifyEither"    , reifyEither)    -- ''
-                  , ("reifyConstruct" , reifyConstruct) -- ''
-                  , ("reifyMethod"    , reifyMethod)    -- ''
-                  , ("reifyCase"      , reifyCase)
-                  , ("reifyCaseWild"  , reifyCaseWild)
-                  , ("reifyApp"       , reifyApp)
-                  , ("reifyLam"       , reifyLam)
-                  , ("reifyMonoLet"   , reifyMonoLet)
-                  , ("reifyPolyLet"   , reifyPolyLet)
-                  , ("reifyTupCase"   , reifyTupCase)
-                  , ("reifyInline"    , reifyInline)
-                  , ("reifyCast"      , reifyCast)
-                  , ("reifyIntLit"    , reifyIntLit)
+reifyMisc = tries [ ("reifyRules"       , reifyRules)     -- before App
+                  , ("reifyEval"        , reifyEval)      -- ''
+                  , ("reifyEither"      , reifyEither)    -- ''
+                  , ("reifyConstruct"   , reifyConstruct) -- ''
+                  , ("reifyMethod"      , reifyMethod)    -- ''
+                  , ("reifyCase"        , reifyCase)
+                  , ("reifyCaseWild"    , reifyCaseWild)
+                  , ("reifyApp"         , reifyApp)
+                  , ("reifyLam"         , reifyLam)
+                  , ("reifyMonoLet"     , reifyMonoLet)
+                  , ("reifyPolyLet"     , reifyPolyLet)
+                  , ("reifyTupCase"     , reifyTupCase)
+                  , ("reifyInline"      , reifyInline)
+                  , ("reifyCast"        , reifyCast)
+                  , ("reifyIntLit"      , reifyIntLit)
                   -- Helpers:
-                  , ("typeBetaReduceR", typeBetaReduceR)
-                  , ("letElim"        , letElimR)  -- Note
+                  , ("typeBetaReduceR"  , typeBetaReduceR)
+                  , ("letElim"          , letElimR)       -- Note
+                  , ("caseReduceUnfoldR", caseReduceUnfoldR True)
+                  , ("inlineWrapper"    , inlineWrapper)
                   ]
 
 -- Note: letElim is handy with reifyPolyLet to eliminate the "foo = eval
@@ -651,12 +681,15 @@ externals =
     , externC "reify-construct" reifyApp "re-construct under reify"
     , externC "reify-case" reifyCase "re-case under reify"
     , externC "reify-method" reifyMethod "reify of a method application"
+    , externC "inline-method" inlineMethod "inline method application"
     , externC "reify-cast" reifyCast "reify a cast"
     , externC "reify-int-literal" reifyIntLit "reify an Int literal"
     , externC "reify-eval" reifyEval "reify eval"
     , externC "reify-tup-case" reifyTupCase "reify case with unit or pair pattern"
     , externC "reify-module" reifyModGuts "reify all top-level definitions"
     , externC "inline-eval" inlineEval "inline to an eval"
+    , externC "inline-dict" inlineDict "inline a dictionary-related var"
+    , externC "inline-wrapper" inlineWrapper "inline a datacon wrapper"
     , externC "type-eta-long" typeEtaLong "type-eta-long form"
     , externC "reify-poly-let" reifyPolyLet "reify polymorphic 'let' expression"
 --     , externC "reify-encode" reifyEncode "type-encode under reify"
