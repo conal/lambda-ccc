@@ -4,6 +4,8 @@ set-pp-width 80
 -- set-pp-type Show
 set-pp-type Omit
 
+try simplify
+
 try unshadow
 
 try reify-module

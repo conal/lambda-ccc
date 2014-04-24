@@ -1,6 +1,6 @@
 Name:               lambda-ccc
 Version:            0.2
-Cabal-Version:      >= 1.6
+Cabal-Version:      >= 1.8
 Synopsis:           Convert lambda expressions to CCC combinators
 Category:           categories
 Description:        Convert lambda expressions to CCC combinators
@@ -48,3 +48,10 @@ Library
 
   Other-Modules:
                     LambdaCCC.Tests
+
+-- Test-Suite test1
+--     hs-Source-Dirs:   test
+--     type:       exitcode-stdio-1.0
+--     main-is:    SimpleMain.hs
+--     build-depends: base, circat, lambda-ccc
+

@@ -21,7 +21,7 @@
 -- 
 -- Test conversion of Haskell source code into circuits. To run:
 -- 
---   hermit Simple.hs -v0 -opt=LambdaCCC.Reify Auto.hss resume && ghc -O2 --make SimpleMain.hs && ./SimpleMain
+--   hermit Simple.hs -v0 -opt=LambdaCCC.Reify Auto.hss resume && ghc SimpleMain.hs && ./SimpleMain
 --   
 ----------------------------------------------------------------------
 
@@ -31,12 +31,6 @@ import Prelude
 
 import LambdaCCC.Lambda (EP,reifyEP,xor,condBool)
 import LambdaCCC.Lambda (condBool)  -- TEMP
-
--- Needed for resolving names. Is there an alternative?
-import qualified LambdaCCC.Lambda
-import GHC.Tuple ()
-import Data.Either ()
-import qualified TypeEncode.Encode
 
 -- #define Classes
 
@@ -229,7 +223,7 @@ class Q a where
   depth :: a -> Int
 
 instance (Q a, Q b) => Q (a,b) where
-  size  (a,b) = size  a + size  b
+  size  (a,b) = size a + size b
   depth (a,b) = 1 + max (depth a) (depth b)
 
 instance Q Bool where
@@ -273,14 +267,14 @@ tailV (_ :< as') = as'
 
 -- Reification example for exporting
 
--- reified :: EP ((Bool, Bool) -> (Bool, Bool))
--- reified = reifyEP halfAdd
+reified :: EP ((Bool, Bool) -> (Bool, Bool))
+reified = reifyEP halfAdd
 
 -- reified :: EP (Bool -> (Bool,Bool))
 -- reified = reifyEP bar'
 
-reified :: EP ((Bool,Bool) -> (Bool,Bool))
-reified = reifyEP halfAddH
+-- reified :: EP ((Bool,Bool) -> (Bool,Bool))
+-- reified = reifyEP halfAddH
 
 -- reified :: EP (Boo -> Bool)
 -- reified = reifyEP caseQ

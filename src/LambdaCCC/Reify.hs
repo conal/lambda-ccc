@@ -20,7 +20,7 @@
 -- Reify a Core expression into GADT
 ----------------------------------------------------------------------
 
--- #define OnlyLifted
+#define OnlyLifted
 
 module LambdaCCC.Reify (plugin) where
 
@@ -464,24 +464,64 @@ reifyEncodeF = unReify >>>
 reifyCodeF :: ReExpr
 reifyCodeF = reifyEncodeF <+ reifyDecodeF
 
-#endif
-
 -- TODO: refactor
 
+#endif
+
+#if 1
+
+reifyCast :: ReExpr
+
+-- reifyCast = unReify >>>
+--             do e'@(Cast e co) <- idR
+--                re <- reifyOf e
+--                appsE "castEP" [exprType e,exprType e'] [Coercion co,re]
+
+-- NOTE: wasn't working with my Cast constructor, so I'm using castEP', which
+-- wraps to use unsafeCoerce. Keep trying.
+
+-- reifyCast = unReify >>>
+--             do e'@(Cast e _) <- idR
+--                re <- reifyOf e
+--                let ty  = exprType e
+--                    ty' = exprType e'
+--                appsE "castEP" [ty,ty']
+--                  [mkEqBox (mkUnivCo Nominal ty ty') `App` re]
+
+-- reifyCast = (unReify &&& arr exprType) >>>
+--             do (Cast e _, ty) <- idR
+--                re <- reifyOf e
+--                apps' "Unsafe.Coerce.unsafeCoerce" [exprType re,ty] [re]
+
+-- Equivalent but a bit prettier:
+reifyCast = unReify >>>
+            do e'@(Cast e _) <- idR
+               re <- reifyOf e
+               appsE "castEP'" [exprType e,exprType e'] [re]
+
+#else
 -- reify (e |> co)  -->  reify (encode e)
 reifyCast :: ReExpr
-reifyCast = inReify $ 
+reifyCast = inReify $
               do e'@(Cast e _) <- idR
                  let ty  = exprType e
                      ty' = exprType e'
                  encodeOf ty ty' e
+#endif
+
+-- -- This version cheats by dropping the cast entirely.
+-- unCast :: ReExpr
+-- unCast = do (Cast e _) <- idR
+--             return e
+
+-- Also try UnivCo
 
 -- TODO: rework reifyCast so that we can recognize and and eliminate composed
 -- inverses.
 
-typeBetaReduceR :: ReExpr
-typeBetaReduceR = do (isTyLam -> True) `App` _ <- idR
-                     betaReduceR >>> letNonRecSubstSafeR
+-- typeBetaReduceR :: ReExpr
+-- typeBetaReduceR = do (isTyLam -> True) `App` _ <- idR
+--                      betaReduceR >>> letNonRecSubstSafeR
 
 -- Given reifyEP (m d), if m is a variable and d is a dictionary,
 -- then anytdR inline >>> simplify.
@@ -634,7 +674,8 @@ reifyMisc = tries [ ("reifyRules"       , reifyRules)     -- before App
                   , ("reifyCast"        , reifyCast)
                   , ("reifyIntLit"      , reifyIntLit)
                   -- Helpers:
-                  , ("typeBetaReduceR"  , typeBetaReduceR)
+                  -- , ("typeBetaReduceR"  , typeBetaReduceR)
+                  -- , ("unCast"           , unCast)   -- experimental
                   , ("letElim"          , letElimR)       -- Note
                   , ("caseReduceUnfoldR", caseReduceUnfoldR True)
                   , ("inlineWrapper"    , inlineWrapper)

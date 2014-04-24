@@ -18,11 +18,10 @@
 -- 
 -- Test conversion of Haskell source code into circuits. To run:
 -- 
---   hermit Simple.hs -v0 -opt=LambdaCCC.ReifyLambda Simple.hss resume && ghc -O --make SimpleMain.hs && ./SimpleMain
+--   hermit Simple.hs -v0 -opt=LambdaCCC.ReifyLambda Auto.hss resume && ghc SimpleMain.hs && ./SimpleMain
 ----------------------------------------------------------------------
 
 import Simple
--- import Squimple (reified)
 
 #define MakeCircuit
 

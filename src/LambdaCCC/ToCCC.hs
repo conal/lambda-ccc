@@ -100,6 +100,7 @@ convert (Var v)      = varL v
 convert (s :^ t)     = convert s @@ convert t
 convert (Lam p e)    = lamL p (convert e)
 convert (Either f g) = convert f |||| convert g
+convert (Cast e)     = convert e
 
 -- | Rewrite a lambda expression via CCC combinators
 toCCC :: BiCCCC k p => E p a -> (Unit `k` a)
