@@ -19,17 +19,23 @@
 -- Convert lambda expressions to CCC combinators
 ----------------------------------------------------------------------
 
-module LambdaCCC.ToCCC (toCCC, toCCC', HasLambda(..)) where
+#define PlainConvert
+
+module LambdaCCC.ToCCC
+  ( toCCC, toCCC'
+#ifndef PlainConvert
+  , HasLambda(..)
+#endif
+  ) where
 
 import Prelude hiding (id,(.),curry,uncurry,const,not,and,or)
 
 import Data.Functor ((<$>))
 import Control.Monad (mplus)
 import Data.Maybe (fromMaybe)
+-- import Data.Coerce (Coercible,coerce)
 
 import Data.Proof.EQ
-
--- #define PlainConvert
 
 import LambdaCCC.Misc
 import LambdaCCC.Lambda (E(..),V,Pat(..))
@@ -58,6 +64,10 @@ convert (Either f g) p = curry ((convert' f ||| convert' g) . distl)
  where
    convert' :: E prim (c :=> d) -> ((a :* c) `k` d)
    convert' h = uncurry (convert h p)
+convert (Cast a)     p = convert a p
+
+-- coerce' :: Coercible b c => f b -> f c
+-- coerce' = coerce
 
 #else
 
@@ -71,6 +81,8 @@ class HasLambda e where
   (@@)   :: e (a :=> b) -> e a -> e b
   lamL   :: Pat a -> e b -> e (a :=> b)
   (||||) :: e (a -> c) -> e (b -> c) -> e (a :+ b -> c)
+
+-- TODO: coerceL
 
 instance HasLambda (E p) where
   type PrimT (E p) = p
@@ -100,7 +112,7 @@ convert (Var v)      = varL v
 convert (s :^ t)     = convert s @@ convert t
 convert (Lam p e)    = lamL p (convert e)
 convert (Either f g) = convert f |||| convert g
-convert (Cast e)     = convert e
+convert (Cast e)     = coerce (convert e)
 
 -- | Rewrite a lambda expression via CCC combinators
 toCCC :: BiCCCC k p => E p a -> (Unit `k` a)
