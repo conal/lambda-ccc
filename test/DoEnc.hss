@@ -1,0 +1,12 @@
+set-pp-renderer ascii
+set-pp-width 80
+set-pp-type     Show
+set-pp-coercion Abstract
+
+rhs-of x6
+
+-- try post-unfold
+
+-- any-td (repeat reify-misc)
+
+-- top ; lint-module ; binding-of x6
