@@ -29,6 +29,10 @@ import Control.Monad ((<=<))
 import Control.Arrow (Arrow(..),(>>>))
 import Data.List (isPrefixOf)
 
+-- GHC
+-- Oops! Not exported.
+-- import Coercion (unSubCo_maybe)
+
 import HERMIT.Monad (newIdH)
 import HERMIT.Core (localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
 import HERMIT.External (External,external,ExternalName)
@@ -39,7 +43,7 @@ import HERMIT.Dictionary
   ( observeR, callT, callNameT
   , rulesR,inlineR,inlineMatchingPredR, simplifyR,letFloatLetR,letFloatTopR,letElimR
   , betaReduceR, letNonRecSubstSafeR
-  , caseReduceUnfoldR
+  , unfoldR, caseReduceUnfoldR, castFloatAppR, bashR,bashExtendedWithR
   -- , unshadowR   -- May need this one later
   )
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
@@ -77,6 +81,25 @@ isTyLam :: CoreExpr -> Bool
 isTyLam (Lam v _) = isTyVar v
 isTyLam _         = False
 
+-- Copied from Coercion in GHC 7.8.2. Sadly, not exported.
+
+-- Not yet doing what I want.
+#if 0
+-- if co is Nominal, returns it; otherwise, unwraps a SubCo; otherwise, fails
+unSubCo_maybe :: Coercion -> Maybe Coercion
+unSubCo_maybe (SubCo co)  = Just co
+unSubCo_maybe (Refl _ ty) = Just $ Refl Nominal ty
+unSubCo_maybe (TyConAppCo Representational tc coes)
+  = do { cos' <- mapM unSubCo_maybe coes
+       ; return $ TyConAppCo Nominal tc cos' }
+unSubCo_maybe (UnivCo Representational ty1 ty2) = Just $ UnivCo Nominal ty1 ty2
+  -- We do *not* promote UnivCo Phantom, as that's unsafe.
+  -- UnivCo Nominal is no more unsafe than UnivCo Representational
+unSubCo_maybe co
+  | Nominal <- coercionRole co = Just co
+unSubCo_maybe _ = Nothing
+#endif
+
 {--------------------------------------------------------------------
     HERMIT utilities
 --------------------------------------------------------------------}
@@ -90,12 +113,17 @@ observeR' :: InCoreTC t => String -> RewriteH t
 observeR' | observing = observeR
           | otherwise = const idR
 
-tries :: (InCoreTC a, InCoreTC t) => [(String,TransformH a t)] -> TransformH a t
+tries :: (InCoreTC a, InCoreTC t) => [TransformH a t] -> TransformH a t
 tries = foldr (<+) ({- observeR' "Unhandled" >>> -} fail "unhandled")
-      . map (uncurry labeled)
 
-labeled :: InCoreTC t => String -> Unop (TransformH a t)
-labeled label = (>>> observeR' label)
+triesL :: (InCoreTC a, InCoreTC t) => [(String,TransformH a t)] -> TransformH a t
+triesL = tries . map labeled
+
+-- triesL = foldr (<+) ({- observeR' "Unhandled" >>> -} fail "unhandled")
+--              . map (uncurry labeled)
+
+labeled :: InCoreTC t => (String, TransformH a t) -> TransformH a t
+labeled (label,trans) = trans >>> observeR' label
 
 -- mkVarName :: MonadThings m => Transform c m Var (CoreExpr,Type)
 -- mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType
@@ -307,9 +335,6 @@ isEval :: CoreExpr -> Bool
 isEval (App (App (Var v) (Type _)) _) = uqVarName v == evalS
 isEval _                              = False
 
-isTyLamsEval :: CoreExpr -> Bool
-isTyLamsEval = isEval . snd . collectTyBinders
-
 reifyPolyLet :: ReExpr
 reifyPolyLet = unReify >>>
                do Let (NonRec (isForAllTy . varType -> True) _) _ <- idR
@@ -385,14 +410,15 @@ reifyModGuts = modGutsR reifyProg
 
 -- TODO: How to float the local bindings as well?
 
--- Inline if doing so yields an eval
-inlineEval :: ReExpr
-inlineEval = inAppTys (inlineR >>> acceptR isTyLamsEval) >>> tryR simplifyE
+inlineR' :: ReExpr
+inlineR' = do Var nm <- idR
+              _ <- observeR' ("inline " ++ uqVarName nm)
+              inlineR
 
 -- Inline if not of type EP t
 inlineNonE :: ReExpr
 inlineNonE = rejectTypeR isEP >>>
-             inAppTys inlineR -- >>> tryR simplifyE
+             inAppTys inlineR' -- >>> tryR simplifyE
 
 -- The simplifyE is for beta-reducing type applications.
 
@@ -403,6 +429,36 @@ inReify = reifyR <~ unReify
 reifyInline :: ReExpr
 reifyInline = inReify inlineNonE
 -- reifyInline = inReify inlineEval
+
+-- TODO: drop the non-E test, since we're already under a reify.
+
+unfoldSimplify :: ReExpr
+unfoldSimplify = unfoldR >>> postUnfold
+
+-- bashE :: ReExpr
+-- bashE = extractR simplifyR -- bashR
+
+postUnfold :: ReExpr
+postUnfold = extractR (bashExtendedWithR (promoteR <$> simplifies))
+
+-- | Simplifications to apply at the start and to the result of each unfolding
+ourSimplifies :: [ReExpr]
+ourSimplifies = map labeled
+             [ ("inline-wrapper", inlineWrapper)
+             , ("inline-dict"   , inlineDict)
+             ]
+
+-- | Simplifications to apply at the start and to the result of each unfolding
+simplifies :: [ReExpr]
+simplifies = map labeled
+             [ ("let-elim"          , letElimR)       -- Note
+             , ("case-reduce-unfold", caseReduceUnfoldR True)
+             , ("cast-float-app"    , castFloatAppR)
+          -- , ("type-beta-reduce"  , typeBetaReduceR)  -- was looping, I think
+             ] ++ ourSimplifies
+
+reifyUnfold :: ReExpr
+reifyUnfold = inReify unfoldSimplify
 
 -- reifyEncode :: ReExpr
 -- reifyEncode = inReify encodeTypesR
@@ -477,16 +533,23 @@ reifyCast :: ReExpr
 --                re <- reifyOf e
 --                appsE "castEP" [exprType e,exprType e'] [Coercion co,re]
 
--- NOTE: wasn't working with my Cast constructor, so I'm using castEP', which
--- wraps to use unsafeCoerce. Keep trying.
+-- What I want, but unSubCo_maybe fails:
 
 -- reifyCast = unReify >>>
+--             do e'@(Cast e co) <- idR
+--                case unSubCo_maybe co of
+--                  Nothing  -> fail "Couldn't unSubCo"
+--                  Just coN ->
+--                    do re <- reifyOf e
+--                       appsE "castEP" [exprType e,exprType e'] [mkEqBox coN,re]
+
+-- -- Cheat via UnivCo:
+-- reifyCast = unReify >>>
 --             do e'@(Cast e _) <- idR
---                re <- reifyOf e
 --                let ty  = exprType e
 --                    ty' = exprType e'
---                appsE "castEP" [ty,ty']
---                  [mkEqBox (mkUnivCo Nominal ty ty') `App` re]
+--                re <- reifyOf e
+--                appsE "castEP" [ty,ty'] [mkEqBox (mkUnivCo Nominal ty ty'),re]
 
 -- reifyCast = (unReify &&& arr exprType) >>>
 --             do (Cast e _, ty) <- idR
@@ -590,6 +653,10 @@ reifyTupCase =
       varPatT v = appsE varPatS [varType v] [varLitE v]
    reifyBranch _ _ = fail "reifyBranch: Only handles pair patterns so far."
 
+reifyUnfoldScrut :: ReExpr
+reifyUnfoldScrut = inReify $
+                   caseAllR unfoldSimplify idR idR (const idR)
+
 reifyEither :: ReExpr
 
 #if 1
@@ -657,29 +724,29 @@ reifyConstruct = inReify reConstructR
 reifyCase :: ReExpr
 reifyCase = inReify reCaseR
 
+miscL :: [(String,ReExpr)]
+miscL = [ ("reifyRules"       , reifyRules)     -- before App
+        , ("reifyEval"        , reifyEval)      -- ''
+        , ("reifyEither"      , reifyEither)    -- ''
+        -- , ("reifyConstruct"   , reifyConstruct) -- ''
+        -- , ("reifyMethod"      , reifyMethod)    -- ''
+        , ("reifyUnfold"      , reifyUnfold)
+        -- , ("inlineMethod"     , inlineMethod)
+        -- , ("reifyCase"        , reifyCase)
+        , ("reifyCaseWild"    , reifyCaseWild)
+        , ("reifyApp"         , reifyApp)
+        , ("reifyLam"         , reifyLam)
+        , ("reifyMonoLet"     , reifyMonoLet)
+        , ("reifyPolyLet"     , reifyPolyLet)
+        , ("reifyTupCase"     , reifyTupCase)
+        , ("reifyUnfoldScrut" , reifyUnfoldScrut)
+    --  , ("reifyInline"      , reifyInline)
+        , ("reifyCast"        , reifyCast)
+        , ("reifyIntLit"      , reifyIntLit)
+        ]
+
 reifyMisc :: ReExpr
-reifyMisc = tries [ ("reifyRules"       , reifyRules)     -- before App
-                  , ("reifyEval"        , reifyEval)      -- ''
-                  , ("reifyEither"      , reifyEither)    -- ''
-                  , ("reifyConstruct"   , reifyConstruct) -- ''
-                  , ("reifyMethod"      , reifyMethod)    -- ''
-                  , ("reifyCase"        , reifyCase)
-                  , ("reifyCaseWild"    , reifyCaseWild)
-                  , ("reifyApp"         , reifyApp)
-                  , ("reifyLam"         , reifyLam)
-                  , ("reifyMonoLet"     , reifyMonoLet)
-                  , ("reifyPolyLet"     , reifyPolyLet)
-                  , ("reifyTupCase"     , reifyTupCase)
-                  , ("reifyInline"      , reifyInline)
-                  , ("reifyCast"        , reifyCast)
-                  , ("reifyIntLit"      , reifyIntLit)
-                  -- Helpers:
-                  -- , ("typeBetaReduceR"  , typeBetaReduceR)
-                  -- , ("unCast"           , unCast)   -- experimental
-                  , ("letElim"          , letElimR)       -- Note
-                  , ("caseReduceUnfoldR", caseReduceUnfoldR True)
-                  , ("inlineWrapper"    , inlineWrapper)
-                  ]
+reifyMisc = triesL miscL
 
 -- Note: letElim is handy with reifyPolyLet to eliminate the "foo = eval
 -- foo_reified", which is usually inaccessible.
@@ -719,20 +786,22 @@ externals =
     , externC "reify-mono-let" reifyMonoLet "reify monomorphic let"
     , externC "reify-poly-let" reifyPolyLet "reify polymorphic let"
     , externC "reify-case-wild" reifyCaseWild "reify a evaluation-only case"
-    , externC "reify-construct" reifyApp "re-construct under reify"
+    , externC "reify-construct" reifyConstruct "re-construct under reify"
     , externC "reify-case" reifyCase "re-case under reify"
     , externC "reify-method" reifyMethod "reify of a method application"
     , externC "inline-method" inlineMethod "inline method application"
     , externC "reify-cast" reifyCast "reify a cast"
     , externC "reify-int-literal" reifyIntLit "reify an Int literal"
     , externC "reify-eval" reifyEval "reify eval"
+    , externC "reify-unfold" reifyUnfold "reify an unfoldable"
+    , externC "post-unfold" postUnfold "simplify after unfolding"
     , externC "reify-tup-case" reifyTupCase "reify case with unit or pair pattern"
     , externC "reify-module" reifyModGuts "reify all top-level definitions"
-    , externC "inline-eval" inlineEval "inline to an eval"
     , externC "inline-dict" inlineDict "inline a dictionary-related var"
     , externC "inline-wrapper" inlineWrapper "inline a datacon wrapper"
     , externC "type-eta-long" typeEtaLong "type-eta-long form"
     , externC "reify-poly-let" reifyPolyLet "reify polymorphic 'let' expression"
+--    , externC "re-simplify" reSimplify "simplifications to complement reification"
 --     , externC "reify-encode" reifyEncode "type-encode under reify"
 --     , externC "encode-types" encodeTypesR
 --        "encode case expressions and constructor applications"
