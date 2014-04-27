@@ -6,7 +6,9 @@ See instructions in test/Tests.hs.
 
 Dependencies:
 
-*   The [circat](https://github.com/conal/circat) library for circuit specification, display, and conversion to netlists.
+*   [hermit-extras](http://github.com/conal/hermit-extras)
+*   [type-encode](http://github.com/conal/type-encode)
+*   [circat](https://github.com/conal/circat), for circuit specification, display, and conversion to netlists.
 
 To try out:
 

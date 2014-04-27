@@ -7,6 +7,7 @@ Description:        Convert lambda expressions to CCC combinators
 Author:             Conal Elliott
 Maintainer:         conal@conal.net
 Copyright:          (c) 2013-2014 by Tabula, Inc
+Homepage:           http://github.com/conal/lambda-ccc
 License:            BSD3
 License-File:       COPYING
 Stability:          experimental
@@ -31,6 +32,7 @@ Library
                   , hermit >= 0.4.0.0
                   , ty >= 0.1.5
                   , circat >= 0.2.7
+                  , hermit-extras >= 0.1
                   , type-encode
   Exposed-Modules:  LambdaCCC.Misc
                     LambdaCCC.ShowUtils

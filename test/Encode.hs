@@ -114,12 +114,12 @@ type N3 = S N2
 type N4 = S N3
 
 -- Operate within a vector
-onVec :: b -> (forall m. n ~ S m => a -> Vec m a -> b) -> Vec n a -> b
+onVec :: forall n a b . b -> (forall m. n ~ S m => a -> Vec m a -> b) -> Vec n a -> b
 onVec ze _ ZVec      = ze
 onVec _ su (a :< as) = su a as
 
 -- Scott-endcoding
-scottVec :: Vec n a -> (b -> (forall m. n ~ S m => a -> Vec m a -> b) -> b)
+scottVec :: forall n a b . Vec n a -> (b -> (forall m. n ~ S m => a -> Vec m a -> b) -> b)
 scottVec v ze su = onVec ze su v
 
 ----

@@ -5,8 +5,10 @@ set-pp-coercion Abstract
 
 rhs-of x6
 
--- try post-unfold
+try post-unfold
 
--- any-td (repeat reify-misc)
+any-td (repeat reify-misc)
 
--- top ; lint-module ; binding-of x6
+set-pp-type Omit
+
+top ; lint-module ; binding-of x6

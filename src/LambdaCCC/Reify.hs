@@ -48,137 +48,23 @@ import HERMIT.Dictionary
   )
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
 
-import LambdaCCC.Misc (Unop,(<~))
+import LambdaCCC.Misc ((<~))
 
-import TypeEncode.Plugin
-  ( apps', callSplitT, callNameSplitT, unCall1
+import HERMIT.Extras
+  ( Unop, apps', callSplitT, callNameSplitT, unCall1
   , ReExpr ,ReCore, TransformU, findTyConT
 #ifdef OnlyLifted
   , liftedKind, unliftedKind
 #endif
-  , encodeOf, reConstructR, reCaseR )
+  , collectForalls, subst, isTyLam, unSubCo_maybe
+  , InCoreTC, observing, observeR', tries, triesL, labeled
+  , varLitE, uqVarName, typeEtaLong, simplifyE
+  , anytdE, inAppTys, isAppTy, letFloatToProg , concatProgs
+  , rejectR , rejectTypeR
+  )
+
+import TypeEncode.Plugin (encodeOf, reConstructR, reCaseR)
 import qualified TypeEncode.Plugin as Enc
-
-{--------------------------------------------------------------------
-    Core utilities
---------------------------------------------------------------------}
-
-collectForalls :: Type -> ([Var], Type)
-collectForalls ty = go [] ty
-  where
-    go vs (ForAllTy v t') = go (v:vs) t'
-    go vs t               = (reverse vs, t)
-
--- TODO: Rewrite collectTypeArgs and collectForalls as unfolds and refactor.
-
--- | Substitute new subexpressions for variables in an expression
-subst :: [(Id,CoreExpr)] -> CoreExpr -> CoreExpr
-subst ps = substExpr (error "subst: no SDoc") (foldr add emptySubst ps)
- where
-   add (v,new) sub = extendIdSubst sub v new
-
-isTyLam :: CoreExpr -> Bool
-isTyLam (Lam v _) = isTyVar v
-isTyLam _         = False
-
--- Copied from Coercion in GHC 7.8.2. Sadly, not exported.
-
--- Not yet doing what I want.
-#if 0
--- if co is Nominal, returns it; otherwise, unwraps a SubCo; otherwise, fails
-unSubCo_maybe :: Coercion -> Maybe Coercion
-unSubCo_maybe (SubCo co)  = Just co
-unSubCo_maybe (Refl _ ty) = Just $ Refl Nominal ty
-unSubCo_maybe (TyConAppCo Representational tc coes)
-  = do { cos' <- mapM unSubCo_maybe coes
-       ; return $ TyConAppCo Nominal tc cos' }
-unSubCo_maybe (UnivCo Representational ty1 ty2) = Just $ UnivCo Nominal ty1 ty2
-  -- We do *not* promote UnivCo Phantom, as that's unsafe.
-  -- UnivCo Nominal is no more unsafe than UnivCo Representational
-unSubCo_maybe co
-  | Nominal <- coercionRole co = Just co
-unSubCo_maybe _ = Nothing
-#endif
-
-{--------------------------------------------------------------------
-    HERMIT utilities
---------------------------------------------------------------------}
-
-type InCoreTC t = Injection t CoreTC
-
-observing :: Bool
-observing = False
-
-observeR' :: InCoreTC t => String -> RewriteH t
-observeR' | observing = observeR
-          | otherwise = const idR
-
-tries :: (InCoreTC a, InCoreTC t) => [TransformH a t] -> TransformH a t
-tries = foldr (<+) ({- observeR' "Unhandled" >>> -} fail "unhandled")
-
-triesL :: (InCoreTC a, InCoreTC t) => [(String,TransformH a t)] -> TransformH a t
-triesL = tries . map labeled
-
--- triesL = foldr (<+) ({- observeR' "Unhandled" >>> -} fail "unhandled")
---              . map (uncurry labeled)
-
-labeled :: InCoreTC t => (String, TransformH a t) -> TransformH a t
-labeled (label,trans) = trans >>> observeR' label
-
--- mkVarName :: MonadThings m => Transform c m Var (CoreExpr,Type)
--- mkVarName = contextfreeT (mkStringExpr . uqName . varName) &&& arr varType
-
-varLitE :: Var -> CoreExpr
-varLitE = Lit . mkMachString . uqVarName
-
-uqVarName :: Var -> String
-uqVarName = uqName . varName
-
--- Fully type-eta-expand, i.e., ensure that every leading forall has a matching
--- (type) lambdas.
-typeEtaLong :: ReExpr
-typeEtaLong = readerT $ \ e ->
-                 if isTyLam e then
-                   lamAllR idR typeEtaLong
-                 else
-                   expand
- where
-   -- Eta-expand enough for lambdas to match foralls.
-   expand = do e@(collectForalls . exprType -> (tvs,_)) <- idR
-               return $ mkLams tvs (mkApps e ((Type . TyVarTy) <$> tvs))
-
-simplifyE :: ReExpr
-simplifyE = extractR simplifyR
-
-anytdE :: Unop ReExpr
-anytdE r = extractR (anytdR (promoteR r :: ReCore))
-
--- TODO: Try rewriting more gracefully, testing isForAllTy first and
--- maybeEtaExpandR
-
--- Apply a rewriter inside type lambdas.
-inAppTys :: Unop ReExpr
-inAppTys r = r'
- where
-   r' = readerT $ \ e -> if isAppTy e then appAllR r' idR else r
-
-isAppTy :: CoreExpr -> Bool
-isAppTy (App _ (Type _)) = True
-isAppTy _                = False
-
-letFloatToProg :: TransformH CoreBind CoreProg
-letFloatToProg = arr (flip ProgCons ProgNil) >>> tryR letFloatTopR
-
-concatProgs :: [CoreProg] -> CoreProg
-concatProgs = bindsToProg . concatMap progToBinds
-
--- | Reject if condition holds. Opposite of 'acceptR'
-rejectR :: Monad m => (a -> Bool) -> Rewrite c m a
-rejectR f = acceptR (not . f)
-
--- | Reject if condition holds on an expression's type.
-rejectTypeR :: Monad m => (Type -> Bool) -> Rewrite c m CoreExpr
-rejectTypeR f = rejectR (f . exprType)
 
 {--------------------------------------------------------------------
     Reification
@@ -533,15 +419,13 @@ reifyCast :: ReExpr
 --                re <- reifyOf e
 --                appsE "castEP" [exprType e,exprType e'] [Coercion co,re]
 
--- What I want, but unSubCo_maybe fails:
-
--- reifyCast = unReify >>>
---             do e'@(Cast e co) <- idR
---                case unSubCo_maybe co of
---                  Nothing  -> fail "Couldn't unSubCo"
---                  Just coN ->
---                    do re <- reifyOf e
---                       appsE "castEP" [exprType e,exprType e'] [mkEqBox coN,re]
+reifyCast = unReify >>>
+            do e'@(Cast e co) <- idR
+               case unSubCo_maybe co of
+                 Nothing  -> fail "Couldn't unSubCo"
+                 Just coN ->
+                   do re <- reifyOf e
+                      appsE "castEP" [exprType e,exprType e'] [mkEqBox coN,re]
 
 -- -- Cheat via UnivCo:
 -- reifyCast = unReify >>>
@@ -556,11 +440,11 @@ reifyCast :: ReExpr
 --                re <- reifyOf e
 --                apps' "Unsafe.Coerce.unsafeCoerce" [exprType re,ty] [re]
 
--- Equivalent but a bit prettier:
-reifyCast = unReify >>>
-            do e'@(Cast e _) <- idR
-               re <- reifyOf e
-               appsE "castEP'" [exprType e,exprType e'] [re]
+-- -- Equivalent but a bit prettier:
+-- reifyCast = unReify >>>
+--             do e'@(Cast e _) <- idR
+--                re <- reifyOf e
+--                appsE "castEP'" [exprType e,exprType e'] [re]
 
 #else
 -- reify (e |> co)  -->  reify (encode e)
