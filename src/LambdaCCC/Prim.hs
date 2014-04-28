@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses, ViewPatterns, PatternGuards, CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE UndecidableInstances #-} -- see below
 
@@ -36,9 +36,11 @@ import Data.Constraint (Dict(..))
 import Circat.Category hiding (CondCat(..))
 import Circat.Classes (BoolCat(not,and,or),MuxCat(..),AddCat'(..))
 import qualified Circat.Classes as C
-import Circat.Circuit ((:>),IsSourceP,constC) -- :( . Disentangle!
 
-import TypeEncode.Encode (EncodeCat(..))
+-- :( . TODO: Disentangle!
+import Circat.Circuit ((:>),IsSourceP,constC,NewtypeCon,NewtypeCat(..))
+
+-- import TypeEncode.Encode (EncodeCat(..))
 
 -- TODO: sort out the two uses of xor and simplify the Circat.Classes imports
 -- and uses.
@@ -130,8 +132,8 @@ data Prim :: * -> * where
   InrP          :: Prim (b -> a :+ b)
   PairP         :: Prim (a -> b -> a :* b)
   CondBP        :: Prim (Bool :* (Bool :* Bool) -> Bool)  -- cond on Bool
-  EncodeP       :: Prim (a -> b)
-  DecodeP       :: Prim (b -> a)
+  PackP         :: NewtypeCon n o => Prim (o -> n)
+  UnpackP       :: NewtypeCon n o => Prim (n -> o)
   OopsP         :: Prim a
   -- More here
 
@@ -154,8 +156,8 @@ instance Eq' (Prim a) (Prim b) where
   InrP    === InrP    = True
   PairP   === PairP   = True
   CondBP  === CondBP  = True
-  EncodeP === EncodeP = True
-  DecodeP === DecodeP = True
+  PackP   === PackP   = True
+  UnpackP === UnpackP = True
   OopsP   === OopsP   = True
   _       === _       = False
 
@@ -174,13 +176,13 @@ instance Show (Prim a) where
   showsPrec _ ExrP     = showString "exr"
   showsPrec _ PairP    = showString "(,)"
   showsPrec _ CondBP   = showString "condBool"
-  showsPrec _ EncodeP  = showString "encode"
-  showsPrec _ DecodeP  = showString "decode"
+  showsPrec _ PackP    = showString "pack"
+  showsPrec _ UnpackP  = showString "unpack"
   showsPrec _ OopsP    = showString "<oops>"
 
 instance Show' Prim where showsPrec' = showsPrec
 
-instance ( BiCCC k, BoolCat k, MuxCat k, EncodeCat k, AddCat' k Int, HasUnitArrow k Lit
+instance ( BiCCC k, BoolCat k, MuxCat k, NewtypeCat k, AddCat' k Int, HasUnitArrow k Lit
          ) =>
          HasUnitArrow k Prim where
   unitArrow (LitP l) = unitArrow l
@@ -194,8 +196,8 @@ instance ( BiCCC k, BoolCat k, MuxCat k, EncodeCat k, AddCat' k Int, HasUnitArro
   unitArrow InlP     = unitFun inl
   unitArrow InrP     = unitFun inr
   unitArrow PairP    = unitFun (curry id)
-  unitArrow EncodeP  = unitFun encode
-  unitArrow DecodeP  = unitFun decode
+  unitArrow PackP    = unitFun pack
+  unitArrow UnpackP  = unitFun unpack
   unitArrow CondBP   = unitFun mux
   unitArrow p        = error $ "unitArrow: not yet handled: " ++ show p
 
@@ -217,8 +219,8 @@ instance Evalable (Prim a) where
   eval InrP          = Right
   eval PairP         = (,)
   eval CondBP        = mux
-  eval EncodeP       = encode
-  eval DecodeP       = decode
+  eval PackP         = pack
+  eval UnpackP       = unpack
   eval OopsP         = error "eval on Prim: Oops!"
 
 -- TODO: replace fst with exl, etc.

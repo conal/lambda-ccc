@@ -4,8 +4,8 @@
 {-# LANGUAGE FlexibleContexts, MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wall #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
-{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -26,18 +26,20 @@ module LambdaCCC.CCC
   ) where
 
 import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
-import qualified Control.Arrow as A
+-- import qualified Control.Arrow as A
 -- import Control.Applicative (liftA3)
 
-import Data.IsTy
+-- import Data.IsTy
 import Data.Proof.EQ
+
+import Circat.Circuit (NewtypeCat(..))  -- TODO: disentangle!
 
 import LambdaCCC.Misc (Unop,Evalable(..),Unit,(:*),(:+),(:=>),Eq'(..),(==?))
 import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 -- import LambdaCCC.Ty
 import LambdaCCC.Prim (Prim(..),Lit(..)) -- ,cond,ifThenElse
 
-import TypeEncode.Encode (EncodeCat(..))
+-- import TypeEncode.Encode (EncodeCat(..))
 
 import Circat.Category
 import Circat.Classes
@@ -114,6 +116,11 @@ instance Eq (a :-> b) where (==) = (===)
 
 -- Homomorphic evaluation
 #if 0
+
+distlF :: a :* (b :+ c) -> a :* b :+ a :* c
+distlF (a, Left  b) = Left  (a,b)
+distlF (a, Right c) = Right (a,c)
+
 instance Evalable (a :-> b) where
   type ValT (a :-> b) = a :=> b
   eval Id          = id
@@ -135,10 +142,6 @@ instance Evalable (a :-> b) where
   type ValT (a :-> b) = a -> b
   eval = convertC
 #endif
-
-distlF :: a :* (b :+ c) -> a :* b :+ a :* c
-distlF (a, Left  b) = Left  (a,b)
-distlF (a, Right c) = Right (a,c)
 
 
 {--------------------------------------------------------------------
@@ -328,9 +331,9 @@ instance Show (a :-> b) where
 
 -- prim :: Prim (a -> b) -> (a :-> b)
 
-instance EncodeCat (:->) where
-  encode = prim EncodeP
-  decode = prim DecodeP
+instance NewtypeCat (:->) where
+  pack   = prim PackP
+  unpack = prim UnpackP
 
 instance BoolCat (:->) where
   not = prim NotP

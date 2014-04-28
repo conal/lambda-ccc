@@ -53,7 +53,11 @@ import GHC.Prim (Addr#)
 
 import Data.Proof.EQ
 
-import TypeEncode.Encode (encodeF,decodeF)
+import TypeUnary.Vec (Vec(..))
+
+import Circat.Circuit (NewtypeCat(..))  -- TODO: disentangle!
+
+-- import TypeEncode.Encode (encodeF,decodeF)
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
 import LambdaCCC.ShowUtils
@@ -489,12 +493,15 @@ intL = kLit
 "reify/inl"     reifyEP Left     = kPrim InlP
 "reify/inr"     reifyEP Right    = kPrim InrP
 "reify/if"      reifyEP condBool = kPrim CondBP
-"reify/encode"  reifyEP encodeF  = kPrim EncodeP
-"reify/decode"  reifyEP decodeF  = kPrim DecodeP
+"reify/pack"    reifyEP pack     = kPrim PackP
+"reify/unpack"  reifyEP unpack   = kPrim UnpackP
 
 "reify/()"      reifyEP ()       = kLit  ()
 "reify/false"   reifyEP False    = kLit  False
 "reify/true"    reifyEP True     = kLit  True
+
+"reify/VNil"                  reifyEP ZVec      = reifyEP (pack ())
+"reify/VCons"    forall a as. reifyEP (a :< as) = reifyEP (pack (a,as))
 
   #-}
 
@@ -657,8 +664,8 @@ instance Eq1' Prim where
   ExrP    ==== ExrP    = True
   PairP   ==== PairP   = True
   CondBP  ==== CondBP  = True
-  EncodeP ==== EncodeP = True
-  DecodeP ==== DecodeP = True
+  PackP   ==== PackP = True
+  UnpackP ==== UnpackP = True
   OopsP   ==== OopsP   = True
   _       ==== _       = False
 

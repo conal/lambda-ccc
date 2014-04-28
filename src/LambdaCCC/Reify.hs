@@ -352,7 +352,7 @@ reifyUnfold = inReify unfoldSimplify
 reifyRuleNames :: [String]
 reifyRuleNames = map ("reify/" ++)
   [ "not","(&&)","(||)","xor","(+)","exl","exr","pair","inl","inr"
-  , "if","encode","decode","()","false","true","if-bool","if-pair" ]
+  , "if","pack","unpack","()","false","true","if-bool","if-pair" ]
 
 -- or: words "not (&&) (||) xor ..."
 

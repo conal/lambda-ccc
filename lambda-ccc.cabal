@@ -6,8 +6,8 @@ Category:           categories
 Description:        Convert lambda expressions to CCC combinators
 Author:             Conal Elliott
 Maintainer:         conal@conal.net
-Copyright:          (c) 2013-2014 by Tabula, Inc
 Homepage:           http://github.com/conal/lambda-ccc
+Copyright:          (c) 2013-2014 by Tabula, Inc
 License:            BSD3
 License-File:       COPYING
 Stability:          experimental
