@@ -34,7 +34,9 @@ Library
                   , type-unary >= 0.2.16
                   , circat >= 0.2.7
                   , hermit-extras >= 0.1
-                  , type-encode
+
+--                  , type-encode
+
   Exposed-Modules:  LambdaCCC.Misc
                     LambdaCCC.ShowUtils
                     LambdaCCC.Prim
