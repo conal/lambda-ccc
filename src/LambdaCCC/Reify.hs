@@ -25,9 +25,11 @@
 module LambdaCCC.Reify (plugin) where
 
 import Data.Functor ((<$>))
+import Data.Foldable (msum)
 import Control.Monad ((<=<))
 import Control.Arrow (Arrow(..),(>>>))
-import Data.List (isPrefixOf)
+import Data.List (isPrefixOf,find)
+import Data.Maybe (fromMaybe)
 
 -- GHC
 -- Oops! Not exported.
@@ -40,10 +42,12 @@ import HERMIT.GHC hiding (mkStringExpr)
 import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary
-  ( observeR, callT, callNameT
+  ( findIdT, observeR, callT, callNameT
   , rulesR,inlineR,inlineMatchingPredR, simplifyR,letFloatLetR,letFloatTopR,letElimR
   , betaReduceR, letNonRecSubstSafeR
-  , unfoldR, unfoldPredR, cleanupUnfoldR, caseReduceUnfoldR, castFloatAppR, bashR,bashExtendedWithR
+  , unfoldR, unfoldPredR, cleanupUnfoldR
+  , caseReduceUnfoldR, caseFloatCaseR
+  , castFloatAppR, bashR,bashExtendedWithR
   -- , unshadowR   -- May need this one later
   )
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
@@ -57,14 +61,35 @@ import HERMIT.Extras
   , liftedKind, unliftedKind
 #endif
   , collectForalls, subst, isTyLam, unSubCo_maybe
-  , InCoreTC, observing, observeR', tries, triesL, labeled
+  , InCoreTC
+  , tries
   , varLitE, uqVarName, typeEtaLong, simplifyE
   , anytdE, inAppTys, isAppTy, letFloatToProg , concatProgs
   , rejectR , rejectTypeR
   )
+import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 
-import TypeEncode.Plugin (encodeOf, reConstructR, reCaseR)
-import qualified TypeEncode.Plugin as Enc
+-- Drop TypeEncode for now.
+-- import TypeEncode.Plugin (encodeOf, reConstructR, reCaseR)
+-- import qualified TypeEncode.Plugin as Enc
+
+{--------------------------------------------------------------------
+    Observing
+--------------------------------------------------------------------}
+
+-- (Observing, observeR', triesL, labeled)
+
+observing :: Ex.Observing
+observing = True
+
+observeR' :: InCoreTC t => String -> RewriteH t
+observeR' = Ex.observeR' observing
+
+triesL :: (InCoreTC a, InCoreTC t) => [(String,TransformH a t)] -> TransformH a t
+triesL = Ex.triesL observing
+
+labeled :: InCoreTC t => (String, TransformH a t) -> TransformH a t
+labeled = Ex.labeled observing
 
 {--------------------------------------------------------------------
     Reification
@@ -632,11 +657,100 @@ reifyCaseWild = inReify $
                   do Case scrut wild _bodyTy [(DEFAULT,[],body)] <- idR
                      return $ Let (NonRec wild scrut) body
 
-reifyConstruct :: ReExpr
-reifyConstruct = inReify reConstructR
+-- reifyConstruct :: ReExpr
+-- reifyConstruct = inReify reConstructR
 
-reifyCase :: ReExpr
-reifyCase = inReify reCaseR
+-- reifyCase :: ReExpr
+-- reifyCase = inReify reCaseR
+
+data VecSize = VZero | VSucc Type
+
+vecSize :: Type -> TransformU (VecSize,Type)
+vecSize (TyConApp tc [len0,elemTy]) =
+  do tcv <- findTyConT "TypeUnary.Vec.Vec"
+     guardMsg (tc == tcv) "Not a Vec type"
+     z <- findTyConT "TypeUnary.TyNat.Z"
+     s <- findTyConT "TypeUnary.TyNat.S"
+     return $
+       ( case fromMaybe len0 (coreView len0) of
+           TyConApp ((== z) -> True) []  -> VZero
+           TyConApp ((== s) -> True) [n] -> VSucc n
+           _ -> error "vecSize: Vec not Z or S n. Investigate."
+       , elemTy )
+
+vecSize _ = fail "Not a Vec type (and wrong # args)"
+
+
+-- | reify a case of a known-size vector
+reifyCaseVec :: ReExpr
+
+#if 0
+reifyCaseVec = inReify $
+               do Case scrut _wild bodyTy alts <- idR
+                  (size,elemTy) <- vecSize (exprType scrut)
+                  case size of
+                    VZero ->
+                      do let Just val = getAlt "ZVec" alts
+                         appsE "vecCaseZ" [bodyTy,elemTy] [val,scrut] 
+                    VSucc n ->
+                      do let Just fun = getAlt ":<" alts
+                         appsE "vecCaseS" [n,elemTy,bodyTy] [fun,scrut] 
+ where
+   getAlt :: String -> [CoreAlt] -> Maybe CoreExpr
+   getAlt con = msum . map (matchAltLam con)
+
+-- vecCaseZ :: forall b a. b -> Vec Z a -> b
+-- vecCaseS :: forall n a b. (a -> Vec n a -> b) -> Vec (S n) a -> b
+
+matchAltLam :: String -> CoreAlt -> Maybe CoreExpr
+matchAltLam want (DataAlt dc,vars,rhs)
+  | uqName (dataConName dc) == want = Just (mkLams vars rhs)
+matchAltLam _ _ = Nothing
+#else
+
+-- Find a structural identity function on vectors
+vecIdStruct :: Type -> TransformU CoreExpr
+vecIdStruct ty = do (size,a) <- vecSize ty
+                    case size of
+                      VZero   -> appsE "idVecZ" [  a] [] 
+                      VSucc n -> appsE "idVecS" [n,a] []
+
+scrutType :: TransformH CoreExpr Type
+scrutType = do Case (exprType -> ty) _wild _bodyTy _alts <- idR
+               return ty
+
+scrutIdF :: TransformH CoreExpr CoreExpr
+scrutIdF = scrutType >>= vecIdStruct
+
+-- TODO: More types besides vectors
+
+onScrut :: Unop ReExpr
+onScrut r = caseAllR r idR idR (const idR)
+
+onRhs :: ReExpr -> ReExpr
+onRhs r = caseAllR idR idR idR (const (altAllR idR (const idR) r))
+
+reifyCaseVec = inReify $
+                 do idF <- scrutIdF
+                    onScrut (arr (App idF) >>> unfoldR)
+                 >>> caseFloatCaseR
+                 >>> onRhs (caseReduceUnfoldR True)
+
+-- TODO: Refactor the scrutIdF & onScrut so we just enter the scrut once.
+-- Simpler?
+
+-- reifyCaseVec = inReify $
+--                do Case scrut wild bodyTy alts <- idR
+--                   idF <- vecIdStruct (exprType scrut)
+--                   return (Case (App idF scrut) wild bodyTy alts)
+
+-- reifyCaseVec = inReify $ caseAllR idStructR idR idR idR
+--  where
+--    -- Oops. I'd need to find/construct a dictionary.
+--    idStructR :: ReExpr
+--    idStructR = ...
+
+#endif
 
 miscL :: [(String,ReExpr)]
 miscL = [ ("reifyRulesPrefix" , reifyRulesPrefix) -- subsumes reifyRules, I think
@@ -654,6 +768,7 @@ miscL = [ ("reifyRulesPrefix" , reifyRulesPrefix) -- subsumes reifyRules, I thin
         , ("reifyMonoLet"     , reifyMonoLet)
         , ("reifyPolyLet"     , reifyPolyLet)
         , ("reifyTupCase"     , reifyTupCase)
+        , ("reifyCaseVec"     , reifyCaseVec)
         , ("reifyUnfoldScrut" , reifyUnfoldScrut)
     --  , ("reifyInline"      , reifyInline)
         , ("reifyCast"        , reifyCast)
@@ -704,14 +819,15 @@ externals =
     , externC "reify-mono-let" reifyMonoLet "reify monomorphic let"
     , externC "reify-poly-let" reifyPolyLet "reify polymorphic let"
     , externC "reify-case-wild" reifyCaseWild "reify a evaluation-only case"
-    , externC "reify-construct" reifyConstruct "re-construct under reify"
-    , externC "reify-case" reifyCase "re-case under reify"
+--     , externC "reify-construct" reifyConstruct "re-construct under reify"
+--     , externC "reify-case" reifyCase "re-case under reify"
     , externC "reify-method" reifyMethod "reify of a method application"
     , externC "inline-method" inlineMethod "inline method application"
     , externC "reify-cast" reifyCast "reify a cast"
     , externC "reify-int-literal" reifyIntLit "reify an Int literal"
     , externC "reify-eval" reifyEval "reify eval"
     , externC "reify-unfold" reifyUnfold "reify an unfoldable"
+    , externC "reify-case-vec" reifyCaseVec "case with a known-length vector scrutinee"
     , externC "post-unfold" postUnfold "simplify after unfolding"
     , externC "reify-tup-case" reifyTupCase "reify case with unit or pair pattern"
     , externC "reify-module" reifyModGuts "reify all top-level definitions"
@@ -726,5 +842,6 @@ externals =
 #ifndef OnlyLifted
     , externC "reify-code" reifyCodeF "manual rewrites for reifying encodeF & decodeF"
 #endif
-    ] ++ Enc.externals
+    ]
+    -- ++ Enc.externals
 
