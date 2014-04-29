@@ -33,12 +33,14 @@ import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
 -- import Control.Arrow ((&&&))
 import Data.Constraint (Dict(..))
 
+import TypeUnary.Vec (Z,S,Vec(..))
+
 import Circat.Category hiding (CondCat(..))
-import Circat.Classes (BoolCat(not,and,or),MuxCat(..),AddCat'(..))
+import Circat.Classes (BoolCat(not,and,or),MuxCat(..),AddCat'(..),VecCat(..))
 import qualified Circat.Classes as C
 
 -- :( . TODO: Disentangle!
-import Circat.Circuit ((:>),IsSourceP,constC,NewtypeCon,NewtypeCat(..))
+import Circat.Circuit ((:>),IsSourceP,constC)
 
 -- import TypeEncode.Encode (EncodeCat(..))
 
@@ -54,9 +56,9 @@ import LambdaCCC.ShowUtils (Show'(..))
 
 -- | Literals
 data Lit :: * -> * where
-  UnitL  :: Unit -> Lit Unit
-  BoolL  :: Bool -> Lit Bool
-  IntL   :: Int  -> Lit Int
+  UnitL  :: Unit    -> Lit Unit
+  BoolL  :: Bool    -> Lit Bool
+  IntL   :: Int     -> Lit Int
 
 -- The Unit argument is just for uniformity
 
@@ -71,9 +73,9 @@ instance Eq (Lit a) where (==) = (===)
 -- | Convenient 'Lit' construction
 class HasLit a where toLit :: a -> Lit a
 
-instance HasLit ()   where toLit = UnitL
-instance HasLit Bool where toLit = BoolL
-instance HasLit Int  where toLit = IntL
+instance HasLit Unit      where toLit = UnitL
+instance HasLit Bool      where toLit = BoolL
+instance HasLit Int       where toLit = IntL
 
 -- Proofs
 
@@ -132,10 +134,15 @@ data Prim :: * -> * where
   InrP          :: Prim (b -> a :+ b)
   PairP         :: Prim (a -> b -> a :* b)
   CondBP        :: Prim (Bool :* (Bool :* Bool) -> Bool)  -- cond on Bool
-  PackP         :: NewtypeCon n o => Prim (o -> n)
-  UnpackP       :: NewtypeCon n o => Prim (n -> o)
-  OopsP         :: Prim a
+  -- Vec TODO below
+  ToVecZP       :: Prim (Unit -> Vec Z a)
+  UnVecZP       :: Prim (Vec Z a -> Unit)
+  VecSP         :: Prim (a -> Vec n a -> Vec (S n) a)
+  UnVecSP       :: Prim (Vec (S n) a -> a :* Vec n a)
   -- More here
+  OopsP         :: Prim a
+
+-- TODO: Figure out how not to need type-specific constructors like the Vec ones above.
 
 -- TODO: Curry CondBP to match AndP, etc.
 
@@ -156,8 +163,10 @@ instance Eq' (Prim a) (Prim b) where
   InrP    === InrP    = True
   PairP   === PairP   = True
   CondBP  === CondBP  = True
-  PackP   === PackP   = True
-  UnpackP === UnpackP = True
+  ToVecZP === ToVecZP = True
+  UnVecZP === UnVecZP = True
+  VecSP   === VecSP   = True
+  UnVecSP === UnVecSP = True
   OopsP   === OopsP   = True
   _       === _       = False
 
@@ -176,14 +185,15 @@ instance Show (Prim a) where
   showsPrec _ ExrP     = showString "exr"
   showsPrec _ PairP    = showString "(,)"
   showsPrec _ CondBP   = showString "condBool"
-  showsPrec _ PackP    = showString "pack"
-  showsPrec _ UnpackP  = showString "unpack"
+  showsPrec _ ToVecZP  = showString "toVecZ"
+  showsPrec _ UnVecZP  = showString "unVecZ"
+  showsPrec _ VecSP    = showString "(:<)"
+  showsPrec _ UnVecSP  = showString "unVecS"
   showsPrec _ OopsP    = showString "<oops>"
 
 instance Show' Prim where showsPrec' = showsPrec
 
-instance ( BiCCC k, BoolCat k, MuxCat k, NewtypeCat k, AddCat' k Int, HasUnitArrow k Lit
-         ) =>
+instance ( BiCCC k, BoolCat k, MuxCat k, VecCat k, AddCat' k Int, HasUnitArrow k Lit) =>
          HasUnitArrow k Prim where
   unitArrow (LitP l) = unitArrow l
   unitArrow NotP     = unitFun not
@@ -196,8 +206,10 @@ instance ( BiCCC k, BoolCat k, MuxCat k, NewtypeCat k, AddCat' k Int, HasUnitArr
   unitArrow InlP     = unitFun inl
   unitArrow InrP     = unitFun inr
   unitArrow PairP    = unitFun (curry id)
-  unitArrow PackP    = unitFun pack
-  unitArrow UnpackP  = unitFun unpack
+  unitArrow ToVecZP  = unitFun toVecZ
+  unitArrow UnVecZP  = unitFun unVecZ
+  unitArrow VecSP    = unitFun (curry toVecS)
+  unitArrow UnVecSP  = unitFun unVecS
   unitArrow CondBP   = unitFun mux
   unitArrow p        = error $ "unitArrow: not yet handled: " ++ show p
 
@@ -219,8 +231,10 @@ instance Evalable (Prim a) where
   eval InrP          = Right
   eval PairP         = (,)
   eval CondBP        = mux
-  eval PackP         = pack
-  eval UnpackP       = unpack
+  eval ToVecZP       = toVecZ
+  eval UnVecZP       = unVecZ
+  eval VecSP         = (:<)
+  eval UnVecSP       = unVecS
   eval OopsP         = error "eval on Prim: Oops!"
 
 -- TODO: replace fst with exl, etc.

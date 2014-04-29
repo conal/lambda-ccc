@@ -36,6 +36,8 @@ module LambdaCCC.Lambda
   -- Remove when I can dig up Prim as a type in Core
   , EP, appP, lamP, lettP , varP#, lamvP#, casevP#, eitherEP, castEP, castEP'
   , evalEP, reifyEP, kPrimEP, oops
+  -- Hopefully temporary
+--  , unVecZ', unVecS'
   ) where
 
 import Data.Functor ((<$>))
@@ -53,11 +55,9 @@ import GHC.Prim (Addr#)
 
 import Data.Proof.EQ
 
-import TypeUnary.Vec (Vec(..))
+import TypeUnary.Vec (Vec(..),Z) -- ,S
 
-import Circat.Circuit (NewtypeCat(..))  -- TODO: disentangle!
-
--- import TypeEncode.Encode (encodeF,decodeF)
+-- import Circat.Classes (VecCat(..))
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
 import LambdaCCC.ShowUtils
@@ -493,17 +493,55 @@ intL = kLit
 "reify/inl"     reifyEP Left     = kPrim InlP
 "reify/inr"     reifyEP Right    = kPrim InrP
 "reify/if"      reifyEP condBool = kPrim CondBP
-"reify/pack"    reifyEP pack     = kPrim PackP
-"reify/unpack"  reifyEP unpack   = kPrim UnpackP
 
 "reify/()"      reifyEP ()       = kLit  ()
 "reify/false"   reifyEP False    = kLit  False
 "reify/true"    reifyEP True     = kLit  True
 
-"reify/VNil"                  reifyEP ZVec      = reifyEP (pack ())
-"reify/VCons"    forall a as. reifyEP (a :< as) = reifyEP (pack (a,as))
+-- "reify/toVecZ"  reifyEP toVecZ'  = kPrim ToVecZP
+-- "reify/unVecZ"  reifyEP unVecZ'  = kPrim UnVecZP
+-- "reify/toVecS"  reifyEP toVecS'  = kPrim ToVecSP
+-- "reify/unVecS"  reifyEP unVecS'  = kPrim UnVecSP
+
+-- "reify/ZVec"    reifyEP ZVec     = reifyEP (toVecZ' ())
+-- "reify/(:<)"    reifyEP (:<)     = reifyEP toVecS'
+
+"reify/ZVec"    reifyEP ZVec     = zVec
+"reify/(:<)"    reifyEP (:<)     = kPrim VecSP
+
+-- -- This one avoids currying
+-- "reify/(a:<as)" forall a as. reifyEP (a:<as) = reifyEP (toVecS' (a,as))
 
   #-}
+
+zVec :: EP (Vec Z a)
+zVec = kPrim ToVecZP @^ kLit ()
+
+#if 0
+-- Bogus method variants to avoid accidental inlining.
+
+toVecZ' :: () -> Vec Z a
+toVecZ' = error "toVecZ': undefined"
+{-# NOINLINE toVecZ' #-}
+
+toVecS' :: a -> Vec n a -> Vec (S n) a
+toVecS' = error "toVecS': undefined"
+{-# NOINLINE toVecS' #-}
+
+unVecZ' :: Vec Z a -> ()
+unVecZ' = error "unVecZ': undefined"
+{-# NOINLINE unVecZ' #-}
+
+unVecS' :: Vec (S n) a -> a :* Vec n a
+unVecS' = error "unVecS': undefined"
+{-# NOINLINE unVecS' #-}
+
+-- vecZ :: Vec Z a
+-- vecZ = toVecZ ()
+
+-- vecS :: a -> Vec n a -> Vec (S n) a
+-- vecS = curry toVecS
+#endif
 
 -- For literals, I'd like to say
 -- 
@@ -664,8 +702,10 @@ instance Eq1' Prim where
   ExrP    ==== ExrP    = True
   PairP   ==== PairP   = True
   CondBP  ==== CondBP  = True
-  PackP   ==== PackP = True
-  UnpackP ==== UnpackP = True
+  ToVecZP ==== ToVecZP = True
+  UnVecZP ==== UnVecZP = True
+  VecSP   ==== VecSP   = True
+  UnVecSP ==== UnVecSP = True
   OopsP   ==== OopsP   = True
   _       ==== _       = False
 

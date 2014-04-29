@@ -43,7 +43,7 @@ import HERMIT.Dictionary
   ( observeR, callT, callNameT
   , rulesR,inlineR,inlineMatchingPredR, simplifyR,letFloatLetR,letFloatTopR,letElimR
   , betaReduceR, letNonRecSubstSafeR
-  , unfoldR, caseReduceUnfoldR, castFloatAppR, bashR,bashExtendedWithR
+  , unfoldR, unfoldPredR, cleanupUnfoldR, caseReduceUnfoldR, castFloatAppR, bashR,bashExtendedWithR
   -- , unshadowR   -- May need this one later
   )
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
@@ -51,7 +51,7 @@ import HERMIT.Plugin (hermitPlugin,phase,interactive)
 import LambdaCCC.Misc ((<~))
 
 import HERMIT.Extras
-  ( Unop, apps', callSplitT, callNameSplitT, unCall1
+  ( Unop, Binop, apps', callSplitT, callNameSplitT, unCall1
   , ReExpr ,ReCore, TransformU, findTyConT
 #ifdef OnlyLifted
   , liftedKind, unliftedKind
@@ -181,6 +181,24 @@ reifyApp = do App u v <- unReify
               v' <- reifyOf v
               appsE "appP" [b,a] [u', v'] -- note b,a
 
+-- Apply a rule to a left application prefix
+reifyRulesPrefix :: ReExpr
+reifyRulesPrefix = reifyRules <+ (reifyApp >>> appArgs reifyRulesPrefix idR)
+
+-- Like appAllR, but on a reified app.
+-- 'app ta tb f x --> 'app ta tb (rf f) (rx s)'
+appArgs :: Binop ReExpr
+appArgs rf rx = appAllR (appAllR idR rf) rx
+
+
+-- reifyApps =
+--   unReify >>> callSplitT >>> arr (\ (f,ts,es) -> ((f,ts),es)) >>> reifyCall
+
+-- reifyCall :: TransformH ((CoreExpr,[Type]), [CoreExpr]) CoreExpr
+-- reifyCall = reifyR 
+               
+               
+
 -- TODO: Use arr instead of (constT (return ...))
 -- TODO: refactor so we unReify once and then try variations
 
@@ -294,8 +312,6 @@ reifyProg = progBindsAnyR (const reifyDef)
 reifyModGuts :: RewriteH ModGuts
 reifyModGuts = modGutsR reifyProg
 
--- TODO: How to float the local bindings as well?
-
 inlineR' :: ReExpr
 inlineR' = do Var nm <- idR
               _ <- observeR' ("inline " ++ uqVarName nm)
@@ -318,20 +334,28 @@ reifyInline = inReify inlineNonE
 
 -- TODO: drop the non-E test, since we're already under a reify.
 
+isWrapper :: Var -> Bool
+isWrapper = ("$W" `isPrefixOf`) . uqVarName -- TODO: alternative?
+
 unfoldSimplify :: ReExpr
-unfoldSimplify = unfoldR >>> postUnfold
+unfoldSimplify = unfoldPredR (const . not . isWrapper) >>> cleanupUnfoldR
+
+-- unfoldSimplify = unfoldR >>> tryR postUnfold
+
+-- unfoldSimplify = unfoldPredR (const . not . isWrapper) >>> tryR postUnfold
 
 -- bashE :: ReExpr
 -- bashE = extractR simplifyR -- bashR
 
 postUnfold :: ReExpr
-postUnfold = extractR (bashExtendedWithR (promoteR <$> simplifies))
+postUnfold = curry labeled "post-unfold" $
+             extractR (bashExtendedWithR (promoteR <$> simplifies))
 
 -- | Simplifications to apply at the start and to the result of each unfolding
 ourSimplifies :: [ReExpr]
 ourSimplifies = map labeled
-             [ ("inline-wrapper", inlineWrapper)
-             , ("inline-dict"   , inlineDict)
+             [ ("inline-dict"   , inlineDict)
+             -- , ("inline-wrapper", inlineWrapper)  -- breaks rewrite rules
              ]
 
 -- | Simplifications to apply at the start and to the result of each unfolding
@@ -352,7 +376,11 @@ reifyUnfold = inReify unfoldSimplify
 reifyRuleNames :: [String]
 reifyRuleNames = map ("reify/" ++)
   [ "not","(&&)","(||)","xor","(+)","exl","exr","pair","inl","inr"
-  , "if","pack","unpack","()","false","true","if-bool","if-pair" ]
+  , "if","()","false","true","toVecZ","unVecZ","toVecS","unVecS"
+  , "ZVec","(:<)"  -- ,"(a:<as)"
+  ]
+
+-- ,"if-bool","if-pair"
 
 -- or: words "not (&&) (||) xor ..."
 
@@ -361,10 +389,12 @@ reifyRuleNames = map ("reify/" ++)
 -- Keep for now, to help us see that whether reify applications vanish.
 
 reifyRules :: ReExpr
-reifyRules = (rulesR reifyRuleNames >>> tryR simplifyE)
-#ifndef OnlyLifted
-             <+ reifyCodeF
-#endif
+reifyRules = rulesR reifyRuleNames >>> cleanupUnfoldR
+
+-- reifyRules = (rulesR reifyRuleNames >>> tryR simplifyE)
+-- #ifndef OnlyLifted
+--              <+ reifyCodeF
+-- #endif
 
 -- reifyRules = rulesR reifyRuleNames >>> tryR (extractR tidy)
 --  where
@@ -382,10 +412,10 @@ reifyRules = (rulesR reifyRuleNames >>> tryR simplifyE)
 reifyIntLit :: ReExpr
 reifyIntLit = unReify >>> do _ <- callNameT "I#"
                              e <- idR
-                             apps' "intL" [] [e]
+                             appsE "intL" [] [e]
 
--- TODO: Why does apps' work here in place of appsE?
--- Maybe simply because the examples import LambdaCCC.Lambda unqualified.
+reifySimplifiable :: ReExpr
+reifySimplifiable = inReify simplifyE
 
 #ifndef OnlyLifted
 
@@ -492,7 +522,7 @@ inlineDict :: ReExpr
 inlineDict = inlineMatchingPredR (dictRelated . varType)
 
 inlineWrapper :: ReExpr
-inlineWrapper = inlineMatchingPredR (("$W" `isPrefixOf`) . uqVarName)
+inlineWrapper = inlineMatchingPredR isWrapper
 
 -- Note: Given reify (m d a .. z), reifyApp whittles down to reify (m d).
 
@@ -609,7 +639,8 @@ reifyCase :: ReExpr
 reifyCase = inReify reCaseR
 
 miscL :: [(String,ReExpr)]
-miscL = [ ("reifyRules"       , reifyRules)     -- before App
+miscL = [ ("reifyRulesPrefix" , reifyRulesPrefix) -- subsumes reifyRules, I think
+     -- , ("reifyRules"       , reifyRules)     -- before App
         , ("reifyEval"        , reifyEval)      -- ''
         , ("reifyEither"      , reifyEither)    -- ''
         -- , ("reifyConstruct"   , reifyConstruct) -- ''
@@ -627,6 +658,7 @@ miscL = [ ("reifyRules"       , reifyRules)     -- before App
     --  , ("reifyInline"      , reifyInline)
         , ("reifyCast"        , reifyCast)
         , ("reifyIntLit"      , reifyIntLit)
+        , ("reifySimplifiable", reifySimplifiable)  -- last resort
         ]
 
 reifyMisc :: ReExpr
@@ -650,6 +682,8 @@ externals :: [External]
 externals =
     [ externC "reify-rules" reifyRules
         "convert some non-local vars to consts"
+    , externC "reify-rules-prefix"  reifyRulesPrefix
+         "reify-rules on an application prefix"
     , external "reify-rhs"
 #ifdef SplitEval
         (promoteR . reifyRhs :: String -> ReCore)

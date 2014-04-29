@@ -32,7 +32,7 @@ import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
 -- import Data.IsTy
 import Data.Proof.EQ
 
-import Circat.Circuit (NewtypeCat(..))  -- TODO: disentangle!
+-- import TypeUnary.Vec (Vec(..))
 
 import LambdaCCC.Misc (Unop,Evalable(..),Unit,(:*),(:+),(:=>),Eq'(..),(==?))
 import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
@@ -79,6 +79,8 @@ data (:->) :: * -> * -> * where
   -- Primitives
   Prim    :: Prim (a :=> b) -> (a :-> b)
   Lit     :: Lit b -> (a :-> b)
+
+-- TODO: Maybe specialize a to Unit in the type of Lit
 
 -- TODO: Try to make instances for the Category subclasses, so we don't need
 -- separate terminology. Then eliminate dup, jam, etc.
@@ -331,9 +333,11 @@ instance Show (a :-> b) where
 
 -- prim :: Prim (a -> b) -> (a :-> b)
 
-instance NewtypeCat (:->) where
-  pack   = prim PackP
-  unpack = prim UnpackP
+instance VecCat (:->) where
+  toVecZ   = prim ToVecZP
+  unVecZ   = prim UnVecZP
+  toVecS   = uncurry (prim VecSP)
+  unVecS   = prim UnVecSP
 
 instance BoolCat (:->) where
   not = prim NotP
@@ -390,3 +394,9 @@ convertP InrP  = inr
 convertP p     = error $ "convertP: not yet handled: " ++ show p
 
 instance HasUnitArrow (:->) Lit where unitArrow = Lit
+
+-- class HasUnitArrow k p where
+--   unitArrow :: p b -> Unit `k` b
+
+--   Lit     :: Lit b -> (a :-> b)
+

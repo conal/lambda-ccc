@@ -25,7 +25,7 @@
 --   
 ----------------------------------------------------------------------
 
-module Simple (reified) where
+module Simple where
 
 import Prelude
 
