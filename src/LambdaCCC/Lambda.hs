@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, PatternGuards #-}
 {-# LANGUAGE MagicHash, ConstraintKinds, ViewPatterns, MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE CPP #-}
 
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
@@ -32,6 +32,9 @@ module LambdaCCC.Lambda
   , vars, vars2
   , xor, condBool   -- from Prim
   , intL
+  , vecCaseZ, vecCaseS   -- To remove
+  -- , Structured(..), idStruct, idVec
+  , idVecZ, idVecS
   -- Temporary less polymorphic variants.
   -- Remove when I can dig up Prim as a type in Core
   , EP, appP, lamP, lettP , varP#, lamvP#, casevP#, eitherEP, castEP, castEP'
@@ -55,7 +58,9 @@ import GHC.Prim (Addr#)
 
 import Data.Proof.EQ
 
-import TypeUnary.Vec (Vec(..),Z) -- ,S
+import TypeUnary.Vec (Vec(..),Z,S)
+
+-- import Circat.Classes (VecCat(..))
 
 -- import Circat.Classes (VecCat(..))
 
@@ -498,13 +503,8 @@ intL = kLit
 "reify/false"   reifyEP False    = kLit  False
 "reify/true"    reifyEP True     = kLit  True
 
--- "reify/toVecZ"  reifyEP toVecZ'  = kPrim ToVecZP
--- "reify/unVecZ"  reifyEP unVecZ'  = kPrim UnVecZP
--- "reify/toVecS"  reifyEP toVecS'  = kPrim ToVecSP
--- "reify/unVecS"  reifyEP unVecS'  = kPrim UnVecSP
-
--- "reify/ZVec"    reifyEP ZVec     = reifyEP (toVecZ' ())
--- "reify/(:<)"    reifyEP (:<)     = reifyEP toVecS'
+-- "reify/ZVec"    reifyEP ZVec     = reifyEP (toVecZ ())
+-- "reify/(:<)"    reifyEP (:<)     = reifyEP toVecS
 
 "reify/ZVec"    reifyEP ZVec     = zVec
 "reify/(:<)"    reifyEP (:<)     = kPrim VecSP
@@ -516,32 +516,6 @@ intL = kLit
 
 zVec :: EP (Vec Z a)
 zVec = kPrim ToVecZP @^ kLit ()
-
-#if 0
--- Bogus method variants to avoid accidental inlining.
-
-toVecZ' :: () -> Vec Z a
-toVecZ' = error "toVecZ': undefined"
-{-# NOINLINE toVecZ' #-}
-
-toVecS' :: a -> Vec n a -> Vec (S n) a
-toVecS' = error "toVecS': undefined"
-{-# NOINLINE toVecS' #-}
-
-unVecZ' :: Vec Z a -> ()
-unVecZ' = error "unVecZ': undefined"
-{-# NOINLINE unVecZ' #-}
-
-unVecS' :: Vec (S n) a -> a :* Vec n a
-unVecS' = error "unVecS': undefined"
-{-# NOINLINE unVecS' #-}
-
--- vecZ :: Vec Z a
--- vecZ = toVecZ ()
-
--- vecS :: a -> Vec n a -> Vec (S n) a
--- vecS = curry toVecS
-#endif
 
 -- For literals, I'd like to say
 -- 
@@ -605,6 +579,102 @@ condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))
 
 {-# RULES "reify/oops" forall e. reifyEP e = oops  #-}
 
+-- For translating case of empty vector
+vecCaseZ :: forall b a. b -> Vec Z a -> b
+vecCaseZ b ZVec = b
+
+-- For translating case of nonempty vector
+-- vecCaseS :: forall n a b. (a -> Vec n a -> b) -> Vec (S n) a -> b
+vecCaseS :: forall n a b. (a -> Vec n a -> b) -> Vec (S n) a -> b
+vecCaseS f (a :< as) = f a as
+
+{--------------------------------------------------------------------
+    Restructuring help. Move elsewhere. Needed by Reify.
+--------------------------------------------------------------------}
+
+{-
+class Structured t where
+  type Enc t
+  encode :: t -> Enc t
+  decode :: Enc t -> t
+
+idStruct :: Structured t => t -> t
+idStruct = decode . encode
+
+instance Structured (Vec   Z   a) where
+  type Enc (Vec Z a) = ()
+  encode = unVecZ
+  decode = toVecZ
+instance Structured (Vec (S n) a) where
+  type Enc (Vec (S n) a) = a :* Vec n a
+  encode = unVecS
+  decode = toVecS
+
+-- Type specialization. Drop when I can find/construct dictionaries via HERMIT.
+idVec :: forall n a. Unop (Vec n a)
+idVec = idStruct
+-}
+
+-- To eliminate a case-of-vec, wrap the scrutinee by idVecZ or idVecS and
+-- simplify. Don't inline vector examination (unVecZ or unVecS), which would
+-- yield another case-of-vec. Do inline vector construction (toVecZ or toVecS)
+-- to reveal case-of-known constructor.
+
+idVecZ :: forall a. Unop (Vec Z a)
+idVecZ = toVecZ' . unVecZ'
+
+idVecS :: forall n a. Unop (Vec (S n) a)
+idVecS = toVecS' . unVecS'
+
+-- Bogus method variants to control inlining.
+
+#if 0
+toVecZ' :: () -> Vec Z a
+toVecZ' = error "toVecZ': undefined"
+{-# NOINLINE toVecZ' #-}
+
+toVecS' :: a -> Vec n a -> Vec (S n) a
+toVecS' = error "toVecS': undefined"
+{-# NOINLINE toVecS' #-}
+
+unVecZ' :: Vec Z a -> ()
+unVecZ' = error "unVecZ': undefined"
+{-# NOINLINE unVecZ' #-}
+
+unVecS' :: Vec (S n) a -> a :* Vec n a
+unVecS' = error "unVecS': undefined"
+{-# NOINLINE unVecS' #-}
+#else
+toVecZ' :: () -> Vec Z a
+toVecZ' () = ZVec
+{-# INLINE toVecZ' #-}
+
+toVecS' :: a :* Vec n a -> Vec (S n) a
+toVecS' (a,as) = a :< as
+{-# INLINE toVecS' #-}
+
+unVecZ' :: Vec Z a -> ()
+unVecZ' ZVec = ()
+{-# NOINLINE unVecZ' #-}
+
+unVecS' :: Vec (S n) a -> a :* Vec n a
+unVecS' (a :< as) = (a,as)
+{-# NOINLINE unVecS' #-}
+
+-- TODO: If these definitions control inlining as I want, try replacing them
+-- with ones that call the VecCat methods.
+
+#endif
+
+{-# RULES
+
+-- "reify/toVecZ" reifyEP toVecZ' = kPrim ToVecZP
+-- "reify/toVecS" reifyEP toVecS' = kPrim ToVecSP
+
+"reify/unVecZ" reifyEP unVecZ' = kPrim UnVecZP
+"reify/unVecS" reifyEP unVecS' = kPrim UnVecSP
+
+ #-}
 
 {--------------------------------------------------------------------
     Constructors that take Addr#, for ReifyLambda
