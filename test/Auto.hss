@@ -19,3 +19,6 @@ down                                    -- To definitions
 --   any-td (apply-rule "reify/oops" ; cleanup-unfold)
 
 try unshadow
+
+-- Remove when I'm able to reactiveate -dcore-lint
+top ; lint-module ; down
