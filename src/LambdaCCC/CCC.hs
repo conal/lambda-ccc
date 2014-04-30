@@ -350,8 +350,9 @@ instance BoolCat (:->) where
 instance MuxCat (:->) where
   mux = prim CondBP
 
-instance AddCat' (:->) Int where
+instance NumCat (:->) Int where
   add = uncurry (prim AddP)
+  mul = uncurry (prim MulP)
 
 -- TODO: reconcile curried vs uncurried, eliminating the conversions here.
 

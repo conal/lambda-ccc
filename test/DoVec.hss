@@ -1,0 +1,28 @@
+set-pp-renderer ascii
+set-pp-width 80
+-- set-pp-type     Show
+-- set-pp-coercion Abstract
+set-pp-type     Omit
+set-pp-coercion Omit
+
+-- rhs-of z
+
+-- try post-unfold
+
+reify-module
+
+binding-of s1_reified
+
+repeat (any-td (repeat reify-misc))
+
+-- occurrence-of reifyEP ; up ; up
+-- reify-case-vec
+
+-- set-pp-type Omit
+
+down
+
+-- Remove when I'm able to reactiveate -dcore-lint
+top ; lint-module ; down
+
+binding-of s1_reified

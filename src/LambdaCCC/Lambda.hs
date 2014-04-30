@@ -492,6 +492,7 @@ intL = kLit
 "reify/(||)"    reifyEP (||)     = kPrim OrP
 "reify/xor"     reifyEP xor      = kPrim XorP
 "reify/(+)"     reifyEP (+)      = kPrim AddP
+"reify/(+)"     reifyEP (*)      = kPrim MulP
 "reify/exl"     reifyEP fst      = kPrim ExlP
 "reify/exr"     reifyEP snd      = kPrim ExrP
 "reify/pair"    reifyEP (,)      = kPrim PairP
@@ -768,6 +769,7 @@ instance Eq1' Prim where
   OrP     ==== OrP     = True
   XorP    ==== XorP    = True
   AddP    ==== AddP    = True
+  MulP    ==== MulP    = True
   ExlP    ==== ExlP    = True
   ExrP    ==== ExrP    = True
   PairP   ==== PairP   = True

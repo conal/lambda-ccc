@@ -80,7 +80,7 @@ import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 -- (Observing, observeR', triesL, labeled)
 
 observing :: Ex.Observing
-observing = True
+observing = False
 
 observeR' :: InCoreTC t => String -> RewriteH t
 observeR' = Ex.observeR' observing
@@ -248,7 +248,8 @@ unlessTC name = rejectTypeR (hasTC name)
 
 -- Pass through unless a dictionary construction
 unlessDict :: ReExpr
-unlessDict = rejectTypeR (isDictTy . snd . splitFunTys . dropForAlls)
+unlessDict = rejectTypeR (dictRelated . dropForAlls)
+-- unlessDict = rejectTypeR (isDictTy . snd . splitFunTys . dropForAlls)
 
 -- Pass through unless an eval application
 unlessEval :: ReExpr
@@ -286,7 +287,8 @@ reifyMonoLet =
 
 #ifdef SplitEval
 
--- e --> eval (reify e) in preparation for rewriting reify e.
+-- (\ vs -> e) --> (\ vs -> eval (reify e)) in preparation for rewriting reify e.
+-- For vs, take all leading type variables.
 -- Fail if e is already an eval or if it has IO or EP type.
 reifyRhs :: String -> ReExpr
 reifyRhs nm =
@@ -299,6 +301,7 @@ reifyRhs nm =
      evald      <- evalOf (mkCoreApps (Var v) ((Type . TyVarTy) <$> tvs))
      return $
        Let (NonRec v reified) (mkLams tvs evald)
+
 
 reifyDef :: RewriteH CoreBind
 reifyDef = do NonRec v _ <- idR
@@ -844,4 +847,3 @@ externals =
 #endif
     ]
     -- ++ Enc.externals
-

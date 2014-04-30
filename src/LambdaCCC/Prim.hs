@@ -36,7 +36,7 @@ import Data.Constraint (Dict(..))
 import TypeUnary.Vec (Z,S,Vec(..))
 
 import Circat.Category hiding (CondCat(..))
-import Circat.Classes (BoolCat(not,and,or),MuxCat(..),AddCat'(..),VecCat(..))
+import Circat.Classes (BoolCat(not,and,or),MuxCat(..),NumCat(..),VecCat(..))
 import qualified Circat.Classes as C
 
 -- :( . TODO: Disentangle!
@@ -127,7 +127,7 @@ data Prim :: * -> * where
   LitP          :: Lit a -> Prim a
   NotP          :: Prim (Bool -> Bool)
   AndP,OrP,XorP :: Prim (Bool -> Bool -> Bool)
-  AddP          :: Prim (Int -> Int -> Int)
+  AddP,MulP     :: Prim (Int -> Int -> Int)
   ExlP          :: Prim (a :* b -> a)
   ExrP          :: Prim (a :* b -> b)
   InlP          :: Prim (a -> a :+ b)
@@ -157,6 +157,7 @@ instance Eq' (Prim a) (Prim b) where
   OrP     === OrP     = True
   XorP    === XorP    = True
   AddP    === AddP    = True
+  MulP    === MulP    = True
   ExlP    === ExlP    = True
   ExrP    === ExrP    = True
   InlP    === InlP    = True
@@ -179,6 +180,7 @@ instance Show (Prim a) where
   showsPrec _ OrP      = showString "(||)"
   showsPrec _ XorP     = showString "xor"
   showsPrec _ AddP     = showString "add"
+  showsPrec _ MulP     = showString "mul"
   showsPrec _ ExlP     = showString "exl"
   showsPrec _ InlP     = showString "Left"
   showsPrec _ InrP     = showString "Right"
@@ -193,7 +195,7 @@ instance Show (Prim a) where
 
 instance Show' Prim where showsPrec' = showsPrec
 
-instance ( BiCCC k, BoolCat k, MuxCat k, VecCat k, AddCat' k Int, HasUnitArrow k Lit) =>
+instance ( BiCCC k, BoolCat k, MuxCat k, VecCat k, NumCat k Int, HasUnitArrow k Lit) =>
          HasUnitArrow k Prim where
   unitArrow (LitP l) = unitArrow l
   unitArrow NotP     = unitFun not
@@ -201,6 +203,7 @@ instance ( BiCCC k, BoolCat k, MuxCat k, VecCat k, AddCat' k Int, HasUnitArrow k
   unitArrow OrP      = unitFun (curry or)
   unitArrow XorP     = unitFun (curry C.xor)
   unitArrow AddP     = unitFun (curry add)
+  unitArrow MulP     = unitFun (curry mul)
   unitArrow ExlP     = unitFun exl
   unitArrow ExrP     = unitFun exr
   unitArrow InlP     = unitFun inl
@@ -225,6 +228,7 @@ instance Evalable (Prim a) where
   eval OrP           = (||)
   eval XorP          = xor
   eval AddP          = (+)
+  eval MulP          = (*)
   eval ExlP          = fst
   eval ExrP          = snd
   eval InlP          = Left
