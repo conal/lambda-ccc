@@ -80,7 +80,7 @@ import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 -- (Observing, observeR', triesL, labeled)
 
 observing :: Ex.Observing
-observing = False
+observing = True
 
 observeR' :: InCoreTC t => String -> RewriteH t
 observeR' = Ex.observeR' observing
@@ -444,7 +444,7 @@ reifyRuleNames = map ("reify/" ++)
   [ "not","(&&)","(||)","xor","(+)","(*)","exl","exr","pair","inl","inr"
   , "if","()","false","true"
   , "toVecZ","unVecZ","toVecS","unVecS"
-  , "ZVec","(:<)","(:#)","L","B"
+  , "ZVec","(:<)","(:#)","L","B","unPair"
   ]
 
 -- ,"if-bool","if-pair"
@@ -725,8 +725,7 @@ sizedTy (TyConApp tc [len0,elemTy]) =
            TyConApp ((== s) -> True) [n] -> VSucc n
            _ -> error "sizedTy: Vec not Z or S n. Investigate."
        , elemTy )
-
-sizedTy _ = fail "Not a Vec type (and wrong # args)"
+sizedTy _ = fail "sizedTy: wrong # args"
 
 
 -- Find a structural identity function on a unary-sized type, given the names of
@@ -746,10 +745,14 @@ vecId = sizedId ("TypeUnary.Vec.Vec","idVecZ","idVecS")
 
 -- Find a structural identity function on trees
 treeId :: Type -> TransformU CoreExpr
-treeId = sizedId ("Circat.RTree","idTreeZ","idTreeS")
+treeId = sizedId ("Circat.RTree.Tree","idTreeZ","idTreeS")
 
 pairId :: Type -> TransformU CoreExpr
-pairId ty = appsE "idPair" [ty] []
+pairId (TyConApp tc [a]) = do tcv <- findTyConT "Circat.Pair.Pair"
+                              guardMsg (tc == tcv) ("Not a Pair")
+                              appsE "idPair" [a] []
+pairId _ = fail "pairId: wrong # args"
+
 
 onScrut :: Unop ReExpr
 onScrut r = caseAllR r idR idR (const idR)
@@ -762,17 +765,9 @@ reifyCaseSized :: ReExpr
 reifyCaseSized =
   inReify $
     onScrut (do ty  <- exprType <$> idR
-                idF <- (vecId ty <+ treeId ty)
+                idF <- (vecId ty <+ treeId ty <+ pairId ty)
                 arr (App idF) >>> unfoldR )
-    >>> caseFloatCaseR
-    >>> onRhs (caseReduceUnfoldR True)
-
--- reifyCaseVec = inReify $
---                  onScrut (do ty  <- exprType <$> idR
---                              idF <- vecId ty
---                              arr (App idF) >>> unfoldR )
---                  >>> caseFloatCaseR
---                  >>> onRhs (caseReduceUnfoldR True)
+    >>> tryR (caseFloatCaseR >>> onRhs (caseReduceUnfoldR True))
 
 -- Temporary workaround. Remove when I get the reifyEP/(:<) rule working on
 -- unwrapped (:<).

@@ -62,7 +62,7 @@ import TypeUnary.Vec (Vec(..),Z,S)
 
 -- import Circat.Classes (VecCat(..))
 
-import Circat.Pair  (Pair(..),PairCat(..))
+import Circat.Pair  (Pair(..)) -- ,PairCat(..)
 import Circat.RTree (Tree(..),TreeCat(..))
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
@@ -515,6 +515,11 @@ intL = kLit
 "reify/L"       reifyEP L        = kPrim ToLeafP
 "reify/B"       reifyEP B        = kPrim ToBranchP
 
+"reify/unPair" reifyEP unPair'  = kPrim UnUPairP
+
+-- TODO: Why reify/unPair' and not reify/unVecZ & reify/unVecS ?
+-- TODO: trees
+
 -- -- This one avoids currying
 -- "reify/(a:<as)" forall a as. reifyEP (a:<as) = reifyEP (toVecS' (a,as))
 
@@ -675,7 +680,7 @@ toPair' (a,a') = a :# a'
 
 unPair' :: Pair a -> a :* a
 unPair' (a :# a') = (a,a')
-{-# INLINE unPair' #-}
+{-# NOINLINE unPair' #-}
 
 
 toTreeZ' :: a -> Tree Z a

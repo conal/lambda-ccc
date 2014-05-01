@@ -217,7 +217,9 @@ instance Show (Prim a) where
 
 instance Show' Prim where showsPrec' = showsPrec
 
-instance ( BiCCC k, BoolCat k, MuxCat k, VecCat k, NumCat k Int, HasUnitArrow k Lit) =>
+instance ( BiCCC k, HasUnitArrow k Lit
+         , BoolCat k, MuxCat k, VecCat k, PairCat k, TreeCat k, NumCat k Int
+         ) =>
          HasUnitArrow k Prim where
   unitArrow (LitP l) = unitArrow l
   unitArrow NotP     = unitFun not
@@ -231,11 +233,18 @@ instance ( BiCCC k, BoolCat k, MuxCat k, VecCat k, NumCat k Int, HasUnitArrow k 
   unitArrow InlP     = unitFun inl
   unitArrow InrP     = unitFun inr
   unitArrow PairP    = unitFun (curry id)
+  unitArrow CondBP   = unitFun mux
   unitArrow ToVecZP  = unitFun toVecZ
   unitArrow UnVecZP  = unitFun unVecZ
   unitArrow VecSP    = unitFun (curry toVecS)
   unitArrow UnVecSP  = unitFun unVecS
-  unitArrow CondBP   = unitFun mux
+  unitArrow UPairP    = unitFun (curry toPair)
+  unitArrow UnUPairP  = unitFun unPair
+  unitArrow ToLeafP   = unitFun toL
+  unitArrow ToBranchP = unitFun toB
+  unitArrow UnLeafP   = unitFun unL
+  unitArrow UnBranchP = unitFun unB
+
   unitArrow p        = error $ "unitArrow: not yet handled: " ++ show p
 
 --     Variable `k' occurs more often than in the instance head

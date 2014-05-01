@@ -52,6 +52,8 @@ import LambdaCCC.Prim (Prim(..),Lit(..)) -- ,cond,ifThenElse
 
 import Circat.Category
 import Circat.Classes
+import Circat.Pair  (PairCat(..))
+import Circat.RTree (TreeCat(..))
 
 infix  0 :->
 
@@ -341,10 +343,20 @@ instance Show (a :-> b) where
 -- prim :: Prim (a -> b) -> (a :-> b)
 
 instance VecCat (:->) where
-  toVecZ   = prim ToVecZP
-  unVecZ   = prim UnVecZP
-  toVecS   = uncurry (prim VecSP)
-  unVecS   = prim UnVecSP
+  toVecZ = prim ToVecZP
+  unVecZ = prim UnVecZP
+  toVecS = uncurry (prim VecSP)
+  unVecS = prim UnVecSP
+
+instance PairCat (:->) where
+  toPair = uncurry (prim UPairP)
+  unPair = prim UnUPairP
+
+instance TreeCat (:->) where
+  toL = prim ToLeafP
+  unL = prim UnLeafP
+  toB = prim ToBranchP
+  unB = prim UnBranchP
 
 instance BoolCat (:->) where
   not = prim NotP
