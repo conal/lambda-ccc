@@ -34,7 +34,7 @@ module LambdaCCC.Lambda
   , intL
   , vecCaseZ, vecCaseS   -- To remove
   -- , Structured(..), idStruct, idVec
-  , idVecZ, idVecS
+  , idVecZ, idVecS, idPair, idTreeZ, idTreeS
   -- Temporary less polymorphic variants.
   -- Remove when I can dig up Prim as a type in Core
   , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP, castEP, castEP'
@@ -62,8 +62,8 @@ import TypeUnary.Vec (Vec(..),Z,S)
 
 -- import Circat.Classes (VecCat(..))
 
-import Circat.Pair  (Pair(..))
-import Circat.RTree (Tree(..))
+import Circat.Pair  (Pair(..),PairCat(..))
+import Circat.RTree (Tree(..),TreeCat(..))
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
 import LambdaCCC.ShowUtils
@@ -639,25 +639,17 @@ idVecZ = toVecZ' . unVecZ'
 idVecS :: forall n a. Unop (Vec (S n) a)
 idVecS = toVecS' . unVecS'
 
+idPair :: forall a. Unop (Pair a)
+idPair = toPair' . unPair'
+
+idTreeZ :: forall a. Unop (Tree Z a)
+idTreeZ = toTreeZ' . unTreeZ'
+
+idTreeS :: forall n a. Unop (Tree (S n) a)
+idTreeS = toTreeS' . unTreeS'
+
 -- Bogus method variants to control inlining.
 
-#if 0
-toVecZ' :: () -> Vec Z a
-toVecZ' = error "toVecZ': undefined"
-{-# NOINLINE toVecZ' #-}
-
-toVecS' :: a -> Vec n a -> Vec (S n) a
-toVecS' = error "toVecS': undefined"
-{-# NOINLINE toVecS' #-}
-
-unVecZ' :: Vec Z a -> ()
-unVecZ' = error "unVecZ': undefined"
-{-# NOINLINE unVecZ' #-}
-
-unVecS' :: Vec (S n) a -> a :* Vec n a
-unVecS' = error "unVecS': undefined"
-{-# NOINLINE unVecS' #-}
-#else
 toVecZ' :: () -> Vec Z a
 toVecZ' () = ZVec
 {-# INLINE toVecZ' #-}
@@ -677,7 +669,30 @@ unVecS' (a :< as) = (a,as)
 -- TODO: If these definitions control inlining as I want, try replacing them
 -- with ones that call the VecCat methods.
 
-#endif
+toPair' :: a :* a -> Pair a
+toPair' (a,a') = a :# a'
+{-# INLINE toPair' #-}
+
+unPair' :: Pair a -> a :* a
+unPair' (a :# a') = (a,a')
+{-# INLINE unPair' #-}
+
+
+toTreeZ' :: a -> Tree Z a
+toTreeZ' = L
+{-# INLINE toTreeZ' #-}
+
+toTreeS' :: Pair (Tree n a) -> Tree (S n) a
+toTreeS' = B
+{-# INLINE toTreeS' #-}
+
+unTreeZ' :: Tree Z a -> a
+unTreeZ' = unL
+{-# NOINLINE unTreeZ' #-}
+
+unTreeS' :: Tree (S n) a -> Pair (Tree n a)
+unTreeS' = unB
+{-# NOINLINE unTreeS' #-}
 
 {-# RULES
 

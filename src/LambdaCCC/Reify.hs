@@ -6,7 +6,7 @@
 {-# OPTIONS_GHC -Wall #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -714,14 +714,13 @@ reifyCaseWild = inReify $
 
 data NatTy = VZero | VSucc Type
 
-sizedTy :: Type -> TransformU (NatTy,Type)
+sizedTy :: Type -> TransformU (TyCon, NatTy,Type)
 sizedTy (TyConApp tc [len0,elemTy]) =
-  do tcv <- findTyConT "TypeUnary.Vec.Vec"
-     guardMsg (tc == tcv) "Not a Vec type"
-     z <- findTyConT "TypeUnary.TyNat.Z"
+  do z <- findTyConT "TypeUnary.TyNat.Z"
      s <- findTyConT "TypeUnary.TyNat.S"
      return $
-       ( case fromMaybe len0 (coreView len0) of
+       ( tc
+       , case fromMaybe len0 (coreView len0) of
            TyConApp ((== z) -> True) []  -> VZero
            TyConApp ((== s) -> True) [n] -> VSucc n
            _ -> error "sizedTy: Vec not Z or S n. Investigate."
@@ -730,48 +729,27 @@ sizedTy (TyConApp tc [len0,elemTy]) =
 sizedTy _ = fail "Not a Vec type (and wrong # args)"
 
 
--- | reify a case of a known-size vector
-reifyCaseVec :: ReExpr
-
-#if 0
-reifyCaseVec = inReify $
-               do Case scrut _wild bodyTy alts <- idR
-                  (size,elemTy) <- sizedTy (exprType scrut)
-                  case size of
-                    VZero ->
-                      do let Just val = getAlt "ZVec" alts
-                         appsE "vecCaseZ" [bodyTy,elemTy] [val,scrut] 
-                    VSucc n ->
-                      do let Just fun = getAlt ":<" alts
-                         appsE "vecCaseS" [n,elemTy,bodyTy] [fun,scrut] 
- where
-   getAlt :: String -> [CoreAlt] -> Maybe CoreExpr
-   getAlt con = msum . map (matchAltLam con)
-
--- vecCaseZ :: forall b a. b -> Vec Z a -> b
--- vecCaseS :: forall n a b. (a -> Vec n a -> b) -> Vec (S n) a -> b
-
-matchAltLam :: String -> CoreAlt -> Maybe CoreExpr
-matchAltLam want (DataAlt dc,vars,rhs)
-  | uqName (dataConName dc) == want = Just (mkLams vars rhs)
-matchAltLam _ _ = Nothing
-#else
+-- Find a structural identity function on a unary-sized type, given the names of
+-- the type and construction functions for zero and succ size.
+sizedId :: (String,String,String) -> Type -> TransformU CoreExpr
+sizedId (tcn,z,s) ty =
+  do (tc,size,a) <- sizedTy ty
+     tcv <- findTyConT tcn
+     guardMsg (tc == tcv) ("Not a " ++ tcn)
+     case size of
+       VZero   -> appsE z [  a] [] 
+       VSucc n -> appsE s [n,a] []
 
 -- Find a structural identity function on vectors
-vecIdStruct :: Type -> TransformU CoreExpr
-vecIdStruct ty = do (size,a) <- sizedTy ty
-                    case size of
-                      VZero   -> appsE "idVecZ" [  a] [] 
-                      VSucc n -> appsE "idVecS" [n,a] []
+vecId :: Type -> TransformU CoreExpr
+vecId = sizedId ("TypeUnary.Vec.Vec","idVecZ","idVecS")
 
-scrutType :: TransformH CoreExpr Type
-scrutType = do Case (exprType -> ty) _wild _bodyTy _alts <- idR
-               return ty
+-- Find a structural identity function on trees
+treeId :: Type -> TransformU CoreExpr
+treeId = sizedId ("Circat.RTree","idTreeZ","idTreeS")
 
-scrutIdF :: TransformH CoreExpr CoreExpr
-scrutIdF = scrutType >>= vecIdStruct
-
--- TODO: More types besides vectors
+pairId :: Type -> TransformU CoreExpr
+pairId ty = appsE "idPair" [ty] []
 
 onScrut :: Unop ReExpr
 onScrut r = caseAllR r idR idR (const idR)
@@ -779,31 +757,30 @@ onScrut r = caseAllR r idR idR (const idR)
 onRhs :: ReExpr -> ReExpr
 onRhs r = caseAllR idR idR idR (const (altAllR idR (const idR) r))
 
-reifyCaseVec = inReify $
-                 do idF <- scrutIdF
-                    onScrut (arr (App idF) >>> unfoldR)
-                 >>> caseFloatCaseR
-                 >>> onRhs (caseReduceUnfoldR True)
-
--- TODO: Refactor the scrutIdF & onScrut so we just enter the scrut once.
--- Simpler?
+-- | reify a case of a known-size structure
+reifyCaseSized :: ReExpr
+reifyCaseSized =
+  inReify $
+    onScrut (do ty  <- exprType <$> idR
+                idF <- (vecId ty <+ treeId ty)
+                arr (App idF) >>> unfoldR )
+    >>> caseFloatCaseR
+    >>> onRhs (caseReduceUnfoldR True)
 
 -- reifyCaseVec = inReify $
---                do Case scrut wild bodyTy alts <- idR
---                   idF <- vecIdStruct (exprType scrut)
---                   return (Case (App idF scrut) wild bodyTy alts)
-
--- reifyCaseVec = inReify $ caseAllR idStructR idR idR idR
---  where
---    -- Oops. I'd need to find/construct a dictionary.
---    idStructR :: ReExpr
---    idStructR = ...
-
-#endif
+--                  onScrut (do ty  <- exprType <$> idR
+--                              idF <- vecId ty
+--                              arr (App idF) >>> unfoldR )
+--                  >>> caseFloatCaseR
+--                  >>> onRhs (caseReduceUnfoldR True)
 
 -- Temporary workaround. Remove when I get the reifyEP/(:<) rule working on
 -- unwrapped (:<).
 reifyVecS :: ReExpr
+reifyVecS = unReify >>>
+            do (Var f,[_sn,Type a,Type n,_co]) <- callT
+               guardMsg (uqVarName f == ":<") "Not a (:<)"
+               appsE "vecSEP" [n,a] []
 
 -- reifyVecS = unReify >>> unCallE ":<" >>>
 --             do [_sn,Type a,Type n,_co] <- idR
@@ -812,12 +789,6 @@ reifyVecS :: ReExpr
 -- "callNameT failed: not a call to 'LambdaCCC.Lambda.:<."
 --
 -- Why?
-
-reifyVecS = unReify >>>
-            do (Var f,[_sn,Type a,Type n,_co]) <- callT
-               guardMsg (uqVarName f == ":<") "Not a (:<)"
-               appsE "vecSEP" [n,a] []
-
 
 miscL :: [(String,ReExpr)]
 miscL = [ ("reifyRulesPrefix" , reifyRulesPrefix) -- subsumes reifyRules, I think
@@ -837,7 +808,7 @@ miscL = [ ("reifyRulesPrefix" , reifyRulesPrefix) -- subsumes reifyRules, I thin
         , ("reifyMonoLet"     , reifyMonoLet)
         , ("reifyPolyLet"     , reifyPolyLet)
         , ("reifyTupCase"     , reifyTupCase)
-        , ("reifyCaseVec"     , reifyCaseVec)
+        , ("reifyCaseSized"   , reifyCaseSized)
         , ("reifyVecS"        , reifyVecS)        -- TEMP workaround
         , ("reifyUnfoldScrut" , reifyUnfoldScrut)
     --  , ("reifyInline"      , reifyInline)
@@ -900,7 +871,7 @@ externals =
     , externC "reify-eval" reifyEval "reify eval"
     , externC "reify-unfold" reifyUnfold "reify an unfoldable"
     , externC "reify-unfold-scrut" reifyUnfoldScrut "reify case with unfoldable scrutinee"
-    , externC "reify-case-vec" reifyCaseVec "case with a known-length vector scrutinee"
+    , externC "reify-case-sized" reifyCaseSized "case with a known-length vector scrutinee"
     , externC "reify-vecs" reifyVecS "Temp workaround"
 --     , externC "post-unfold" postUnfold "simplify after unfolding"
     , externC "reify-tup-case" reifyTupCase "reify case with unit or pair pattern"

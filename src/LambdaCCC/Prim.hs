@@ -33,7 +33,7 @@ import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
 -- import Control.Arrow ((&&&))
 import Data.Constraint (Dict(..))
 
-import TypeUnary.Vec (Z,S,Vec(..),IsNat(..))
+import TypeUnary.Vec (Z,S,Vec(..))  -- ,IsNat(..)
 
 import Circat.Category hiding (CondCat(..))
 import Circat.Classes (BoolCat(not,and,or),MuxCat(..),NumCat(..),VecCat(..))
@@ -145,10 +145,10 @@ data Prim :: * -> * where
   UPairP        :: Prim (a -> a -> Pair a)
   UnUPairP      :: Prim (Pair a -> a :* a)
   -- Trees
-  ToLeafP       ::            Prim (a -> Tree Z a)
-  UnLeafP       ::            Prim (Tree Z a -> a)
-  ToBranchP     :: IsNat n => Prim (Pair (Tree n a) -> Tree (S n) a)
-  UnBranchP     :: IsNat n => Prim (Tree (S n) a -> Pair (Tree n a))
+  ToLeafP       :: Prim (a -> Tree Z a)
+  UnLeafP       :: Prim (Tree Z a -> a)
+  ToBranchP     :: Prim (Pair (Tree n a) -> Tree (S n) a)
+  UnBranchP     :: Prim (Tree (S n) a -> Pair (Tree n a))
   -- More here
   OopsP         :: Prim a
 
