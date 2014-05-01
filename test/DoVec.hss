@@ -9,9 +9,9 @@ set-pp-coercion Omit
 
 -- try post-unfold
 
-reify-module
+-- reify-module
 
-binding-of s1_reified
+binding-of main
 
 repeat (any-td (repeat reify-misc))
 
@@ -25,4 +25,12 @@ down
 -- Remove when I'm able to reactiveate -dcore-lint
 top ; lint-module ; down
 
-binding-of s1_reified
+binding-of main
+
+-- Remove later:
+
+-- occurrence-of reifyEP ; up ; up
+-- set-pp-type Show
+-- set-pp-coercion Show
+-- -- reify-vecs
+

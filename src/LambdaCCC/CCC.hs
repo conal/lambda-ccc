@@ -2,6 +2,7 @@
 {-# LANGUAGE PatternGuards, ViewPatterns, ConstraintKinds #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts, MultiParamTypeClasses #-}
+{-# LANGUAGE TypeSynonymInstances #-}   -- for Int1 hack
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -19,6 +20,12 @@
 -- GADT of CCC combinators
 ----------------------------------------------------------------------
 
+-- Whether to introduce defined operations like (***) during show
+#define Sugared
+
+-- -- Whether to simplify during construction
+-- #define Simplify
+
 module LambdaCCC.CCC
   ( module LambdaCCC.Misc
   , (:->)(..), prim
@@ -29,8 +36,10 @@ import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
 -- import qualified Control.Arrow as A
 -- import Control.Applicative (liftA3)
 
+#ifdef Simplify
 -- import Data.IsTy
 import Data.Proof.EQ
+#endif
 
 -- import TypeUnary.Vec (Vec(..))
 
@@ -48,12 +57,6 @@ infix  0 :->
 
 infixr 3 :&&&
 infixr 2 :|||
-
--- Whether to introduce defined operations like (***) during show
-#define Sugared
-
--- Whether to simplify during construction
-#define Simplify
 
 -- | CCC combinator expressions. Although we use standard Haskell unit,
 -- cartesian product, sums, and function types here, the intended interpretation
@@ -269,7 +272,7 @@ instance ClosedCat (:->) where
     Factoring (decomposition)
 --------------------------------------------------------------------}
 
-#if defined Simplify || defined Sugared
+#if defined Simplify
 
 -- | Decompose into @g . f@, where @g@ is as small as possible, but not 'Id'.
 decompL :: Unop (a :-> c)
@@ -277,6 +280,10 @@ decompL Id                         = Id
 decompL ((decompL -> h :. g) :. f) = h :. (g . f)
 decompL comp@(_ :. _)              = comp
 decompL f                          = f :. Id
+
+#endif
+
+#if defined Simplify || defined Sugared
 
 -- | Decompose into @g . f@, where @f@ is as small as possible, but not 'Id'.
 decompR :: Unop (a :-> c)
@@ -353,6 +360,10 @@ instance MuxCat (:->) where
 instance NumCat (:->) Int where
   add = uncurry (prim AddP)
   mul = uncurry (prim MulP)
+
+-- instance NumCat (:->) Int1 where
+--   add = uncurry (prim AddP)
+--   mul = uncurry (prim MulP)
 
 -- TODO: reconcile curried vs uncurried, eliminating the conversions here.
 

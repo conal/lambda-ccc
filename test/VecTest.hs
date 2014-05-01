@@ -1,25 +1,11 @@
 {-# LANGUAGE CPP #-}
-
--- #define CopyOfVec
-
-#ifdef CopyOfVec
--- For copied Vec code. Remove later.
-{-# LANGUAGE TypeFamilies, EmptyDataDecls, TypeOperators
-           , GADTs, KindSignatures, TupleSections
-           , FlexibleInstances, FlexibleContexts
-           , UndecidableInstances
-           , ScopedTypeVariables, CPP
-           , RankNTypes
-           , MultiParamTypeClasses, FunctionalDependencies
-           , DeriveDataTypeable
-  #-}
-#endif
-{-# LANGUAGE ExplicitForAll #-}  -- For :< experiment
+{-# LANGUAGE ExplicitForAll, ConstraintKinds, FlexibleContexts #-}  -- For :< experiment
 
 {-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -fcontext-stack=34 #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -31,11 +17,12 @@
 -- 
 -- Tests with length-typed vectors. To run:
 -- 
---   hermit VecTest.hs -v0 -opt=LambdaCCC.Reify DoVec.hss
+--   hermit VecTest.hs -v0 -opt=LambdaCCC.Reify DoVec.hss resume && ./VecTest
 --   
+-- Remove the 'resume' to see intermediate Core.
 ----------------------------------------------------------------------
 
-module VecTest where
+-- module VecTest where
 
 -- TODO: explicit exports
 
@@ -45,54 +32,18 @@ import Control.Applicative (Applicative,liftA2)
 
 import Data.Foldable (Foldable(..),sum)
 
-#ifdef CopyOfVec
-import TypeUnary.Nat
-#else
 import TypeUnary.Vec
-#endif
 -- Strange -- why needed? EP won't resolve otherwise. Bug?
 import qualified LambdaCCC.Lambda
 import LambdaCCC.Lambda (EP,reifyEP)
 
-import LambdaCCC.Prim (Prim(VecSP))  -- TEMP
-
-import Circat.Classes (VecCat(..))
+import LambdaCCC.Prim (Prim(VecSP))
 import LambdaCCC.Misc (Unop)
 
-#ifdef CopyOfVec
+import Circat.Classes (VecCat(..))
+import Circat.Circuit (IsSourceP2)
 
-{--------------------------------------------------------------------
-    Copied from TypeUnary.Vec to try getting $W:< to fold.
-    Remove later.
---------------------------------------------------------------------}
-
-infixr 5 :<
-
--- | Vectors with type-determined length, having empty vector ('ZVec') and
--- vector cons ('(:<)').
-data Vec :: * -> * -> * where
-  ZVec :: Vec Z a 
-  (:<) :: a -> Vec n a -> Vec (S n) a
-
-
-infixl 1 <+>
--- | Concatenation of vectors
-(<+>) :: Vec m a -> Vec n a -> Vec (m :+: n) a
-ZVec     <+> v = v
-(a :< u) <+> v = a :< (u <+> v)
-{-# INLINE (<+>) #-}
-
-instance Functor (Vec n) where
-  fmap _ ZVec     = ZVec
-  fmap f (a :< u) = f a :< fmap f u
-  {-# INLINE fmap #-}
-
-instance Foldable (Vec n) where
-  foldr _  b ZVec     = b
-  foldr h b (a :< as) = a `h` foldr h b as
-  {-# INLINE foldr #-}
-
-#endif
+import LambdaCCC.Run
 
 {--------------------------------------------------------------------
     Examples
@@ -113,7 +64,7 @@ v6 = v3 <+> v3
 m3 :: Unop (Vec N3 Bool)
 m3 = fmap not
 
-f3 :: Vec N3 Bool -> Bool
+f3 :: Vec N5 Bool -> Bool
 f3 = foldr (||) True
 
 -- Dot product
@@ -121,21 +72,44 @@ f3 = foldr (||) True
 square :: (Functor f, Num a) => f a -> f a
 square = fmap (\ x -> x * x)
 
-dot :: (Applicative f, Foldable f, Num a) => f a -> f a -> a
-dot as bs = sum (liftA2 (*) as bs)
+prod :: (Applicative f, Foldable f, Num a) => (f a, f a) -> f a
+prod (as,bs) = liftA2 (*) as bs
 
-s1 :: Unop (Vec N2 Int)
-s1 = square
+dot :: (Applicative f, Foldable f, Num a) => (f a, f a) -> a
+dot (as,bs) = sum (liftA2 (*) as bs)
 
-d1 :: Vec N2 Int -> Vec N2 Int -> Int
+sum1 :: Vec N8 Int -> Int
+sum1 = foldr (+) 0
+
+sq1 :: Unop (Vec N4 Int)
+-- sq1 x = x * x
+sq1 = square
+
+d1 :: (Vec N1 Int, Vec N1 Int) -> Int
 d1 = dot
 
+p0 :: (Vec N0 Int, Vec N0 Int) -> Vec N0 Int
+p0 = prod
+
+p1 :: (Vec N1 Int, Vec N1 Int) -> Vec N1 Int
+p1 = prod
+
+
 -- TODO: Use the `Num` interface for even simpler formulations, including `dot
--- as bs = sum (as * bs)` and `square a = a * a`.
+-- as bs = sum (as * bs)` and `square a = a * a`. Would be less polymorphic.
 
-boo :: forall n a. a -> Vec n a -> Vec (S n) a
-boo = (:<)
+{--------------------------------------------------------------------
+    Run it
+--------------------------------------------------------------------}
 
-foo :: forall n a. Prim (a -> Vec n a -> Vec (S n) a)
-foo = VecSP
+-- Only works when compiled with HERMIT
+main :: IO ()
+-- main = run (reifyEP f3)
 
+main = run (reifyEP sum1)
+
+-- main = run (reifyEP d1)
+
+-- main = run (reifyEP sq1)
+
+-- main = run (reifyEP p1)

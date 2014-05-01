@@ -44,6 +44,7 @@ Library
                     LambdaCCC.CCC
                     LambdaCCC.ToCCC
                     LambdaCCC.Reify
+                    LambdaCCC.Run
 
 --                     LambdaCCC.Ty
 --                     LambdaCCC.MkStringExpr

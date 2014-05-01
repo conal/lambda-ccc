@@ -37,10 +37,10 @@ module LambdaCCC.Lambda
   , idVecZ, idVecS
   -- Temporary less polymorphic variants.
   -- Remove when I can dig up Prim as a type in Core
-  , EP, appP, lamP, lettP , varP#, lamvP#, casevP#, eitherEP, castEP, castEP'
+  , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP, castEP, castEP'
   , evalEP, reifyEP, kPrimEP, oops
   -- Hopefully temporary
---  , unVecZ', unVecS'
+  , vecSEP
   ) where
 
 import Data.Functor ((<$>))
@@ -62,7 +62,8 @@ import TypeUnary.Vec (Vec(..),Z,S)
 
 -- import Circat.Classes (VecCat(..))
 
--- import Circat.Classes (VecCat(..))
+import Circat.Pair  (Pair(..))
+import Circat.RTree (Tree(..))
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
 import LambdaCCC.ShowUtils
@@ -109,14 +110,14 @@ instance Eq (V a) where (==) = (====)
 instance Eq1' V where
   V a ==== V b = a == b
 
-infixr 1 :#
+infixr 1 :$
 infixr 8 :@
 
 -- | Lambda patterns
 data Pat :: * -> * where
   UnitPat :: Pat Unit
   VarPat  :: V a -> Pat a
-  (:#)    :: Pat a -> Pat b -> Pat (a :* b)
+  (:$)    :: Pat a -> Pat b -> Pat (a :* b)
   (:@)    :: Pat a -> Pat a -> Pat a
 
 -- NOTE: ":@" is named to suggest "as patterns", but is more general ("and patterns").
@@ -126,7 +127,7 @@ data Pat :: * -> * where
 instance Eq1' Pat where
   UnitPat  ==== UnitPat    = True
   VarPat v ==== VarPat v'  = v ==== v'
-  (a :# b) ==== (a' :# b') = a ==== a' && b ==== b'
+  (a :$ b) ==== (a' :$ b') = a ==== a' && b ==== b'
   (a :@ b) ==== (a' :@ b') = a ==== a' && b ==== b'
   _        ==== _          = False
 
@@ -135,14 +136,14 @@ instance Eq (Pat a) where (==) = (====)
 instance Show (Pat a) where
   showsPrec _ UnitPat    = showString "()"
   showsPrec p (VarPat v) = showsPrec p v
-  showsPrec p (a :# b)   = showsPair p a b
+  showsPrec p (a :$ b)   = showsPair p a b
   showsPrec p (a :@ b)   = showsOp2' "@" (8,AssocRight) p a b
 
 -- | Does a variable occur in a pattern?
 occursVP :: V a -> Pat b -> Bool
 occursVP _ UnitPat     = False
 occursVP v (VarPat v') = varName v == varName v'
-occursVP v (a :# b)    = occursVP v a || occursVP v b
+occursVP v (a :$ b)    = occursVP v a || occursVP v b
 occursVP v (a :@ b)    = occursVP v a || occursVP v b
 
 -- TODO: Pull v out of the recursion.
@@ -163,7 +164,7 @@ substVP v p = substIn
  where
    substIn :: Unop (Pat c)
    substIn (VarPat ((v ===?) -> Just Refl)) = p
-   substIn (a :# b)                         = substIn a :# substIn b
+   substIn (a :$ b)                         = substIn a :$ substIn b
    substIn (a :@ b)                         = substIn a :@ substIn b
    substIn q                                = q
 #endif
@@ -200,7 +201,7 @@ occursVE v@(V name) = occ
 occursPE :: Pat a -> E p b -> Bool
 occursPE UnitPat    = pure False
 occursPE (VarPat v) = occursVE v
-occursPE (p :# q)   = liftA2 (||) (occursPE p) (occursPE q)
+occursPE (p :$ q)   = liftA2 (||) (occursPE p) (occursPE q)
 occursPE (p :@ q)   = liftA2 (||) (occursPE p) (occursPE q)
 
 -- I've placed the quantifiers explicitly to reflect what I learned from GHCi
@@ -262,7 +263,7 @@ patToE (AndPat  _ _) = error "patToE: AndPat not yet handled"
 patToEs :: PrimBasics p => Pat a -> [E p a]
 patToEs UnitPat    = pure $ ConstE unitP
 patToEs (VarPat v) = pure $ Var v
-patToEs (p :# q)   = liftA2 (#) (patToEs p) (patToEs q)
+patToEs (p :$ q)   = liftA2 (#) (patToEs p) (patToEs q)
 patToEs (p :@ q)   = patToEs p ++ patToEs q
 
 #endif
@@ -438,7 +439,7 @@ eval' (Cast e)     = eval' e
 extendEnv :: Pat b -> b -> (Env -> Env)
 extendEnv UnitPat       ()  = id
 extendEnv (VarPat vb)   b   = (Bind vb b :)
-extendEnv (p :# q)    (a,b) = extendEnv q b . extendEnv p a
+extendEnv (p :$ q)    (a,b) = extendEnv q b . extendEnv p a
 extendEnv (p :@ q)      b   = extendEnv q b . extendEnv p b
 
 -- TODO: Rewrite extendEnv so that it examines the pattern just once,
@@ -463,7 +464,7 @@ vars = (VarPat &&& Var) . V
 -- vars n = (VarPat v, Var v) where v = V n typ
 
 vars2 :: (Name,Name) -> (Pat (a,b), (E p a,E p b))
-vars2 (na,nb) = (ap :# bp, (ae,be))
+vars2 (na,nb) = (ap :$ bp, (ae,be))
  where
    (ap,ae) = vars na
    (bp,be) = vars nb
@@ -492,7 +493,7 @@ intL = kLit
 "reify/(||)"    reifyEP (||)     = kPrim OrP
 "reify/xor"     reifyEP xor      = kPrim XorP
 "reify/(+)"     reifyEP (+)      = kPrim AddP
-"reify/(+)"     reifyEP (*)      = kPrim MulP
+"reify/(*)"     reifyEP (*)      = kPrim MulP
 "reify/exl"     reifyEP fst      = kPrim ExlP
 "reify/exr"     reifyEP snd      = kPrim ExrP
 "reify/pair"    reifyEP (,)      = kPrim PairP
@@ -507,16 +508,24 @@ intL = kLit
 -- "reify/ZVec"    reifyEP ZVec     = reifyEP (toVecZ ())
 -- "reify/(:<)"    reifyEP (:<)     = reifyEP toVecS
 
-"reify/ZVec"    reifyEP ZVec     = zVec
+"reify/ZVec"    reifyEP ZVec     = vecZEP
 "reify/(:<)"    reifyEP (:<)     = kPrim VecSP
+
+"reify/(:#)"    reifyEP (:#)     = kPrim UPairP
+"reify/L"       reifyEP L        = kPrim ToLeafP
+"reify/B"       reifyEP B        = kPrim ToBranchP
 
 -- -- This one avoids currying
 -- "reify/(a:<as)" forall a as. reifyEP (a:<as) = reifyEP (toVecS' (a,as))
 
   #-}
 
-zVec :: EP (Vec Z a)
-zVec = kPrim ToVecZP @^ kLit ()
+vecZEP :: EP (Vec Z a)
+vecZEP = kPrim ToVecZP @^ kLit ()
+
+-- Temp workaround until I can get reify/(:<) to apply to the bare constructor
+vecSEP :: forall n a. EP (a -> Vec n a -> Vec (S n) a)
+vecSEP = kPrim VecSP
 
 -- For literals, I'd like to say
 -- 
@@ -530,6 +539,9 @@ zVec = kPrim ToVecZP @^ kLit ()
 "xor/True"  forall a. a     `xor` True  = not a
 "False/xor" forall b. False `xor` b     = b
 "xor/False" forall a. a     `xor` False = a
+
+"0 + a" forall a. 0 + a = a
+"a + 0" forall a. a + 0 = a
 
  #-}
 
@@ -695,6 +707,10 @@ lamv# :: forall a b p. (PrimBasics p, Eq1' p, p ~ Prim) =>
          Addr# -> E p b -> E p (a -> b)
 lamv# addr body = lam (VarPat (V (unpackCString# addr))) body
 
+letv# :: forall p a b. (PrimBasics p, Eq1' p) =>
+         Addr# -> E p a -> E p b -> E p b
+letv# addr body = lett (varPat# addr) body
+
 casev# :: forall a b c p. (PrimBasics p, Eq1' p, p ~ Prim) =>
           Addr# -> E p c -> Addr# -> E p c -> E p (a :+ b) -> E p c
 casev# a q b = caseEither (varPat# a) q (varPat# b)
@@ -722,6 +738,9 @@ varP# = var#
 
 lamvP# :: forall a b. Addr# -> EP b -> EP (a -> b)
 lamvP# = lamv#
+
+letvP# :: forall a b. Addr# -> EP a -> EP b -> EP b
+letvP# = letv#
 
 casevP# :: forall a b c. Addr# -> EP c -> Addr# -> EP c -> EP (a :+ b) -> EP c
 casevP# = casev#
@@ -763,23 +782,29 @@ oops = kPrim OopsP
 -- instance Eq1' Prim where (====) = (===)
 
 instance Eq1' Prim where
-  LitP a  ==== LitP b  = a ==== b
-  NotP    ==== NotP    = True
-  AndP    ==== AndP    = True
-  OrP     ==== OrP     = True
-  XorP    ==== XorP    = True
-  AddP    ==== AddP    = True
-  MulP    ==== MulP    = True
-  ExlP    ==== ExlP    = True
-  ExrP    ==== ExrP    = True
-  PairP   ==== PairP   = True
-  CondBP  ==== CondBP  = True
-  ToVecZP ==== ToVecZP = True
-  UnVecZP ==== UnVecZP = True
-  VecSP   ==== VecSP   = True
-  UnVecSP ==== UnVecSP = True
-  OopsP   ==== OopsP   = True
-  _       ==== _       = False
+  LitP a    ==== LitP b    = a ==== b
+  NotP      ==== NotP      = True
+  AndP      ==== AndP      = True
+  OrP       ==== OrP       = True
+  XorP      ==== XorP      = True
+  AddP      ==== AddP      = True
+  MulP      ==== MulP      = True
+  ExlP      ==== ExlP      = True
+  ExrP      ==== ExrP      = True
+  PairP     ==== PairP     = True
+  CondBP    ==== CondBP    = True
+  ToVecZP   ==== ToVecZP   = True
+  UnVecZP   ==== UnVecZP   = True
+  VecSP     ==== VecSP     = True
+  UnVecSP   ==== UnVecSP   = True
+  UPairP    ==== UPairP    = True
+  UnUPairP  ==== UnUPairP  = True
+  ToLeafP   ==== ToLeafP   = True
+  ToBranchP ==== ToBranchP = True
+  UnLeafP   ==== UnLeafP   = True
+  UnBranchP ==== UnBranchP = True
+  OopsP     ==== OopsP     = True
+  _         ==== _         = False
 
 instance Eq1' Lit where
   UnitL x ==== UnitL y = x == y

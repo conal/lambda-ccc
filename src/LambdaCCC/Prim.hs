@@ -33,11 +33,13 @@ import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
 -- import Control.Arrow ((&&&))
 import Data.Constraint (Dict(..))
 
-import TypeUnary.Vec (Z,S,Vec(..))
+import TypeUnary.Vec (Z,S,Vec(..),IsNat(..))
 
 import Circat.Category hiding (CondCat(..))
 import Circat.Classes (BoolCat(not,and,or),MuxCat(..),NumCat(..),VecCat(..))
 import qualified Circat.Classes as C
+import Circat.Pair (Pair(..),PairCat(..))
+import Circat.RTree (Tree(..),TreeCat(..))
 
 -- :( . TODO: Disentangle!
 import Circat.Circuit ((:>),IsSourceP,constC)
@@ -134,11 +136,19 @@ data Prim :: * -> * where
   InrP          :: Prim (b -> a :+ b)
   PairP         :: Prim (a -> b -> a :* b)
   CondBP        :: Prim (Bool :* (Bool :* Bool) -> Bool)  -- cond on Bool
-  -- Vec TODO below
+  -- Vectors. See Vec TODO below
   ToVecZP       :: Prim (Unit -> Vec Z a)
   UnVecZP       :: Prim (Vec Z a -> Unit)
   VecSP         :: Prim (a -> Vec n a -> Vec (S n) a)
   UnVecSP       :: Prim (Vec (S n) a -> a :* Vec n a)
+  -- Uniform pairs
+  UPairP        :: Prim (a -> a -> Pair a)
+  UnUPairP      :: Prim (Pair a -> a :* a)
+  -- Trees
+  ToLeafP       ::            Prim (a -> Tree Z a)
+  UnLeafP       ::            Prim (Tree Z a -> a)
+  ToBranchP     :: IsNat n => Prim (Pair (Tree n a) -> Tree (S n) a)
+  UnBranchP     :: IsNat n => Prim (Tree (S n) a -> Pair (Tree n a))
   -- More here
   OopsP         :: Prim a
 
@@ -151,47 +161,59 @@ data Prim :: * -> * where
 --  AddP          :: Num  a => Prim (a -> a -> a)
 
 instance Eq' (Prim a) (Prim b) where
-  LitP a  === LitP b  = a === b
-  NotP    === NotP    = True
-  AndP    === AndP    = True
-  OrP     === OrP     = True
-  XorP    === XorP    = True
-  AddP    === AddP    = True
-  MulP    === MulP    = True
-  ExlP    === ExlP    = True
-  ExrP    === ExrP    = True
-  InlP    === InlP    = True
-  InrP    === InrP    = True
-  PairP   === PairP   = True
-  CondBP  === CondBP  = True
-  ToVecZP === ToVecZP = True
-  UnVecZP === UnVecZP = True
-  VecSP   === VecSP   = True
-  UnVecSP === UnVecSP = True
-  OopsP   === OopsP   = True
-  _       === _       = False
+  LitP a    === LitP b    = a === b
+  NotP      === NotP      = True
+  AndP      === AndP      = True
+  OrP       === OrP       = True
+  XorP      === XorP      = True
+  AddP      === AddP      = True
+  MulP      === MulP      = True
+  ExlP      === ExlP      = True
+  ExrP      === ExrP      = True
+  InlP      === InlP      = True
+  InrP      === InrP      = True
+  PairP     === PairP     = True
+  CondBP    === CondBP    = True
+  ToVecZP   === ToVecZP   = True
+  UnVecZP   === UnVecZP   = True
+  VecSP     === VecSP     = True
+  UnVecSP   === UnVecSP   = True
+  UPairP    === UPairP    = True
+  UnUPairP  === UnUPairP  = True
+  ToLeafP   === ToLeafP   = True
+  ToBranchP === ToBranchP = True
+  UnLeafP   === UnLeafP   = True
+  UnBranchP === UnBranchP = True
+  OopsP     === OopsP     = True
+  _         === _         = False
 
 instance Eq (Prim a) where (==) = (===)
 
 instance Show (Prim a) where
-  showsPrec p (LitP a) = showsPrec p a
-  showsPrec _ NotP     = showString "not"
-  showsPrec _ AndP     = showString "(&&)"
-  showsPrec _ OrP      = showString "(||)"
-  showsPrec _ XorP     = showString "xor"
-  showsPrec _ AddP     = showString "add"
-  showsPrec _ MulP     = showString "mul"
-  showsPrec _ ExlP     = showString "exl"
-  showsPrec _ InlP     = showString "Left"
-  showsPrec _ InrP     = showString "Right"
-  showsPrec _ ExrP     = showString "exr"
-  showsPrec _ PairP    = showString "(,)"
-  showsPrec _ CondBP   = showString "condBool"
-  showsPrec _ ToVecZP  = showString "toVecZ"
-  showsPrec _ UnVecZP  = showString "unVecZ"
-  showsPrec _ VecSP    = showString "(:<)"
-  showsPrec _ UnVecSP  = showString "unVecS"
-  showsPrec _ OopsP    = showString "<oops>"
+  showsPrec p (LitP a)  = showsPrec p a
+  showsPrec _ NotP      = showString "not"
+  showsPrec _ AndP      = showString "(&&)"
+  showsPrec _ OrP       = showString "(||)"
+  showsPrec _ XorP      = showString "xor"
+  showsPrec _ AddP      = showString "add"
+  showsPrec _ MulP      = showString "mul"
+  showsPrec _ ExlP      = showString "exl"
+  showsPrec _ InlP      = showString "Left"
+  showsPrec _ InrP      = showString "Right"
+  showsPrec _ ExrP      = showString "exr"
+  showsPrec _ PairP     = showString "(,)"
+  showsPrec _ CondBP    = showString "condBool"
+  showsPrec _ ToVecZP   = showString "toVecZ"
+  showsPrec _ UnVecZP   = showString "unVecZ"
+  showsPrec _ VecSP     = showString "(:<)"
+  showsPrec _ UnVecSP   = showString "unVecS"
+  showsPrec _ UPairP    = showString "toPair"
+  showsPrec _ UnUPairP  = showString "unPair"
+  showsPrec _ ToLeafP   = showString "toL"
+  showsPrec _ ToBranchP = showString "toB"
+  showsPrec _ UnLeafP   = showString "unL"
+  showsPrec _ UnBranchP = showString "unB"
+  showsPrec _ OopsP     = showString "<oops>"
 
 instance Show' Prim where showsPrec' = showsPrec
 
@@ -239,6 +261,12 @@ instance Evalable (Prim a) where
   eval UnVecZP       = unVecZ
   eval VecSP         = (:<)
   eval UnVecSP       = unVecS
+  eval UPairP        = curry toPair
+  eval UnUPairP      = unPair
+  eval ToLeafP       = toL
+  eval ToBranchP     = toB
+  eval UnLeafP       = unL
+  eval UnBranchP     = unB
   eval OopsP         = error "eval on Prim: Oops!"
 
 -- TODO: replace fst with exl, etc.

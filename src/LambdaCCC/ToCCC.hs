@@ -59,7 +59,7 @@ convert :: forall a b prim k. BiCCCC k prim =>
 convert (ConstE x)   _ = unitArrow x . it
 convert (Var v)      p = convertVar v p
 convert (u :^ v)     p = apply . (convert u p &&& convert v p)
-convert (Lam q e)    p = curry (convert e (p :# q))
+convert (Lam q e)    p = curry (convert e (p :$ q))
 convert (Either f g) p = curry ((convert' f ||| convert' g) . distl)
  where
    convert' :: E prim (c :=> d) -> ((a :* c) `k` d)
@@ -101,7 +101,7 @@ instance HasLambda (MkC prim) where
   constL x         = MkC (\ _ -> unitArrow x . it)
   varL y           = MkC (\ p -> convertVar y p)
   MkC u @@ MkC v   = MkC (\ p -> apply . (u p &&& v p))
-  lamL q (MkC u)   = MkC (\ p -> curry (u (p :# q)))
+  lamL q (MkC u)   = MkC (\ p -> curry (u (p :$ q)))
   MkC f |||| MkC g =
     MkC (\ p -> curry ((uncurry (f p) ||| uncurry (g p)) . distl))
 
@@ -140,7 +140,7 @@ toCCC' = unUnitFun . toCCC
 -- TODO: Handle constants in a generic manner, so we can drop the constraint that k ~ (:->).
 
 -- convert k (Case (a,p) (b,q) ab) =
---   (convert (k :# a) p ||| convert (k :# b) q) . ldistribS . (Id &&& convert k ab)
+--   (convert (k :$ a) p ||| convert (k :$ b) q) . ldistribS . (Id &&& convert k ab)
 
 -- Convert a variable in context
 convertVar :: forall b a k. ProductCat k =>
@@ -152,7 +152,7 @@ convertVar u = fromMaybe (error $ "convert: unbound variable: " ++ show u) .
    conv (VarPat v) | Just Refl <- v ===? u = Just id
                    | otherwise             = Nothing
    conv UnitPat  = Nothing
-   conv (p :# q) = ((. exr) <$> conv q) `mplus` ((. exl) <$> conv p)
+   conv (p :$ q) = ((. exr) <$> conv q) `mplus` ((. exl) <$> conv p)
    conv (p :@ q) = conv q `mplus` conv p
 
 -- Note that we try q before p. This choice cooperates with uncurrying and
@@ -160,7 +160,7 @@ convertVar u = fromMaybe (error $ "convert: unbound variable: " ++ show u) .
 
 -- Alternatively,
 -- 
---    conv (p :# q) = descend exr q `mplus` descend exl p
+--    conv (p :$ q) = descend exr q `mplus` descend exl p
 --     where
 --       descend :: (c `k` d) -> Pat d -> Maybe (c `k` b)
 --       descend sel r = (. sel) <$> conv r

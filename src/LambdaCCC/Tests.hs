@@ -17,6 +17,8 @@
 
 module LambdaCCC.Tests where
 
+import Prelude
+
 import LambdaCCC.Misc
 import LambdaCCC.Prim
 import LambdaCCC.Lambda

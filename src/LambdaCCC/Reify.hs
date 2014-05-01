@@ -44,9 +44,9 @@ import HERMIT.Kure -- hiding (apply)
 import HERMIT.Dictionary
   ( findIdT, observeR, callT, callNameT
   , rulesR,inlineR,inlineMatchingPredR, simplifyR,letFloatLetR,letFloatTopR,letElimR
-  , betaReduceR, letNonRecSubstSafeR
+  , betaReduceR, etaReduceR, letNonRecSubstSafeR
   , unfoldR, unfoldPredR, cleanupUnfoldR
-  , caseReduceUnfoldR, caseFloatCaseR
+  , caseReduceUnfoldR, caseFloatCaseR, caseFloatAppR
   , castFloatAppR, bashR,bashExtendedWithR
   -- , unshadowR   -- May need this one later
   )
@@ -55,7 +55,7 @@ import HERMIT.Plugin (hermitPlugin,phase,interactive)
 import LambdaCCC.Misc ((<~))
 
 import HERMIT.Extras
-  ( Unop, Binop, apps', callSplitT, callNameSplitT, unCall1
+  ( Unop, Binop, apps', callSplitT, callNameSplitT, unCall, unCall1
   , ReExpr ,ReCore, TransformU, findTyConT
 #ifdef OnlyLifted
   , liftedKind, unliftedKind
@@ -64,7 +64,7 @@ import HERMIT.Extras
   , InCoreTC
   , tries
   , varLitE, uqVarName, typeEtaLong, simplifyE
-  , anytdE, inAppTys, isAppTy, letFloatToProg , concatProgs
+  , anytdE, anybuE, inAppTys, isAppTy, letFloatToProg , concatProgs
   , rejectR , rejectTypeR
   )
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
@@ -85,11 +85,11 @@ observing = False
 observeR' :: InCoreTC t => String -> RewriteH t
 observeR' = Ex.observeR' observing
 
-triesL :: (InCoreTC a, InCoreTC t) => [(String,TransformH a t)] -> TransformH a t
+triesL :: InCoreTC t => [(String,RewriteH t)] -> RewriteH t
 triesL = Ex.triesL observing
 
-labeled :: InCoreTC t => (String, TransformH a t) -> TransformH a t
-labeled = Ex.labeled observing
+-- labeled :: InCoreTC t => (String, RewriteH t) -> RewriteH t
+-- labeled = Ex.labeled observing
 
 {--------------------------------------------------------------------
     Reification
@@ -106,6 +106,10 @@ findTyConE = findTyConT . lamName
 
 appsE :: String -> [Type] -> [CoreExpr] -> TransformU CoreExpr
 appsE = apps' . lamName
+
+-- -- | Uncall a named function
+-- unCallE :: String -> TransformH CoreExpr [CoreExpr]
+-- unCallE = unCall . lamName
 
 -- | Uncall a named function
 unCallE1 :: String -> ReExpr
@@ -163,10 +167,13 @@ reifyOf e = do guardMsg (not (unliftedKind ki))
                guardMsg (liftedKind ki)
                  ("reifyOf: Can only reify lifted values, but this one is "
                   ++ kindStr ki)
+               guardMsg (not (dictRelated (exprType e)))
+                 "reify: dictionary-related"
                appsE reifyS [exprType e] [e]
  where
    ty = exprType e
    ki = typeKind ty
+
 
 kindStr :: Kind -> String
 kindStr (TyConApp tc _) = "TyConApp " ++ uqName (tyConName tc) ++ "..."
@@ -195,6 +202,25 @@ dropEP _ = error "dropEP: not a TyConApp"
 reifyR :: ReExpr
 reifyR = idR >>= reifyOf
 
+#ifdef OnlyLifted
+reifyR' :: ReExpr
+reifyR' = idR >>= reifyOf'
+
+reifyOf' :: CoreExpr -> TransformU CoreExpr
+reifyOf' e = do 
+                guardMsg (not (unliftedKind ki))
+                  "reifyOf: no unlifted values (with type of kind #)"
+--                 guardMsg (liftedKind ki)
+--                   ("reifyOf: Can only reify lifted values, but this one is "
+--                    ++ kindStr ki)
+--                 guardMsg (not (dictRelated (exprType e)))
+--                   "reify: dictionary-related"
+                appsE reifyS [exprType e] [e]
+ where
+   ty = exprType e
+   ki = typeKind ty
+#endif
+
 evalR :: ReExpr
 evalR = idR >>= evalOf
 
@@ -221,8 +247,6 @@ appArgs rf rx = appAllR (appAllR idR rf) rx
 
 -- reifyCall :: TransformH ((CoreExpr,[Type]), [CoreExpr]) CoreExpr
 -- reifyCall = reifyR 
-               
-               
 
 -- TODO: Use arr instead of (constT (return ...))
 -- TODO: refactor so we unReify once and then try variations
@@ -276,10 +300,18 @@ reifyPolyLet = unReify >>>
 
 -- | Turn a monomorphic let into a beta-redex.
 reifyMonoLet :: ReExpr
+
+-- reifyMonoLet =
+--   inReify $
+--     do Let (NonRec v@(isForAllTy . varType -> False) rhs) body <- idR
+--        return (Lam v body `App` rhs)
+
 reifyMonoLet =
-  inReify $
+    unReify >>>
     do Let (NonRec v@(isForAllTy . varType -> False) rhs) body <- idR
-       return (Lam v body `App` rhs)
+       rhsE  <- reifyOf rhs
+       bodyE <- reifyOf body
+       appsE "letvP#" [varType v, exprType body] [varLitE v, rhsE,bodyE]
 
 -- TODO: Perhaps combine reifyPolyLet and reifyMonoLet into reifyLet
 
@@ -366,7 +398,9 @@ isWrapper :: Var -> Bool
 isWrapper = ("$W" `isPrefixOf`) . uqVarName -- TODO: alternative?
 
 unfoldSimplify :: ReExpr
-unfoldSimplify = unfoldPredR (const . not . isWrapper) >>> cleanupUnfoldR
+unfoldSimplify = do e <- idR
+                    guardMsg (not (dictRelated (exprType e))) "dictionary-related"
+                    unfoldPredR (const . not . isWrapper) >>> cleanupUnfoldR
 
 -- unfoldSimplify = unfoldR >>> tryR postUnfold
 
@@ -374,6 +408,8 @@ unfoldSimplify = unfoldPredR (const . not . isWrapper) >>> cleanupUnfoldR
 
 -- bashE :: ReExpr
 -- bashE = extractR simplifyR -- bashR
+
+#if 0
 
 postUnfold :: ReExpr
 postUnfold = curry labeled "post-unfold" $
@@ -395,6 +431,8 @@ simplifies = map labeled
           -- , ("type-beta-reduce"  , typeBetaReduceR)  -- was looping, I think
              ] ++ ourSimplifies
 
+#endif
+
 reifyUnfold :: ReExpr
 reifyUnfold = inReify unfoldSimplify
 
@@ -403,9 +441,10 @@ reifyUnfold = inReify unfoldSimplify
 
 reifyRuleNames :: [String]
 reifyRuleNames = map ("reify/" ++)
-  [ "not","(&&)","(||)","xor","(+)","exl","exr","pair","inl","inr"
-  , "if","()","false","true","toVecZ","unVecZ","toVecS","unVecS"
-  , "ZVec","(:<)"  -- ,"(a:<as)"
+  [ "not","(&&)","(||)","xor","(+)","(*)","exl","exr","pair","inl","inr"
+  , "if","()","false","true"
+  , "toVecZ","unVecZ","toVecS","unVecS"
+  , "ZVec","(:<)","(:#)","L","B"
   ]
 
 -- ,"if-bool","if-pair"
@@ -443,7 +482,14 @@ reifyIntLit = unReify >>> do _ <- callNameT "I#"
                              appsE "intL" [] [e]
 
 reifySimplifiable :: ReExpr
-reifySimplifiable = inReify simplifyE
+reifySimplifiable = inReify simplifyE' -- (extractR bashR)
+ where
+   simplifyE' = repeatR $
+                simplifyE <+ anybuE (caseFloatAppR <+ caseFloatCaseR)
+
+-- Sadly, don't use bashR. It gives false positives (succeeding without change),
+-- *and* it leads to lint errors and even to non-terminating exprType (or
+-- close).
 
 #ifndef OnlyLifted
 
@@ -582,7 +628,7 @@ reifyTupCase =
         pat   <- if null vars then
                    appsE "UnitPat" [] []
                   else
-                   appsE ":#" (varType <$> vars) vPats
+                   appsE ":$" (varType <$> vars) vPats
         pat'  <- if wild `elemVarSet` localFreeIdsExpr rhs
                    then -- WARNING: untested as of 2014-03-11
                      appsE "asPat#" [varType wild] [varLitE wild,pat]
@@ -597,7 +643,7 @@ reifyTupCase =
 
 reifyUnfoldScrut :: ReExpr
 reifyUnfoldScrut = inReify $
-                   caseAllR unfoldSimplify idR idR (const idR)
+                   caseAllR unfoldR idR idR (const idR)
 
 reifyEither :: ReExpr
 
@@ -666,10 +712,10 @@ reifyCaseWild = inReify $
 -- reifyCase :: ReExpr
 -- reifyCase = inReify reCaseR
 
-data VecSize = VZero | VSucc Type
+data NatTy = VZero | VSucc Type
 
-vecSize :: Type -> TransformU (VecSize,Type)
-vecSize (TyConApp tc [len0,elemTy]) =
+sizedTy :: Type -> TransformU (NatTy,Type)
+sizedTy (TyConApp tc [len0,elemTy]) =
   do tcv <- findTyConT "TypeUnary.Vec.Vec"
      guardMsg (tc == tcv) "Not a Vec type"
      z <- findTyConT "TypeUnary.TyNat.Z"
@@ -678,10 +724,10 @@ vecSize (TyConApp tc [len0,elemTy]) =
        ( case fromMaybe len0 (coreView len0) of
            TyConApp ((== z) -> True) []  -> VZero
            TyConApp ((== s) -> True) [n] -> VSucc n
-           _ -> error "vecSize: Vec not Z or S n. Investigate."
+           _ -> error "sizedTy: Vec not Z or S n. Investigate."
        , elemTy )
 
-vecSize _ = fail "Not a Vec type (and wrong # args)"
+sizedTy _ = fail "Not a Vec type (and wrong # args)"
 
 
 -- | reify a case of a known-size vector
@@ -690,7 +736,7 @@ reifyCaseVec :: ReExpr
 #if 0
 reifyCaseVec = inReify $
                do Case scrut _wild bodyTy alts <- idR
-                  (size,elemTy) <- vecSize (exprType scrut)
+                  (size,elemTy) <- sizedTy (exprType scrut)
                   case size of
                     VZero ->
                       do let Just val = getAlt "ZVec" alts
@@ -713,7 +759,7 @@ matchAltLam _ _ = Nothing
 
 -- Find a structural identity function on vectors
 vecIdStruct :: Type -> TransformU CoreExpr
-vecIdStruct ty = do (size,a) <- vecSize ty
+vecIdStruct ty = do (size,a) <- sizedTy ty
                     case size of
                       VZero   -> appsE "idVecZ" [  a] [] 
                       VSucc n -> appsE "idVecS" [n,a] []
@@ -755,6 +801,24 @@ reifyCaseVec = inReify $
 
 #endif
 
+-- Temporary workaround. Remove when I get the reifyEP/(:<) rule working on
+-- unwrapped (:<).
+reifyVecS :: ReExpr
+
+-- reifyVecS = unReify >>> unCallE ":<" >>>
+--             do [_sn,Type a,Type n,_co] <- idR
+--                appsE "vecSEP" [n,a] []
+--
+-- "callNameT failed: not a call to 'LambdaCCC.Lambda.:<."
+--
+-- Why?
+
+reifyVecS = unReify >>>
+            do (Var f,[_sn,Type a,Type n,_co]) <- callT
+               guardMsg (uqVarName f == ":<") "Not a (:<)"
+               appsE "vecSEP" [n,a] []
+
+
 miscL :: [(String,ReExpr)]
 miscL = [ ("reifyRulesPrefix" , reifyRulesPrefix) -- subsumes reifyRules, I think
      -- , ("reifyRules"       , reifyRules)     -- before App
@@ -766,17 +830,19 @@ miscL = [ ("reifyRulesPrefix" , reifyRulesPrefix) -- subsumes reifyRules, I thin
         -- , ("inlineMethod"     , inlineMethod)
         -- , ("reifyCase"        , reifyCase)
         , ("reifyCaseWild"    , reifyCaseWild)
+        , ("reifySimplifiable", reifySimplifiable)
         , ("reifyApp"         , reifyApp)
+        , ("reifyEtaReduce"   , inReify etaReduceR)
         , ("reifyLam"         , reifyLam)
         , ("reifyMonoLet"     , reifyMonoLet)
         , ("reifyPolyLet"     , reifyPolyLet)
         , ("reifyTupCase"     , reifyTupCase)
         , ("reifyCaseVec"     , reifyCaseVec)
+        , ("reifyVecS"        , reifyVecS)        -- TEMP workaround
         , ("reifyUnfoldScrut" , reifyUnfoldScrut)
     --  , ("reifyInline"      , reifyInline)
         , ("reifyCast"        , reifyCast)
         , ("reifyIntLit"      , reifyIntLit)
-        , ("reifySimplifiable", reifySimplifiable)  -- last resort
         ]
 
 reifyMisc :: ReExpr
@@ -815,6 +881,9 @@ externals =
     , externC "unreify" unReify "Drop reify"
     , externC "reify-inline" reifyInline "inline names where reified"
     , externC "reify-it" reifyR "apply reify"
+#ifdef OnlyLifted
+    , externC "reify-it'" reifyR' "reifyR'"
+#endif
     , externC "eval-it" evalR "apply eval"
     , externC "reify-app" reifyApp "reify (u v) --> reify u `appP` reify v"
     , externC "reify-lam" reifyLam
@@ -830,9 +899,12 @@ externals =
     , externC "reify-int-literal" reifyIntLit "reify an Int literal"
     , externC "reify-eval" reifyEval "reify eval"
     , externC "reify-unfold" reifyUnfold "reify an unfoldable"
+    , externC "reify-unfold-scrut" reifyUnfoldScrut "reify case with unfoldable scrutinee"
     , externC "reify-case-vec" reifyCaseVec "case with a known-length vector scrutinee"
-    , externC "post-unfold" postUnfold "simplify after unfolding"
+    , externC "reify-vecs" reifyVecS "Temp workaround"
+--     , externC "post-unfold" postUnfold "simplify after unfolding"
     , externC "reify-tup-case" reifyTupCase "reify case with unit or pair pattern"
+    , externC "reify-simplifiable" reifySimplifiable "Simplify under reify"
     , externC "reify-module" reifyModGuts "reify all top-level definitions"
     , externC "inline-dict" inlineDict "inline a dictionary-related var"
     , externC "inline-wrapper" inlineWrapper "inline a datacon wrapper"
