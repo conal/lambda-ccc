@@ -46,7 +46,7 @@ import HERMIT.Dictionary
   , rulesR,inlineR,inlineMatchingPredR, simplifyR,letFloatLetR,letFloatTopR,letElimR
   , betaReduceR, etaReduceR, letNonRecSubstSafeR
   , unfoldR, unfoldPredR, cleanupUnfoldR
-  , caseReduceUnfoldR, caseFloatCaseR, caseFloatAppR
+  , caseReduceUnfoldR, caseFloatCaseR, caseFloatAppR, letSubstR
   , castFloatAppR, bashR,bashExtendedWithR
   -- , unshadowR   -- May need this one later
   )
@@ -80,7 +80,7 @@ import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 -- (Observing, observeR', triesL, labeled)
 
 observing :: Ex.Observing
-observing = False
+observing = True
 
 observeR' :: InCoreTC t => String -> RewriteH t
 observeR' = Ex.observeR' observing
@@ -300,19 +300,28 @@ reifyPolyLet = unReify >>>
 
 -- | Turn a monomorphic let into a beta-redex.
 reifyMonoLet :: ReExpr
+reifyMonoLet =
+    unReify >>>
+    do Let (NonRec v@(isForAllTy . varType -> False) rhs) body <- idR
+       guardMsgM (worthLet rhs) "trivial let"
+       rhsE  <- reifyOf rhs
+       sub   <- varSubst [v]
+       bodyE <- reifyOf (sub body)
+       appsE "letvP#" [varType v, exprType body] [varLitE v, rhsE,bodyE]
 
+-- Placeholder
+worthLet :: CoreExpr -> TransformU Bool
+worthLet _ = return True
+
+-- Simpler but can lead to loops. Maybe fix by following with reifyLam.
+-- 
 -- reifyMonoLet =
 --   inReify $
 --     do Let (NonRec v@(isForAllTy . varType -> False) rhs) body <- idR
 --        return (Lam v body `App` rhs)
 
-reifyMonoLet =
-    unReify >>>
-    do Let (NonRec v@(isForAllTy . varType -> False) rhs) body <- idR
-       rhsE  <- reifyOf rhs
-       sub   <- varSubst [v]
-       bodyE <- reifyOf (sub body)
-       appsE "letvP#" [varType v, exprType body] [varLitE v, rhsE,bodyE]
+reifyLetSubst :: ReExpr
+reifyLetSubst = inReify letSubstR
 
 -- TODO: Perhaps combine reifyPolyLet and reifyMonoLet into reifyLet
 
@@ -399,9 +408,9 @@ isWrapper :: Var -> Bool
 isWrapper = ("$W" `isPrefixOf`) . uqVarName -- TODO: alternative?
 
 unfoldSimplify :: ReExpr
-unfoldSimplify = do e <- idR
-                    guardMsg (not (dictRelated (exprType e))) "dictionary-related"
-                    unfoldPredR (const . not . isWrapper) >>> cleanupUnfoldR
+unfoldSimplify = unfoldPredR (const . not . bad) >>> cleanupUnfoldR
+ where
+   bad v = isWrapper v || dictRelated (varType v)
 
 -- unfoldSimplify = unfoldR >>> tryR postUnfold
 
@@ -446,6 +455,7 @@ reifyRuleNames = map ("reify/" ++)
   , "if","()","false","true"
   , "toVecZ","unVecZ","toVecS","unVecS"
   , "ZVec","(:<)","(:#)","L","B","unPair","unLeaf","unBranch"
+  , "square"
   ]
 
 -- ,"if-bool","if-pair"
@@ -816,6 +826,7 @@ miscL = [ ("reifyRulesPrefix" , reifyRulesPrefix) -- subsumes reifyRules, I thin
         , ("reifyEtaReduce"   , inReify etaReduceR)
         , ("reifyLam"         , reifyLam)
         , ("reifyMonoLet"     , reifyMonoLet)
+        , ("reifyLetSubst"    , reifyLetSubst)
         , ("reifyPolyLet"     , reifyPolyLet)
         , ("reifyTupCase"     , reifyTupCase)
         , ("reifyCaseSized"   , reifyCaseSized)

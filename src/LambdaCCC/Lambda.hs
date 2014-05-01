@@ -525,7 +525,15 @@ intL = kLit
 -- -- This one avoids currying
 -- "reify/(a:<as)" forall a as. reifyEP (a:<as) = reifyEP (toVecS' (a,as))
 
+-- HACK/experiment.
+-- Doesn't fire when the 2 is let-abstracted.
+-- TODO: Fix worthLet in Reify.
+"reify/square"  reifyEP (^2) = reifyEP square
+
   #-}
+
+square :: Num a => Unop a
+square a = a * a
 
 vecZEP :: EP (Vec Z a)
 vecZEP = kPrim ToVecZP @^ kLit ()

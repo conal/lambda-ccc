@@ -12,8 +12,12 @@ set-pp-coercion Omit
 -- reify-module
 
 binding-of main
+try (any-td (unfold go))
+bash  -- for go unfolding
 
 repeat (any-td (repeat reify-misc))
+
+try bash
 
 -- occurrence-of reifyEP ; up ; up
 -- reify-case-vec
