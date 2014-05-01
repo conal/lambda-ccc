@@ -80,7 +80,7 @@ import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 -- (Observing, observeR', triesL, labeled)
 
 observing :: Ex.Observing
-observing = True
+observing = False
 
 observeR' :: InCoreTC t => String -> RewriteH t
 observeR' = Ex.observeR' observing
@@ -310,7 +310,8 @@ reifyMonoLet =
     unReify >>>
     do Let (NonRec v@(isForAllTy . varType -> False) rhs) body <- idR
        rhsE  <- reifyOf rhs
-       bodyE <- reifyOf body
+       sub   <- varSubst [v]
+       bodyE <- reifyOf (sub body)
        appsE "letvP#" [varType v, exprType body] [varLitE v, rhsE,bodyE]
 
 -- TODO: Perhaps combine reifyPolyLet and reifyMonoLet into reifyLet
@@ -444,7 +445,7 @@ reifyRuleNames = map ("reify/" ++)
   [ "not","(&&)","(||)","xor","(+)","(*)","exl","exr","pair","inl","inr"
   , "if","()","false","true"
   , "toVecZ","unVecZ","toVecS","unVecS"
-  , "ZVec","(:<)","(:#)","L","B","unPair"
+  , "ZVec","(:<)","(:#)","L","B","unPair","unLeaf","unBranch"
   ]
 
 -- ,"if-bool","if-pair"
@@ -610,16 +611,16 @@ inlineWrapper = inlineMatchingPredR isWrapper
 -- reify of case on 0-tuple or 2-tuple
 reifyTupCase :: ReExpr
 reifyTupCase =
-  do Case scrut@(exprType -> scrutT) wild bodyT [branch] <- unReify
-     (patE,rhs) <- reifyBranch wild branch
+  do Case scrut@(exprType -> scrutT) wild bodyT [alt] <- unReify
+     (patE,rhs) <- reifyAlt wild alt
      scrut'     <- reifyOf scrut
      appsE letS [scrutT,bodyT] [patE,scrut',rhs]
  where
    -- Reify a case alternative, yielding a reified pattern and a reified
    -- alternative body (RHS). Only unit and pair patterns. Others are
    -- transformed away in the type-encode plugin.
-   reifyBranch :: Var -> CoreAlt -> TransformU (CoreExpr,CoreExpr)
-   reifyBranch wild (DataAlt ( isTupleTyCon . dataConTyCon -> True)
+   reifyAlt :: Var -> CoreAlt -> TransformU (CoreExpr,CoreExpr)
+   reifyAlt wild (DataAlt ( isTupleTyCon . dataConTyCon -> True)
                              , vars, rhs ) =
      do guardMsg (length vars `elem` [0,2])
           "Only handles unit and pair patterns"
@@ -639,7 +640,7 @@ reifyTupCase =
     where
       varPatT :: Var -> TransformU CoreExpr
       varPatT v = appsE varPatS [varType v] [varLitE v]
-   reifyBranch _ _ = fail "reifyBranch: Only handles pair patterns so far."
+   reifyAlt _ _ = fail "reifyAlt: Only handles pair patterns so far."
 
 reifyUnfoldScrut :: ReExpr
 reifyUnfoldScrut = inReify $
@@ -785,6 +786,20 @@ reifyVecS = unReify >>>
 --
 -- Why?
 
+reifyLeaf :: ReExpr
+reifyLeaf = unReify >>>
+            do (Var f,[_sn,Type a,_co]) <- callT
+               guardMsg (uqVarName f == "L") "Not an L"
+               appsE "treeZEP" [a] []
+
+reifyBranch :: ReExpr
+reifyBranch = unReify >>>
+              do (Var f,[_sn,Type a,Type n,_co]) <- callT
+                 guardMsg (uqVarName f == "B") "Not a B"
+                 appsE "treeSEP" [n,a] []
+
+-- TODO: refactor or eliminate
+
 miscL :: [(String,ReExpr)]
 miscL = [ ("reifyRulesPrefix" , reifyRulesPrefix) -- subsumes reifyRules, I think
      -- , ("reifyRules"       , reifyRules)     -- before App
@@ -805,6 +820,8 @@ miscL = [ ("reifyRulesPrefix" , reifyRulesPrefix) -- subsumes reifyRules, I thin
         , ("reifyTupCase"     , reifyTupCase)
         , ("reifyCaseSized"   , reifyCaseSized)
         , ("reifyVecS"        , reifyVecS)        -- TEMP workaround
+        , ("reifyLeaf"        , reifyLeaf)        -- TEMP workaround
+        , ("reifyBranch"      , reifyBranch)      -- TEMP workaround
         , ("reifyUnfoldScrut" , reifyUnfoldScrut)
     --  , ("reifyInline"      , reifyInline)
         , ("reifyCast"        , reifyCast)

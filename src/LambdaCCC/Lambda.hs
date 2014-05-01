@@ -40,7 +40,7 @@ module LambdaCCC.Lambda
   , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP, castEP, castEP'
   , evalEP, reifyEP, kPrimEP, oops
   -- Hopefully temporary
-  , vecSEP
+  , vecSEP, treeZEP, treeSEP
   ) where
 
 import Data.Functor ((<$>))
@@ -515,7 +515,9 @@ intL = kLit
 "reify/L"       reifyEP L        = kPrim ToLeafP
 "reify/B"       reifyEP B        = kPrim ToBranchP
 
-"reify/unPair" reifyEP unPair'  = kPrim UnUPairP
+"reify/unPair"   reifyEP unPair'  = kPrim UnUPairP
+"reify/unLeaf"   reifyEP unTreeZ' = kPrim UnLeafP
+"reify/unBranch" reifyEP unTreeS' = kPrim UnBranchP
 
 -- TODO: Why reify/unPair' and not reify/unVecZ & reify/unVecS ?
 -- TODO: trees
@@ -531,6 +533,14 @@ vecZEP = kPrim ToVecZP @^ kLit ()
 -- Temp workaround until I can get reify/(:<) to apply to the bare constructor
 vecSEP :: forall n a. EP (a -> Vec n a -> Vec (S n) a)
 vecSEP = kPrim VecSP
+
+treeZEP :: forall a. EP (a -> Tree Z a)
+treeZEP = kPrim ToLeafP
+
+treeSEP :: forall n a. EP (Pair (Tree n a) -> Tree (S n) a)
+treeSEP = kPrim ToBranchP
+
+
 
 -- For literals, I'd like to say
 -- 
