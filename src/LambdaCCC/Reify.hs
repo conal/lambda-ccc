@@ -25,15 +25,12 @@
 module LambdaCCC.Reify (plugin) where
 
 import Data.Functor ((<$>))
+import Control.Applicative (Applicative(..))
 import Data.Foldable (msum)
 import Control.Monad ((<=<))
 import Control.Arrow (Arrow(..),(>>>))
 import Data.List (isPrefixOf,find)
 import Data.Maybe (fromMaybe)
-
--- GHC
--- Oops! Not exported.
--- import Coercion (unSubCo_maybe)
 
 import HERMIT.Monad (newIdH)
 import HERMIT.Core (localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
@@ -57,10 +54,11 @@ import LambdaCCC.Misc ((<~))
 import HERMIT.Extras
   ( Unop, Binop, apps', callSplitT, callNameSplitT, unCall, unCall1
   , ReExpr ,ReCore, TransformU, findTyConT
+  , setNominalRole_maybe
 #ifdef OnlyLifted
   , liftedKind, unliftedKind
 #endif
-  , collectForalls, subst, isTyLam, unSubCo_maybe
+  , collectForalls, subst, isTyLam
   , InCoreTC
   , tries
   , varLitE, uqVarName, typeEtaLong, simplifyE
@@ -80,7 +78,7 @@ import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 -- (Observing, observeR', triesL, labeled)
 
 observing :: Ex.Observing
-observing = True
+observing = False
 
 observeR' :: InCoreTC t => String -> RewriteH t
 observeR' = Ex.observeR' observing
@@ -410,7 +408,7 @@ isWrapper = ("$W" `isPrefixOf`) . uqVarName -- TODO: alternative?
 unfoldSimplify :: ReExpr
 unfoldSimplify = unfoldPredR (const . not . bad) >>> cleanupUnfoldR
  where
-   bad v = isWrapper v || dictRelated (varType v)
+   bad v = isWrapper v -- || dictRelated (varType v)
 
 -- unfoldSimplify = unfoldR >>> tryR postUnfold
 
@@ -536,8 +534,8 @@ reifyCast :: ReExpr
 
 reifyCast = unReify >>>
             do e'@(Cast e co) <- idR
-               case unSubCo_maybe co of
-                 Nothing  -> fail "Couldn't unSubCo"
+               case setNominalRole_maybe co of
+                 Nothing  -> fail "Couldn't setNominalRole"
                  Just coN ->
                    do re <- reifyOf e
                       appsE "castEP" [exprType e,exprType e'] [mkEqBox coN,re]
@@ -911,5 +909,7 @@ externals =
 #ifndef OnlyLifted
     , externC "reify-code" reifyCodeF "manual rewrites for reifying encodeF & decodeF"
 #endif
+    , external "uncalle1" (promoteR . unCallE1 :: String -> ReCore) ["uncall a function"]
+
     ]
     -- ++ Enc.externals
