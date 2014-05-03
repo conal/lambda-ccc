@@ -17,24 +17,25 @@
 -- Run a test: reify, CCC, circuit
 ----------------------------------------------------------------------
 
-module LambdaCCC.Run (run) where
+module LambdaCCC.Run (go,run) where
 
 import Prelude
 
 import LambdaCCC.Misc (Unop)
-import LambdaCCC.Lambda (EP)
+import LambdaCCC.Lambda (EP,reifyEP)
 import LambdaCCC.CCC ((:->),convertC)
 import LambdaCCC.ToCCC (toCCC')
 
 import Circat.Circuit (IsSourceP2,(:>),outGWith,IsSourceP2)
 import Circat.Netlist (outV)
 
--- go :: IsSourceP2 a b => (a -> b) -> IO ()
--- go f = run (reifyEP f)
--- {-# INLINE go #-}
+go :: IsSourceP2 a b => String -> (a -> b) -> IO ()
+go name f = run name (reifyEP f)
+{-# INLINE go #-}
 
 -- #define ViaTerm
 
+-- Run an example: reify, CCC, circuit.
 run :: IsSourceP2 a b => String -> EP (a -> b) -> IO ()
 #ifdef ViaTerm
 run str  expr = do print expr
