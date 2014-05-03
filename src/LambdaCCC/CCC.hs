@@ -175,7 +175,8 @@ instance Category (:->) where
   (f :||| _) . Inl                 = f
   (_ :||| g) . Inr                 = g
   Lit l      . _                   = Lit l
-  Apply      . (decompL -> g :. f) = composeApply g . f
+  -- Occasionally leads to non-termination, even when composeApply h = Apply :. h
+--   Apply      . (decompL -> g :. f) = composeApply g . f
   -- Experiment. To do: prove
   Curry (decompR -> f :. Exr) . _ = curry (f . exr)
 # endif
@@ -186,7 +187,7 @@ instance Category (:->) where
 --   curry (f . exr) . g == curry (f . exr)
 
 
-#ifdef Simplify
+#ifdef Simplifyy
 
 -- | @'composeApply' h == 'apply' . h@
 composeApply :: (z :-> (a :=> b) :* a) -> (z :-> b)
@@ -194,10 +195,10 @@ composeApply :: (z :-> (a :=> b) :* a) -> (z :-> b)
 composeApply ((decompL -> (Curry h :. f)) :&&& g) = h . (f &&& g)
 composeApply (h@Prim{} :. f    :&&& g) = uncurry h . (f  &&& g)
 composeApply (h@Prim{}         :&&& g) = uncurry h . (Id &&& g)
-apply . (curry (g . exr) &&& f) == g . f
+-- apply . (curry (g . exr) &&& f) == g . f
 -- The combination of the next two rules leads to non-tmn
 composeApply (Curry (decompR -> g :. Exr) :&&& f) = g . f
--- composeApply (f :. Exl :&&& Exr) = uncurry f
+composeApply (f :. Exl :&&& Exr) = uncurry f
 -- -- apply . first f == uncurry f  -- see proof below
 composeApply h = Apply :. h
 
