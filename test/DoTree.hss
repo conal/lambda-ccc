@@ -19,12 +19,14 @@ repeat (any-td (repeat reify-misc))
 
 try bash
 
+try unshadow
+
 -- occurrence-of reifyEP ; up ; up
 -- reify-case-vec
 
 -- set-pp-type Omit
 
-down
+-- down
 
 
 -- -- Remove when I'm able to reactiveate -dcore-lint
