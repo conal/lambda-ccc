@@ -179,8 +179,6 @@ data E :: (* -> *) -> (* -> *) where
   Either :: forall p a b c. E p (a -> c) -> E p (b -> c) -> E p (a :+ b -> c)
   Cast   :: forall p a b  . a ~ b => E p a -> E p b
 
--- TODO: rename Cast to "Coerce".
-
 -- The explicit universals come from ghci's ":ty" command with ":set
 -- -fprint-explicit-foralls", so that I can get the order right when
 -- constructing Core programmatically.
