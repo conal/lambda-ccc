@@ -23,8 +23,8 @@
 -- Whether to introduce defined operations like (***) during show
 #define Sugared
 
--- -- Whether to simplify during construction
--- #define Simplify
+-- Whether to simplify during construction
+#define Simplify
 
 module LambdaCCC.CCC
   ( module LambdaCCC.Misc
@@ -194,10 +194,11 @@ composeApply :: (z :-> (a :=> b) :* a) -> (z :-> b)
 composeApply ((decompL -> (Curry h :. f)) :&&& g) = h . (f &&& g)
 composeApply (h@Prim{} :. f    :&&& g) = uncurry h . (f  &&& g)
 composeApply (h@Prim{}         :&&& g) = uncurry h . (Id &&& g)
--- apply . (curry (g . exr) &&& f) == g . f
+apply . (curry (g . exr) &&& f) == g . f
+-- The combination of the next two rules leads to non-tmn
 composeApply (Curry (decompR -> g :. Exr) :&&& f) = g . f
--- apply . first f == uncurry f  -- see proof below
-composeApply (f :. Exl :&&& Exr) = uncurry f
+-- composeApply (f :. Exl :&&& Exr) = uncurry f
+-- -- apply . first f == uncurry f  -- see proof below
 composeApply h = Apply :. h
 
 #endif
