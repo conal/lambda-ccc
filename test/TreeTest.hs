@@ -31,7 +31,7 @@ import Prelude hiding (foldr,sum)
 
 import Control.Applicative (Applicative(..),liftA2)
 
-import Data.Foldable (Foldable(..))
+import Data.Foldable (Foldable(..),sum)
 
 import TypeUnary.TyNat
 import TypeUnary.Nat (IsNat)
@@ -42,7 +42,7 @@ import qualified LambdaCCC.Lambda
 import LambdaCCC.Lambda (EP,reifyEP)
 
 -- import LambdaCCC.Prim (Prim(TreeSP))
-import LambdaCCC.Misc (Unop)
+import LambdaCCC.Misc (Unop,Binop)
 
 import Circat.Pair (Pair(..))
 import Circat.RTree (TreeCat(..))
@@ -66,8 +66,8 @@ p1 (a :# b) = b :# a
 psum :: Pair Int -> Int
 psum (a :# b) = a + b
 
-sum :: Num a => Tree n a -> a
-sum = foldT id (+)
+tsum :: Num a => Tree n a -> a
+tsum = foldT id (+)
 
 -- prod :: (IsNat n, Num a) => (Tree n a, Tree n a) -> Tree n a
 -- prod (as,bs) = liftA2 (*) as bs
@@ -76,13 +76,16 @@ sum = foldT id (+)
 -- prod = liftA2 (*)
 
 -- dot :: (IsNat n, Num a) => Tree n a -> Tree n a -> a
--- dot as bs = sum (prod as bs)
+-- dot as bs = tsum (prod as bs)
 
 prod :: (Functor f, Num a) => f (a,a) -> f a
 prod = fmap (uncurry (*))
 
+prodA :: (Applicative f, Num a) => Binop (f a)
+prodA = liftA2 (*)
+
 dot :: Num a => Tree n (a,a) -> a
-dot = sum . prod
+dot = tsum . prod
 
 square :: (Functor f, Num a) => f a -> f a
 square = fmap (\ x -> x * x)
@@ -99,28 +102,19 @@ go name f = run name (reifyEP f)
 
 -- Only works when compiled with HERMIT
 main :: IO ()
--- main = go p1
--- main = go (fmap not :: Unop (Tree N3 Int))
--- main = go psum
--- main = go (sum :: Tree N4 Int -> Int)
--- main = go (prod :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
 
--- main = go (sum :: Tree N4 Int -> Int)
-
--- main = go (uncurry prod :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
-
--- main = go (prod' :: Tree N2 (Int,Int) -> Tree N2 Int)
-
--- main = go (dot :: Tree N4 (Int,Int) -> Int)
-
--- main = go "square3" (square :: Tree N3 Int -> Tree N3 Int)
--- main = go "sum4"    (sum    :: Tree N4 Int -> Int)
--- main = go "dot4"    (dot    :: Tree N4 (Int,Int) -> Int)
+-- main = go "tsum4" (tsum :: Tree N4 Int -> Int)
 
 -- main = do go "square3" (square :: Tree N3 Int -> Tree N3 Int)
---           go "sum4"    (sum    :: Tree N4 Int -> Int)
+--           go "sum4"    (tsum   :: Tree N4 Int -> Int)
 --           go "dot4"    (dot    :: Tree N4 (Int,Int) -> Int)
 
--- main = go "square2" (square' :: Unop (Tree N2 Int))
+main = go "dot1" (dot :: Tree N1 (Int,Int) -> Int)
 
-main = go "square2" (square' :: Unop (Tree N0 Int))
+-- main = go "square2" (square :: Unop (Tree N2 Int))
+
+-- main = go "square2" (square' :: Unop (Tree N0 Int))
+
+-- main = go "sum1f" (sum :: Tree N1 Int -> Int)
+
+-- main = go "prodA1" (uncurry prodA :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
