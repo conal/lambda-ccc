@@ -17,7 +17,7 @@
 
 module LambdaCCC.Tests where
 
-import Prelude
+import Prelude hiding (id,(.),curry,uncurry,not)
 
 import LambdaCCC.Misc
 import LambdaCCC.Prim
@@ -25,7 +25,8 @@ import LambdaCCC.Lambda
 import LambdaCCC.CCC
 import LambdaCCC.ToCCC
 
--- import Circat.Category (unitFun, unUnitFun)
+import Circat.Category
+import Circat.Classes
 
 {--------------------------------------------------------------------
     Convenient notation for expression building
@@ -201,3 +202,14 @@ With Simplify and Sugared:
   uncurry xor &&& uncurry (&&)
 
 -}
+
+---- Tracking down a looping bug in optimized CCC construction
+
+x1 :: (a :* (b :* c)) :-> c
+x1 = apply . (curry (exr . exr) &&& exr)
+
+-- x2 :: p :-> q
+-- x2 = uncurry not
+
+-- x :: p :-> q
+-- x = apply . (curry (uncurry not . (it &&& id) . exr) &&& apply . (curry (exr . exr) &&& exr)) . (it &&& id)

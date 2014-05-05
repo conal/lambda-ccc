@@ -63,17 +63,11 @@ t1 = B (pure t0)
 p1 :: Unop (Pair Bool)
 p1 (a :# b) = b :# a
 
-psum :: Pair Int -> Int
+psum :: Num a => Pair a -> a
 psum (a :# b) = a + b
 
 tsum :: Num a => Tree n a -> a
 tsum = foldT id (+)
-
--- prod :: (IsNat n, Num a) => (Tree n a, Tree n a) -> Tree n a
--- prod (as,bs) = liftA2 (*) as bs
-
--- prod :: (IsNat n, Num a) => Tree n a -> Tree n a -> Tree n a
--- prod = liftA2 (*)
 
 -- dot :: (IsNat n, Num a) => Tree n a -> Tree n a -> a
 -- dot as bs = tsum (prod as bs)
@@ -87,11 +81,11 @@ prodA = liftA2 (*)
 dot :: Num a => Tree n (a,a) -> a
 dot = tsum . prod
 
-square :: (Functor f, Num a) => f a -> f a
-square = fmap (\ x -> x * x)
+squares :: (Functor f, Num a) => f a -> f a
+squares = fmap (\ x -> x * x)
 
-square' :: (Functor f, Num a) => f a -> f a
-square' = fmap (^ (2 :: Int))
+squares' :: (Functor f, Num a) => f a -> f a
+squares' = fmap (^ (2 :: Int))
 
 {--------------------------------------------------------------------
     Run it
@@ -105,16 +99,30 @@ main :: IO ()
 
 -- main = go "tsum4" (tsum :: Tree N4 Int -> Int)
 
--- main = do go "square3" (square :: Tree N3 Int -> Tree N3 Int)
---           go "sum4"    (tsum   :: Tree N4 Int -> Int)
---           go "dot4"    (dot    :: Tree N4 (Int,Int) -> Int)
+-- main = do go "squares3" (squares :: Tree N3 Int -> Tree N3 Int)
+--           go "sum4"     (tsum   :: Tree N4 Int -> Int)
+--           go "dot4"     (dot    :: Tree N4 (Int,Int) -> Int)
 
-main = go "dot1" (dot :: Tree N1 (Int,Int) -> Int)
+-- main = go "dot5" (dot :: Tree N5 (Int,Int) -> Int)
 
--- main = go "square2" (square :: Unop (Tree N2 Int))
+-- main = go "squares1" (squares :: Unop (Tree N1 Int))
 
--- main = go "square2" (square' :: Unop (Tree N0 Int))
+-- main = go "psum" (psum :: Pair Int -> Int)
 
+-- main = go "tsum1" (tsum :: Tree N1 Int -> Int)
+
+-- main = go "squares2" (squares' :: Unop (Tree N0 Int))
+
+-- Working out a reify issue.
 -- main = go "sum1f" (sum :: Tree N1 Int -> Int)
 
--- main = go "prodA1" (uncurry prodA :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
+-- Causes a GHC RTS crash ("internal error: stg_ap_pp_ret").
+main = go "prodA1" (uncurry prodA :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
+
+----
+
+-- Breaks:
+-- main = go "test" (uncurry (&&))
+-- main = go "test" (\ p -> (let (x,ds) = p in x) && (let (ds,y) = p in y))
+
+-- main = go "test" not
