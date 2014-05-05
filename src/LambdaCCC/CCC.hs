@@ -46,7 +46,7 @@ import Data.Proof.EQ
 import LambdaCCC.Misc (Unop,Evalable(..),Unit,(:*),(:+),(:=>),Eq'(..),(==?))
 import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 -- import LambdaCCC.Ty
-import LambdaCCC.Prim (Prim(..),Lit(..)) -- ,cond,ifThenElse
+import LambdaCCC.Prim (Prim(..),Lit(..),primArrow) -- ,cond,ifThenElse
 
 -- import TypeEncode.Encode (EncodeCat(..))
 
@@ -82,7 +82,8 @@ data (:->) :: * -> * -> * where
   Curry   :: (a :* b :-> c) -> (a :-> (b :=> c))
   Uncurry :: (a :-> (b :=> c)) -> (a :* b :-> c)
   -- Primitives
-  ConstU  :: Prim a -> (Unit :-> a)
+  Prim    :: Prim (a :=> b) -> (a :-> b)
+  Lit     :: Lit b -> (a :-> b)
 
 -- TODO: Maybe specialize a to Unit in the type of Lit
 
@@ -102,7 +103,8 @@ instance Eq' (a :-> b) (c :-> d) where
   Apply      === Apply        = True
   Curry h    === Curry h'     = h === h'
   Uncurry k  === Uncurry k'   = k === k'
-  ConstU p   === ConstU p'    = p === p'
+  Prim p     === Prim p'      = p === p'
+  Lit l      === Lit l'       = l === l'
   _          === _            = False
 
 instance Eq (a :-> b) where (==) = (===)
@@ -130,7 +132,6 @@ instance Evalable (a :-> b) where
   type ValT (a :-> b) = a :=> b
   eval Id          = id
   eval (g :. f)    = eval g . eval f
-  eval (ConstU p)  = const (eval p)
   eval Exl         = fst
   eval Exr         = snd
   eval (f :&&& g)  = eval f A.&&& eval g
@@ -141,6 +142,8 @@ instance Evalable (a :-> b) where
   eval Apply       = uncurry ($)
   eval (Curry   h) = curry   (eval h)
   eval (Uncurry f) = uncurry (eval f)
+  eval (Prim p)    = eval p
+  eval (Lit l)     = const (eval l)
 #else
 instance Evalable (a :-> b) where
   type ValT (a :-> b) = a -> b
@@ -152,12 +155,12 @@ instance Evalable (a :-> b) where
     Smart constructors
 --------------------------------------------------------------------}
 
-prim :: Prim a -> (Unit :-> a)
-prim ExlP = unitFun Exl
-prim ExrP = unitFun Exr
-prim InlP = unitFun Inl
-prim InrP = unitFun Inr
-prim p    = ConstU p
+prim :: Prim (a -> b) -> (a :-> b)
+prim ExlP = Exl
+prim ExrP = Exr
+prim InlP = Inl
+prim InrP = Inr
+prim p    = Prim p
 
 instance Category (:->) where
   id  = Id
@@ -171,8 +174,8 @@ instance Category (:->) where
   It          . _                  = it
   (f :||| _) . Inl                 = f
   (_ :||| g) . Inr                 = g
-  -- Important but occasionally leads to nontermination. Investigating.
-  -- The simplest breaking example I have is `uncurry (&&)`.
+  -- Important but occasionally leads to nontermination.
+  -- See https://github.com/conal/lambda-ccc/issues/14
 --   Apply      . (decompL -> g :. f) = composeApply g . f
   -- Even the following simpler version trips nontermination.
 --   Apply     . (decompL -> g :. f)  = (Apply :. g) . f
@@ -191,8 +194,8 @@ instance Category (:->) where
 composeApply :: (z :-> (a :=> b) :* a) -> (z :-> b)
 -- apply . (curry h . f &&& g) == h . (f &&& g)
 composeApply ((decompL -> (Curry h :. f)) :&&& g) = h . (f &&& g)
-composeApply (h@ConstU{} :. f    :&&& g) = uncurry h . (f  &&& g)
-composeApply (h@ConstU{}         :&&& g) = uncurry h . (Id &&& g)
+composeApply (h@Prim{} :. f    :&&& g) = uncurry h . (f  &&& g)
+composeApply (h@Prim{}         :&&& g) = uncurry h . (Id &&& g)
 -- apply . (curry (g . exr) &&& f) == g . f
 composeApply (Curry (decompR -> g :. Exr) :&&& f) = g . f
 -- apply . first f == uncurry f  -- see proof below
@@ -221,7 +224,7 @@ instance ProductCat (:->) where
   exr = Exr
 # ifdef Simplify
   -- Experimental: const a &&& const b == const (a,b)
-  -- ConstU (ConstP (LitP a)) &&& ConstU (ConstP (LitP b)) = ConstU (ConstP (LitP (a,b)))
+  -- Prim (ConstP (LitP a)) &&& Prim (ConstP (LitP b)) = Prim (ConstP (LitP (a,b)))
   Exl &&& Exr = Id
   -- f . r &&& g . r == (f &&& g) . r
   (decompR -> f :. r) &&& (decompR -> g :. r') | Just Refl <- r ==? r'
@@ -251,7 +254,7 @@ instance ClosedCat (:->) where
   curry h = Curry h
 # ifdef Simplify
   uncurry (Curry f)    = f
---   uncurry (ConstU PairP) = Id             -- now ill-typed
+  uncurry (Prim PairP) = Id
 # endif
   uncurry x = Uncurry x
 
@@ -331,45 +334,43 @@ instance Show (a :-> b) where
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "uncurry" p h
-  showsPrec p (ConstU x)  = showsApp1  "const"   p x
+  showsPrec p (Prim x)    = showsPrec p x
+  showsPrec p (Lit l)     = showsApp1 "const" p l
 
 -- -- | Category with boolean operations.
 -- class ProductCat k => BoolCat k where
 --   not :: Bool `k` Bool
 --   and, or, xor :: (Bool :* Bool) `k` Bool
 
-primFun :: Prim (a :=> b) -> (a :-> b)
-primFun = unUnitFun . prim
-
 primUnc :: Prim (a :=> b :=> c) -> (a :* b :-> c)
-primUnc p = uncurry (primFun p)
+primUnc = uncurry . prim
 
 instance VecCat (:->) where
-  toVecZ = primFun ToVecZP
-  unVecZ = primFun UnVecZP
+  toVecZ = prim ToVecZP
+  unVecZ = prim UnVecZP
   toVecS = primUnc VecSP
-  unVecS = primFun UnVecSP
+  unVecS = prim UnVecSP
 
 instance PairCat (:->) where
-  toPair = primUnc UPairP
-  unPair = primFun UnUPairP
+  toPair = uncurry (prim UPairP)
+  unPair = prim UnUPairP
 
 instance TreeCat (:->) where
-  toL = primFun ToLeafP
-  unL = primFun UnLeafP
-  toB = primFun ToBranchP
-  unB = primFun UnBranchP
+  toL = prim ToLeafP
+  unL = prim UnLeafP
+  toB = prim ToBranchP
+  unB = prim UnBranchP
 
 instance BoolCat (:->) where
-  not = primFun NotP
-  xor = primUnc XorP
-  and = primUnc AndP
-  or  = primUnc OrP
+  not = prim NotP
+  xor = uncurry (prim XorP)
+  and = uncurry (prim AndP)
+  or  = uncurry (prim OrP)
 
 -- etc.
 
 instance MuxCat (:->) where
-  mux = primFun CondBP
+  mux = prim CondBP
 
 instance NumCat (:->) Int where
   add = primUnc AddP
@@ -391,7 +392,6 @@ convertC :: ( BiCCC k, HasUnitArrow k Lit
             (a :-> b) -> (a `k` b)
 convertC Id           = id
 convertC (g :. f)     = convertC g . convertC f
-convertC (ConstU p)   = unitArrow p . it
 convertC Exl          = exl
 convertC Exr          = exr
 convertC (f :&&& g)   = convertC f &&& convertC g
@@ -403,13 +403,7 @@ convertC DistL        = distl
 convertC Apply        = apply
 convertC (Curry   h)  = curry   (convertC h)
 convertC (Uncurry f)  = uncurry (convertC f)
+convertC (Prim p)     = primArrow p
+convertC (Lit l)      = unitArrow l . it
 
-instance HasUnitArrow (:->) Lit where unitArrow = ConstU . LitP
-
-{--------------------------------------------------------------------
-    TEMP
---------------------------------------------------------------------}
-
--- z :: Unit :-> (Bool -> Bool)
--- z = curry (not . exr) . it
-
+instance HasUnitArrow (:->) Lit where unitArrow = Lit

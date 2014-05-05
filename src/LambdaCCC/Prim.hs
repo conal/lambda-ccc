@@ -26,6 +26,7 @@
 module LambdaCCC.Prim
   ( Lit(..), HasLit(..), litSS
   , Prim(..),litP,xor, condBool -- ,cond -- ,ifThenElse
+  , primArrow
   ) where
 
 import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
@@ -217,35 +218,62 @@ instance Show (Prim a) where
 
 instance Show' Prim where showsPrec' = showsPrec
 
+primArrow :: ( BiCCC k, HasUnitArrow k Lit
+             , BoolCat k, MuxCat k, VecCat k, PairCat k, TreeCat k, NumCat k Int ) =>
+             Prim (a :=> b) -> (a `k` b)
+primArrow NotP      = not
+primArrow AndP      = curry and
+primArrow OrP       = curry or
+primArrow XorP      = curry C.xor
+primArrow AddP      = curry add
+primArrow MulP      = curry mul
+primArrow ExlP      = exl
+primArrow ExrP      = exr
+primArrow InlP      = inl
+primArrow InrP      = inr
+primArrow PairP     = curry id
+primArrow CondBP    = mux
+primArrow ToVecZP   = toVecZ
+primArrow UnVecZP   = unVecZ
+primArrow VecSP     = curry toVecS
+primArrow UnVecSP   = unVecS
+primArrow UPairP    = curry toPair
+primArrow UnUPairP  = unPair
+primArrow ToLeafP   = toL
+primArrow ToBranchP = toB
+primArrow UnLeafP   = unL
+primArrow UnBranchP = unB
+primArrow OopsP     = error "primArrow: Oops"
+primArrow (LitP _)  = error ("primArrow: LitP with function type?!")
+
 instance ( BiCCC k, HasUnitArrow k Lit
          , BoolCat k, MuxCat k, VecCat k, PairCat k, TreeCat k, NumCat k Int
          ) =>
          HasUnitArrow k Prim where
-  unitArrow (LitP l) = unitArrow l
-  unitArrow NotP     = unitFun not
-  unitArrow AndP     = unitFun (curry and)
-  unitArrow OrP      = unitFun (curry or)
-  unitArrow XorP     = unitFun (curry C.xor)
-  unitArrow AddP     = unitFun (curry add)
-  unitArrow MulP     = unitFun (curry mul)
-  unitArrow ExlP     = unitFun exl
-  unitArrow ExrP     = unitFun exr
-  unitArrow InlP     = unitFun inl
-  unitArrow InrP     = unitFun inr
-  unitArrow PairP    = unitFun (curry id)
-  unitArrow CondBP   = unitFun mux
-  unitArrow ToVecZP  = unitFun toVecZ
-  unitArrow UnVecZP  = unitFun unVecZ
-  unitArrow VecSP    = unitFun (curry toVecS)
-  unitArrow UnVecSP  = unitFun unVecS
+  unitArrow NotP      = unitFun not
+  unitArrow AndP      = unitFun (curry and)
+  unitArrow OrP       = unitFun (curry or)
+  unitArrow XorP      = unitFun (curry C.xor)
+  unitArrow AddP      = unitFun (curry add)
+  unitArrow MulP      = unitFun (curry mul)
+  unitArrow ExlP      = unitFun exl
+  unitArrow ExrP      = unitFun exr
+  unitArrow InlP      = unitFun inl
+  unitArrow InrP      = unitFun inr
+  unitArrow PairP     = unitFun (curry id)
+  unitArrow CondBP    = unitFun mux
+  unitArrow ToVecZP   = unitFun toVecZ
+  unitArrow UnVecZP   = unitFun unVecZ
+  unitArrow VecSP     = unitFun (curry toVecS)
+  unitArrow UnVecSP   = unitFun unVecS
   unitArrow UPairP    = unitFun (curry toPair)
   unitArrow UnUPairP  = unitFun unPair
   unitArrow ToLeafP   = unitFun toL
   unitArrow ToBranchP = unitFun toB
   unitArrow UnLeafP   = unitFun unL
   unitArrow UnBranchP = unitFun unB
-
-  unitArrow p        = error $ "unitArrow: not yet handled: " ++ show p
+  unitArrow OopsP     = error "unitArrow on Prim: OopsP"
+  unitArrow (LitP l)  = unitArrow l
 
 --     Variable `k' occurs more often than in the instance head
 --       in the constraint: BiCCC k

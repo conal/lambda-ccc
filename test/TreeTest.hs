@@ -103,6 +103,14 @@ main :: IO ()
 --           go "sum4"     (tsum   :: Tree N4 Int -> Int)
 --           go "dot4"     (dot    :: Tree N4 (Int,Int) -> Int)
 
+-- Problematic examples:
+
+-- -- This one leads to non-terminating CCC construction when the composeApply
+-- -- optimization is in place.
+-- main = go "dot1" (dot :: Tree N1 (Int,Int) -> Int)
+
+-- main = go "prod1" (prod :: Tree N1 (Int,Int) -> Tree N1 Int)
+
 -- main = go "dot5" (dot :: Tree N5 (Int,Int) -> Int)
 
 -- main = go "squares1" (squares :: Unop (Tree N1 Int))
@@ -111,18 +119,11 @@ main :: IO ()
 
 -- main = go "tsum1" (tsum :: Tree N1 Int -> Int)
 
+-- -- Not working yet: the (^) is problematic.
 -- main = go "squares2" (squares' :: Unop (Tree N0 Int))
 
--- Working out a reify issue.
+-- -- Working out a reify issue.
 -- main = go "sum1f" (sum :: Tree N1 Int -> Int)
 
--- Causes a GHC RTS crash ("internal error: stg_ap_pp_ret").
-main = go "prodA1" (uncurry prodA :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
-
-----
-
--- Breaks:
--- main = go "test" (uncurry (&&))
--- main = go "test" (\ p -> (let (x,ds) = p in x) && (let (ds,y) = p in y))
-
--- main = go "test" not
+-- -- Causes a GHC RTS crash ("internal error: stg_ap_pp_ret").
+-- main = go "prodA1" (uncurry prodA :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
