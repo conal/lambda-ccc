@@ -30,6 +30,10 @@ import Control.Arrow ((***),(+++),(|||))
 
 import Data.Monoid
 
+import TypeUnary.Vec
+import Circat.Pair
+import Circat.RTree
+
 type Unop  a = a -> a
 type Binop a = a -> Unop a
 
@@ -92,6 +96,10 @@ instance Encodable Bool where
 bool :: a -> a -> Bool -> a
 bool t e i = if i then t else e
 
+{--------------------------------------------------------------------
+    Library types
+--------------------------------------------------------------------}
+
 instance Encodable Any where
   { type Encode Any = Encode Bool ; encode = encode . getAny ; decode = Any . decode }
 
@@ -100,73 +108,29 @@ instance Encodable All where
 
 -- etc
 
--- Uniform pairs
-data Pair a = a :#: a deriving (Eq,Show,Functor,Foldable,Traversable)
+-- TODO: Can we get some help from the Newtype class?
 
 instance Encodable a => Encodable (Pair a) where
   type Encode (Pair a) = Encode (a :* a)
-  encode (a :#: a') = (encode a, encode a')
-  decode (u,u') = decode u :#: decode u'
+  encode (a :# a') = (encode a, encode a')
+  decode (b,b') = decode b :# decode b'
 
-data Nat = Z | S Nat
+instance Encodable (Vec Z a) where
+  type Encode (Vec Z a) = Unit
+  encode ZVec = ()
+  decode () = ZVec
 
--- Depth-typed, top-down, perfect, binary leaf trees
-data T :: Nat -> * -> * where
-  L :: a -> T Z a
-  B :: Pair (T n a) -> T (S n) a
+instance (Encodable a, Encodable (Vec n a)) => Encodable (Vec (S n) a) where
+  type Encode (Vec (S n) a) = Encode (a :* Vec n a)
+  encode (a :< as) = (encode a, encode as)
+  decode (b,bs) = decode b :< decode bs
 
-instance Encodable (T Z a) where
-  type Encode (T Z a) = a
+instance Encodable (Tree Z a) where
+  type Encode (Tree Z a) = a
   encode (L a) = a
   decode a = L a
 
-instance Encodable (T n a) => Encodable (T (S n) a) where
-  type Encode (T (S n) a) = Encode (Pair (T n a))
+instance Encodable (Tree n a) => Encodable (Tree (S n) a) where
+  type Encode (Tree (S n) a) = Encode (Pair (Tree n a))
   encode (B ts) = encode ts
   decode x = B (decode x)
-
--- Expressions
-data E a
-
-idE :: E (a -> a)
-idE = undefined
-
-reifyE :: Encodable a => a -> E (Encode a)
-reifyE = error "reifyE: Oops! Not rewritten away."
-
-infixr 3 &&*
-infixr 2 ||*
-
-(&&*), (||*) :: E (Binop (Encode Bool))
-(&&*) = undefined
-(||*) = undefined
-
-{-# RULES
-"reifyE/id"           reifyE id                  = idE
-"reifyE/(&&)"         reifyE (&&)                = (&&*)
-"reifyE/(||)"         reifyE (||)                = (||*)
-"reifyE/Any"          reifyE Any                 = reifyE (id :: Unop Bool)  -- = idE
-"reifyE/All"          reifyE All                 = reifyE (id :: Unop Bool)  -- = idE
-"reifyE/mappend Any"  reifyE ((<>) :: Binop Any) = reifyE (||)
-"reifyE/mappend All"  reifyE ((<>) :: Binop All) = reifyE (&&)
-  #-}
-
--- instance Encodable a => Encodable [a] where
---   -- type Encode [a] = Encode (() :+ a :* [a])
---   type Encode [a] = () :+ Encode a :* Encode [a]
---   encode []     = Left  ()
---   encode (a:as) = Right (encode (a,as))
---   decode (Left  ()    ) = []    
---   decode (Right (a,as)) = decode a : decode as
-
-
--- Oops! Infinite type:
--- 
---     Occurs check: cannot construct the infinite type:
---       uf0 = (Encode a, Either () uf0)
---     Expected type: Encode [a]
---       Actual type: Either () (Encode a, Either () uf0)
---     In the return type of a call of `Right'
---     In the expression: Right (encode (a, as))
---     In an equation for `decode':
---         encode (a : as) = Right (encode (a, as))
