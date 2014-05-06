@@ -40,56 +40,35 @@ infixr 1 -->
 -- (-->) :: Category k =>
 --          (a' `k` a) -> (b `k` b') -> ((a `k` b) -> (a' `k` b'))
 
+#define INS {-# INLINE encode #-} ; {-# INLINE decode #-}
+
 class Encodable a where
   type Encode a
   encode :: a -> Encode a
   decode :: Encode a -> a
 
 instance (Encodable a, Encodable b) => Encodable (a :* b) where
-  type Encode (a :* b) = Encode a :* Encode b
+  type Encode (a :* b) = Encode a :* Encode b ; INS
   encode = encode *** encode
   decode = decode *** decode
-  {-# INLINE encode #-}
-  {-# INLINE decode #-}
 
 instance (Encodable a, Encodable b) => Encodable (a :+ b) where
-  type Encode (a :+ b) = Encode a :+ Encode b
+  type Encode (a :+ b) = Encode a :+ Encode b ; INS
   encode = encode +++ encode
   decode = decode +++ decode
-  {-# INLINE encode #-}
-  {-# INLINE decode #-}
 
 instance (Encodable a, Encodable b) => Encodable (a -> b) where
-  type Encode (a -> b) = Encode a -> Encode b
+  type Encode (a -> b) = Encode a -> Encode b ; INS
   encode = decode --> encode
   decode = encode --> decode
-  {-# INLINE encode #-}
-  {-# INLINE decode #-}
 
 #define PrimEncode(t) \
  instance Encodable (t) where \
-   { type Encode (t) = t ; encode = id ; decode = id; \
-     {-# INLINE encode #-}; {-# INLINE decode #-}; \
-   }
+   { type Encode (t) = t ; INS ; encode = id ; decode = id }
 
 PrimEncode(Unit)
 PrimEncode(Bool)
 PrimEncode(Int)
-
--- instance Encodable Bool where
---   type Encode Bool = () :+ ()
---   encode False = Left ()
---   encode True  = Right ()
---   decode (Left  ()) = False
---   decode (Right ()) = True
-
--- instance Encodable Bool where
---   type Encode Bool = () :+ ()
---   encode = bool (Left ()) (Right ())
---   decode = const False ||| const True
-
--- bool :: a -> a -> Bool -> a
--- bool t e i = if i then t else e
 
 {--------------------------------------------------------------------
     Library types
@@ -97,9 +76,7 @@ PrimEncode(Int)
 
 #define NewtypeEncode(n,o,wrap,unwrap) \
   instance Encodable (n) where \
-    { type Encode (n) = Encode (o) ; encode = encode . unwrap ; decode = wrap . decode ; \
-      {-# INLINE encode #-}; {-# INLINE decode #-}; \
-    }
+    { type Encode (n) = Encode (o) ; INS ; encode = encode . unwrap ; decode = wrap . decode }
 
 NewtypeEncode(Any,Bool,Any,getAny)
 NewtypeEncode(All,Bool,All,getAll)
@@ -117,36 +94,26 @@ NewtypeEncode(All,Bool,All,getAll)
 -- Sized types
 
 instance Encodable a => Encodable (Pair a) where
-  type Encode (Pair a) = Encode (a :* a)
+  type Encode (Pair a) = Encode (a :* a) ; INS
   encode (a :# a') = (encode a, encode a')
   decode (b,b') = decode b :# decode b'
-  {-# INLINE encode #-}
-  {-# INLINE decode #-}
 
 instance Encodable (Vec Z a) where
-  type Encode (Vec Z a) = Unit
+  type Encode (Vec Z a) = Unit ; INS
   encode ZVec = ()
   decode () = ZVec
-  {-# INLINE encode #-}
-  {-# INLINE decode #-}
 
 instance (Encodable a, Encodable (Vec n a)) => Encodable (Vec (S n) a) where
-  type Encode (Vec (S n) a) = Encode (a :* Vec n a)
+  type Encode (Vec (S n) a) = Encode (a :* Vec n a) ; INS
   encode (a :< as) = (encode a, encode as)
   decode (b,bs) = decode b :< decode bs
-  {-# INLINE encode #-}
-  {-# INLINE decode #-}
 
 instance Encodable (Tree Z a) where
-  type Encode (Tree Z a) = a
+  type Encode (Tree Z a) = a ; INS
   encode (L a) = a
   decode a = L a
-  {-# INLINE encode #-}
-  {-# INLINE decode #-}
 
 instance Encodable (Tree n a) => Encodable (Tree (S n) a) where
-  type Encode (Tree (S n) a) = Encode (Pair (Tree n a))
+  type Encode (Tree (S n) a) = Encode (Pair (Tree n a)) ; INS
   encode (B ts) = encode ts
   decode x = B (decode x)
-  {-# INLINE encode #-}
-  {-# INLINE decode #-}
