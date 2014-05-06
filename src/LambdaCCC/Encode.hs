@@ -5,7 +5,7 @@
 
 {-# OPTIONS_GHC -Wall #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -22,19 +22,15 @@
 
 module LambdaCCC.Encode (Encodable(..)) where
 
--- import Prelude hiding (id,(.))
-import Data.Foldable
-import Data.Traversable
--- import Control.Category (Category(..))
-import Control.Arrow ((***),(+++),(|||))
+import Control.Arrow ((***),(+++))
+import Data.Monoid (Any(..),All(..))
 
-import Data.Monoid
+import TypeUnary.TyNat (Z,S)
+import TypeUnary.Vec (Vec(..))
+import Circat.Pair (Pair(..))
+import Circat.RTree (Tree(..))
 
-import TypeUnary.Vec
-import Circat.Pair
-import Circat.RTree
-
-import LambdaCCC.Misc (Unop,Binop,Unit,(:+),(:*))
+import LambdaCCC.Misc (Unit,(:+),(:*))
 
 infixr 1 -->
 -- | Add pre- and post processing
