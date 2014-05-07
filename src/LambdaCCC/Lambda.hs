@@ -611,7 +611,7 @@ condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))
 
 -- Use this rule only we do all the reification we can, in order to finish generating an EP.
 
-{-# RULES "reify/oops" forall e. reifyEP e = oops  #-}
+-- {-# RULES "reify/oops" forall e. reifyEP e = oops  #-}
 
 -- For translating case of empty vector
 vecCaseZ :: forall b a. b -> Vec Z a -> b
