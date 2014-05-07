@@ -1,5 +1,5 @@
 Name:               lambda-ccc
-Version:            0.2
+Version:            0.3
 Cabal-Version:      >= 1.8
 Synopsis:           Convert lambda expressions to CCC combinators
 Category:           categories
@@ -43,8 +43,12 @@ Library
                     LambdaCCC.Lambda
                     LambdaCCC.CCC
                     LambdaCCC.ToCCC
+                    LambdaCCC.Encode
                     LambdaCCC.Reify
+                    LambdaCCC.SReify
                     LambdaCCC.Run
+
+-- I'll drop one of Reify & SReify later
 
 --                     LambdaCCC.Ty
 --                     LambdaCCC.MkStringExpr
