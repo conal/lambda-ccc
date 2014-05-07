@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, ConstraintKinds #-}
+{-# LANGUAGE TypeOperators, ConstraintKinds, CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- For tests
@@ -27,6 +27,10 @@ import LambdaCCC.ToCCC
 
 import Circat.Category
 import Circat.Classes
+
+import TypeUnary.TyNat
+import Circat.Pair
+import Circat.RTree
 
 {--------------------------------------------------------------------
     Convenient notation for expression building
@@ -203,6 +207,8 @@ With Simplify and Sugared:
 
 -}
 
+#if 0
+
 ---- Tracking down a looping bug in optimized CCC construction
 
 x1 :: (a :* (b :* c)) :-> c
@@ -213,3 +219,49 @@ x1 = apply . (curry (exr . exr) &&& exr)
 
 -- x :: p :-> q
 -- x = apply . (curry (uncurry not . (it &&& id) . exr) &&& apply . (curry (exr . exr) &&& exr)) . (it &&& id)
+
+
+----
+
+-- z = apply . (curry (apply . (apply . (curry (add . exr) &&& apply . (curry (exl . exr) &&& exr)) &&& apply . (curry (exr . exr) &&& exr))) &&& apply . (curry (apply . (apply . (curry (curry id . exr) &&& exl . exr) &&& exr . exr)) &&& apply . (curry (unPair . exr) &&& apply . (curry (apply . (apply . (curry (toPair . exr) &&& apply . (curry (unL . exr) &&& exl . exr)) &&& apply . (curry (unL . exr) &&& exr . exr))) &&& apply . (curry (unPair . exr) &&& apply . (curry (unB . exr) &&& apply . (curry (toB . exr) &&& apply . (curry (apply . (apply . (curry (toPair . exr) &&& apply . (curry (toL . exr) &&& apply . (apply . (curry (curry (apply . (apply . (exr . exl &&& apply . (curry (exl . exr) &&& exr)) &&& apply . (curry (exr . exr) &&& exr)))) &&& curry (mul . exr)) &&& apply . (curry (unL . exr) &&& exl . exr)))) &&& apply . (curry (toL . exr) &&& apply . (apply . (curry (curry (apply . (apply . (exr . exl &&& apply . (curry (exl . exr) &&& exr)) &&& apply . (curry (exr . exr) &&& exr)))) &&& curry (mul . exr)) &&& apply . (curry (unL . exr) &&& exr . exr))))) &&& apply . (curry (unPair . exr) &&& apply . (curry (unB . exr) &&& exr)))))))))) . (it &&& id)
+
+
+-- okay
+z1 :: a :* (d :* b) :-> ((Int :* Int) :=> Int) :* d
+z1 = curry (add . exr) &&& apply . (curry (exl . exr) &&& exr)
+
+-- -- doesn't type
+-- z2 :: q
+-- z2 = apply . (apply . z1 &&& apply . (curry (exr . exr) &&& exr))
+
+-- okay
+z3 :: a1 :* (a0 :* c0) :-> c0
+z3 = apply . (curry (exr . exr) &&& exr)
+
+z4 :: a0 :-> (a2 :* a1) :=> (a2 :* a1)
+z4 = curry (apply . (apply . (curry (curry id . exr) &&& exl . exr) &&& exr . exr))
+
+z5 :: a0 :-> (Pair a1 :=> (a1 :* a1))
+z5 = curry (unPair . exr)
+
+z6 :: (a1 :* (Tree Z (a0 :* a0) :* Tree Z d0)) :-> (Pair a0 :* d0)
+z6 = apply . (curry (toPair . exr) &&& apply . (curry (unL . exr) &&& exl . exr)) &&& apply . (curry (unL . exr) &&& exr . exr)
+
+z7 :: a1 :-> (((a2 :=> (a0 :=> c0)) :=> ((a2 :* a0) :=> c0)) :* ((Int :* Int) :=> Int))
+z7 = curry (curry (apply . (apply . (exr . exl &&& apply . (curry (exl . exr) &&& exr)) &&& apply . (curry (exr . exr) &&& exr)))) &&& curry (mul . exr)
+
+-- z7 :: a1 :-> (((a2 :=> (a0 :=> c0)) :=> ((a2 :* a0) :=> c0)) :* ((Int :* Int) :=> Int))
+z7' = curry (curry (apply . (apply . (exr . exl &&& apply . (curry (exl . exr) &&& exr)) &&& apply . (curry (exr . exr) &&& exr)))) &&& curry (mul . exr)
+
+z8 :: (a1 :* (a0 :* Tree Z c0)) :-> c0
+z8 = apply . (curry (unL . exr) &&& exr . exr)
+
+-- z9 = apply . (curry (curry (apply . (apply . (exr . exl &&& apply . (curry (exl . exr) &&& exr)) &&& apply . (curry (exr . exr) &&& exr)))) &&& curry (mul . exr)) &&& apply . (curry (unL . exr) &&& exr . exr)
+
+-- -- num ->
+-- z7 :: (a2 :* (a1 :* Tree Z (((a0 :=> b0) :* (a0 :=> b0)) :* a0))) :-> (Tree Z b0)
+-- z7 = apply . (curry (toL . exr) &&& apply . (apply . (curry (curry (apply . (apply . (exr . exl &&& apply . (curry (exl . exr) &&& exr)) &&& apply . (curry (exr . exr) &&& exr)))) &&& curry (mul . exr)) &&& apply . (curry (unL . exr) &&& exr . exr)))
+
+-- z7 = apply . (curry (unPair . exr) &&& apply . (curry (unB . exr) &&& apply . (curry (toB . exr) &&& apply . (curry (apply . (apply . (curry (toPair . exr) &&& apply . (curry (toL . exr) &&& apply . (apply . (curry (curry (apply . (apply . (exr . exl &&& apply . (curry (exl . exr) &&& exr)) &&& apply . (curry (exr . exr) &&& exr)))) &&& curry (mul . exr)) &&& apply . (curry (unL . exr) &&& exl . exr)))) &&& apply . (curry (toL . exr) &&& apply . (apply . (curry (curry (apply . (apply . (exr . exl &&& apply . (curry (exl . exr) &&& exr)) &&& apply . (curry (exr . exr) &&& exr)))) &&& curry (mul . exr)) &&& apply . (curry (unL . exr) &&& exr . exr))))) &&& apply . (curry (unPair . exr) &&& apply . (curry (unB . exr) &&& exr))))))
+
+#endif
