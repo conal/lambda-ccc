@@ -48,6 +48,7 @@ import Circat.Pair (Pair(..))
 import Circat.RTree (TreeCat(..))
 import Circat.Circuit (IsSourceP2)
 
+import LambdaCCC.Encode (Encodable(..))
 import LambdaCCC.Run (run)
 
 {--------------------------------------------------------------------
@@ -91,8 +92,12 @@ squares' = fmap (^ (2 :: Int))
     Run it
 --------------------------------------------------------------------}
 
-go :: IsSourceP2 a b => String -> (a -> b) -> IO ()
-go name f = run name (reifyEP f)
+-- go :: IsSourceP2 a b => String -> (a -> b) -> IO ()
+-- go name f = run name (reifyEP f)
+
+go :: (Encodable a, Encodable b, IsSourceP2 (Encode a) (Encode b)) =>
+      String -> (a -> b) -> IO ()
+go name f = run name (reifyEP (encode f))
 
 -- Only works when compiled with HERMIT
 main :: IO ()
@@ -108,6 +113,9 @@ main :: IO ()
 -- -- This one leads to non-terminating CCC construction when the composeApply
 -- -- optimization is in place.
 -- main = go "dot1" (dot :: Tree N1 (Int,Int) -> Int)
+
+-- Doesn't wedge.
+main = go "dotp" ((psum . prod) :: Pair (Int,Int) -> Int)
 
 -- main = go "prod1" (prod :: Tree N1 (Int,Int) -> Tree N1 Int)
 
