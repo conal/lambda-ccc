@@ -13,9 +13,9 @@ set-pp-coercion Omit
 
 binding-of main
 try (any-td (unfold go))
-bash  -- for go unfolding
+try bash  -- for go unfolding
 
-repeat (any-td (repeat reify-misc))
+try (repeat (any-td (repeat reify-misc)))
 
 try bash
 
