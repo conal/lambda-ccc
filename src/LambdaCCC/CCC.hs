@@ -179,7 +179,7 @@ instance Category (:->) where
 --   Apply      . (decompL -> g :. f) = composeApply g . f
   -- Even the following simpler version trips nontermination.
 --   Apply     . (decompL -> g :. f)  = (Apply :. g) . f
-  Curry (decompR -> f :. Exr) . _  = curry (f . exr)  -- see below
+--   Curry (decompR -> f :. Exr) . _  = curry (f . exr)  -- see below
 # endif
   g          . f                   = g :. f
 
