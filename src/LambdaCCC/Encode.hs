@@ -56,12 +56,12 @@ instance (Encodable a, Encodable b) => Encodable (a :* b) where
   decode = decode *** decode
 
 instance (Encodable a, Encodable b) => Encodable (a :+ b) where
-  EncTy (a :+ b, Encode a :+ Encode b)
+  EncTy(a :+ b, Encode a :+ Encode b)
   encode = encode +++ encode
   decode = decode +++ decode
 
 instance (Encodable a, Encodable b) => Encodable (a -> b) where
-  EncTy (a -> b, Encode a -> Encode b)
+  EncTy(a -> b, Encode a -> Encode b)
   encode = decode --> encode
   decode = encode --> decode
 
@@ -73,7 +73,7 @@ PrimEncode(Bool)
 PrimEncode(Int)
 
 -- instance Encodable Bool where
---   EncTy (Bool,() :+ ())
+--   EncTy(Bool,() :+ ())
 --   encode False = Left ()
 --   encode True  = Right ()
 --   decode (Left  ()) = False
@@ -87,8 +87,19 @@ PrimEncode(Int)
 
 #define RepEncode(n,o,wrap,unwrap) \
   instance Encodable (o) => Encodable (n) where \
-    { EEncTy (n,o) ; encode = encode . (unwrap) ; decode = (wrap) . decode }
+    { EEncTy(n,o) ; encode = encode . (unwrap) ; decode = (wrap) . decode }
 
+-- TODO: Can we get some help from the Newtype class?
+
+RepEncode(Pair a, a :* a, toP, fromP)
+
+RepEncode(Vec Z a, Unit, \ () -> ZVec, \ ZVec -> ())
+RepEncode(Vec (S n) a, a :* Vec n a, uncurry (:<), unConsV)
+
+RepEncode(Tree Z a, a, toL, unL)
+RepEncode(Tree (S n) a, Pair (Tree n a), toB, unB)
+
+-- Standard newtypes:
 RepEncode(Any,Bool,Any,getAny)
 RepEncode(All,Bool,All,getAll)
 -- etc
@@ -98,13 +109,3 @@ RepEncode(All,Bool,All,getAll)
 --     (Use UndecidableInstances to permit this)
 --     In the type instance declaration for ‘Encode’
 --     In the instance declaration for ‘Encodable (Any)’
-
--- TODO: Can we get some help from the Newtype class?
-
-RepEncode(Pair a, a :* a, toP, fromP)
-
-RepEncode(Vec Z a, Unit, \ () -> ZVec, \ ZVec -> ())
-RepEncode(Vec (S n) a, a :* Vec n a, uncurry (:<), unConsV)
-
-RepEncode (Tree Z a, a, toL, unL)
-RepEncode (Tree (S n) a, Pair (Tree n a), toB, unB)
