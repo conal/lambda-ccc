@@ -64,6 +64,7 @@ import HERMIT.Extras
   , varLitE, uqVarName, typeEtaLong, simplifyE
   , anytdE, anybuE, inAppTys, isAppTy, letFloatToProg , concatProgs
   , rejectR , rejectTypeR
+  , simplifyExprT
   )
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 
@@ -78,7 +79,7 @@ import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 -- (Observing, observeR', triesL, labeled)
 
 observing :: Ex.Observing
-observing = False
+observing = True
 
 observeR' :: InCoreTC t => String -> RewriteH t
 observeR' = Ex.observeR' observing
@@ -910,6 +911,6 @@ externals =
     , externC "reify-code" reifyCodeF "manual rewrites for reifying encodeF & decodeF"
 #endif
     , external "uncalle1" (promoteR . unCallE1 :: String -> ReCore) ["uncall a function"]
-
+    , externC "simplify-expr" simplifyExprT "Invoke GHC's simplifyExpr"
     ]
     -- ++ Enc.externals
