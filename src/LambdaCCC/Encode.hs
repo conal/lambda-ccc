@@ -109,3 +109,4 @@ RepEncode(All,Bool,All,getAll)
 --     (Use UndecidableInstances to permit this)
 --     In the type instance declaration for ‘Encode’
 --     In the instance declaration for ‘Encodable (Any)’
+
