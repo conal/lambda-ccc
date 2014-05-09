@@ -3,7 +3,8 @@
 
 -- Whether to use trees instead of vectors.
 -- Restricts to power-of-two, and gives fast fold for dot.
-#define UseTrees
+
+-- #define UseTrees
 
 module LambdaCCC.Examples.Linear where
 

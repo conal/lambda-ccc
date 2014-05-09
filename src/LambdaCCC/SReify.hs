@@ -10,7 +10,7 @@
 
 ----------------------------------------------------------------------
 -- |
--- Module      :  LambdaCCC.Reify
+-- Module      :  LambdaCCC.SReify
 -- Copyright   :  (c) 2013 Tabula, Inc.
 -- LICENSE     :  BSD3
 --
@@ -22,15 +22,18 @@
 
 #define OnlyLifted
 
-module LambdaCCC.Reify (plugin) where
+module LambdaCCC.SReify (plugin) where
 
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..))
 import Data.Foldable (msum)
-import Control.Monad ((<=<))
+import Control.Monad ((<=<),unless)
 import Control.Arrow (Arrow(..),(>>>))
 import Data.List (isPrefixOf,find)
 import Data.Maybe (fromMaybe)
+
+-- GHC
+import PrelNames (eitherTyConName)
 
 import HERMIT.Monad (newIdH)
 import HERMIT.Core (localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
@@ -65,6 +68,7 @@ import HERMIT.Extras
   , anytdE, anybuE, inAppTys, isAppTy, letFloatToProg , concatProgs
   , rejectR , rejectTypeR
   , simplifyExprT
+  , showPprT
   )
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 
@@ -79,7 +83,7 @@ import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 -- (Observing, observeR', triesL, labeled)
 
 observing :: Ex.Observing
-observing = False
+observing = True
 
 observeR' :: InCoreTC t => String -> RewriteH t
 observeR' = Ex.observeR' observing
@@ -89,6 +93,33 @@ triesL = Ex.triesL observing
 
 -- labeled :: InCoreTC t => (String, RewriteH t) -> RewriteH t
 -- labeled = Ex.labeled observing
+
+{--------------------------------------------------------------------
+    Standard types
+--------------------------------------------------------------------}
+
+-- A "standard type" is built up from `Unit`, `Bool`, `Int` (for now), pairs (of
+-- standard types), sums, and functions.
+
+standardTy :: Type -> Bool
+standardTy (tcView -> Just ty) = standardTy ty
+standardTy (TyConApp tc args)  = standardTC tc && all standardTy args
+standardTy (FunTy arg res)     = standardTy arg && standardTy res
+standardTy _                   = False
+
+-- TODO: Maybe use coreView instead of tcView? I think it's tcView we want,
+-- since it just looks through type synonyms and not newtypes.
+
+standardTC :: TyCon -> Bool
+standardTC tc =
+     (tc `elem` [unitTyCon, boolTyCon, intTyCon])
+  || isPairTC tc
+  || tyConName tc == eitherTyConName    -- no eitherTyCon
+
+isPairTC :: TyCon -> Bool
+isPairTC tc = isBoxedTupleTyCon tc && tupleTyConArity tc == 2
+
+-- TODO: Maybe move some of this functionality to HERMIT.Extras.
 
 {--------------------------------------------------------------------
     Reification
@@ -127,9 +158,8 @@ evalS, reifyS :: String
 evalS = "evalEP"
 reifyS = "reifyEP"
 
-varPS, letS, varPatS :: String
+varPS, varPatS :: String
 varPS   = "varP#"
-letS    = "lettP"
 varPatS = "varPat#"
 
 epS :: String
@@ -158,32 +188,14 @@ unEval = unCallE1 evalS
 reifyEval :: ReExpr
 reifyEval = unReify >>> unEval
 
-#ifdef OnlyLifted
-
 reifyOf :: CoreExpr -> TransformU CoreExpr
-reifyOf e = do guardMsg (not (unliftedKind ki))
-                 "reifyOf: no unlifted values (with type of kind #)"
-               guardMsg (liftedKind ki)
-                 ("reifyOf: Can only reify lifted values, but this one is "
-                  ++ kindStr ki)
-               guardMsg (not (dictRelated (exprType e)))
-                 "reify: dictionary-related"
+reifyOf e = do unless (standardTy (exprType e)) $
+                 do s <- showPprT (exprType e)
+                    fail ("reifyOf: non-standard type:\n" ++ s)
                appsE reifyS [exprType e] [e]
  where
    ty = exprType e
    ki = typeKind ty
-
-
-kindStr :: Kind -> String
-kindStr (TyConApp tc _) = "TyConApp " ++ uqName (tyConName tc) ++ "..."
-kindStr _               = "not a TyConApp" -- TODO: more detail here if needed
-
-#else
-
-reifyOf :: CoreExpr -> TransformU CoreExpr
-reifyOf e = appsE reifyS [exprType e] [e]
-
-#endif
 
 evalOf :: CoreExpr -> TransformU CoreExpr
 evalOf e = appsE evalS [dropEP (exprType e)] [e]
@@ -201,29 +213,11 @@ dropEP _ = error "dropEP: not a TyConApp"
 reifyR :: ReExpr
 reifyR = idR >>= reifyOf
 
-#ifdef OnlyLifted
-reifyR' :: ReExpr
-reifyR' = idR >>= reifyOf'
-
-reifyOf' :: CoreExpr -> TransformU CoreExpr
-reifyOf' e = do 
-                guardMsg (not (unliftedKind ki))
-                  "reifyOf: no unlifted values (with type of kind #)"
---                 guardMsg (liftedKind ki)
---                   ("reifyOf: Can only reify lifted values, but this one is "
---                    ++ kindStr ki)
---                 guardMsg (not (dictRelated (exprType e)))
---                   "reify: dictionary-related"
-                appsE reifyS [exprType e] [e]
- where
-   ty = exprType e
-   ki = typeKind ty
-#endif
-
 evalR :: ReExpr
 evalR = idR >>= evalOf
 
--- reify (u v) --> reify u `appP` reify v
+-- reify (u v) --> reify u `appP` reify v .
+-- Fails if v (and hence u) has a nonstandard type.
 reifyApp :: ReExpr
 reifyApp = do App u v <- unReify
               Just (a,b) <- constT (return (splitFunTy_maybe (exprType u)))
@@ -445,13 +439,13 @@ simplifies = map labeled
 reifyUnfold :: ReExpr
 reifyUnfold = inReify unfoldSimplify
 
--- reifyEncode :: ReExpr
--- reifyEncode = inReify encodeTypesR
-
 castFloatAppsR :: ReExpr
 castFloatAppsR = go
  where
    go = castFloatAppR <+ (appAllR go idR >>> castFloatAppR)
+
+-- reifyEncode :: ReExpr
+-- reifyEncode = inReify encodeTypesR
 
 reifyRuleNames :: [String]
 reifyRuleNames = map ("reify/" ++)
@@ -538,21 +532,21 @@ reifyCast :: ReExpr
 --                re <- reifyOf e
 --                appsE "castEP" [exprType e,exprType e'] [Coercion co,re]
 
--- reifyCast = unReify >>>
---             do e'@(Cast e co) <- idR
---                case setNominalRole_maybe co of
---                  Nothing  -> fail "Couldn't setNominalRole"
---                  Just coN ->
---                    do re <- reifyOf e
---                       appsE "castEP" [exprType e,exprType e'] [mkEqBox coN,re]
-
--- Cheat via UnivCo:
 reifyCast = unReify >>>
-            do e'@(Cast e _) <- idR
-               let ty  = exprType e
-                   ty' = exprType e'
-               re <- reifyOf e
-               appsE "castEP" [ty,ty'] [mkEqBox (mkUnivCo Nominal ty ty'),re]
+            do e'@(Cast e co) <- idR
+               case setNominalRole_maybe co of
+                 Nothing  -> fail "Couldn't setNominalRole"
+                 Just coN ->
+                   do re <- reifyOf e
+                      appsE "castEP" [exprType e,exprType e'] [mkEqBox coN,re]
+
+-- -- Cheat via UnivCo:
+-- reifyCast = unReify >>>
+--             do e'@(Cast e _) <- idR
+--                let ty  = exprType e
+--                    ty' = exprType e'
+--                re <- reifyOf e
+--                appsE "castEP" [ty,ty'] [mkEqBox (mkUnivCo Nominal ty ty'),re]
 
 -- reifyCast = (unReify &&& arr exprType) >>>
 --             do (Cast e _, ty) <- idR
@@ -628,7 +622,7 @@ reifyTupCase =
   do Case scrut@(exprType -> scrutT) wild bodyT [alt] <- unReify
      (patE,rhs) <- reifyAlt wild alt
      scrut'     <- reifyOf scrut
-     appsE letS [scrutT,bodyT] [patE,scrut',rhs]
+     appsE "lettP" [scrutT,bodyT] [patE,scrut',rhs]
  where
    -- Reify a case alternative, yielding a reified pattern and a reified
    -- alternative body (RHS). Only unit and pair patterns. Others are
@@ -735,7 +729,7 @@ sizedTy (TyConApp tc [len0,elemTy]) =
      s <- findTyConT "TypeUnary.TyNat.S"
      return $
        ( tc
-       , case fromMaybe len0 (coreView len0) of
+       , case fromMaybe len0 (tcView len0) of
            TyConApp ((== z) -> True) []  -> VZero
            TyConApp ((== s) -> True) [n] -> VSucc n
            _ -> error "sizedTy: Vec not Z or S n. Investigate."
@@ -880,9 +874,6 @@ externals =
     , externC "unreify" unReify "Drop reify"
     , externC "reify-inline" reifyInline "inline names where reified"
     , externC "reify-it" reifyR "apply reify"
-#ifdef OnlyLifted
-    , externC "reify-it'" reifyR' "reifyR'"
-#endif
     , externC "eval-it" evalR "apply eval"
     , externC "reify-app" reifyApp "reify (u v) --> reify u `appP` reify v"
     , externC "reify-lam" reifyLam
@@ -919,6 +910,7 @@ externals =
     , externC "reify-code" reifyCodeF "manual rewrites for reifying encodeF & decodeF"
 #endif
     , external "uncalle1" (promoteR . unCallE1 :: String -> ReCore) ["uncall a function"]
+    , externC "cast-float-apps" castFloatAppsR "float casts over apps"
     , externC "simplify-expr" simplifyExprT "Invoke GHC's simplifyExpr"
     ]
     -- ++ Enc.externals

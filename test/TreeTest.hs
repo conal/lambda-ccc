@@ -92,12 +92,14 @@ squares' = fmap (^ (2 :: Int))
     Run it
 --------------------------------------------------------------------}
 
--- go :: IsSourceP2 a b => String -> (a -> b) -> IO ()
--- go name f = run name (reifyEP f)
+go :: IsSourceP2 a b => String -> (a -> b) -> IO ()
+go name f = run name (reifyEP f)
 
-go :: (Encodable a, Encodable b, IsSourceP2 (Encode a) (Encode b)) =>
-      String -> (a -> b) -> IO ()
-go name f = run name (reifyEP (encode f))
+-- With an outer encode
+
+-- go :: (Encodable a, Encodable b, IsSourceP2 (Encode a) (Encode b)) =>
+--       String -> (a -> b) -> IO ()
+-- go name f = run name (reifyEP (encode f))
 
 -- Only works when compiled with HERMIT
 main :: IO ()
@@ -114,8 +116,10 @@ main :: IO ()
 -- -- optimization is in place.
 -- main = go "dot1" (dot :: Tree N1 (Int,Int) -> Int)
 
--- Doesn't wedge.
-main = go "dotp" ((psum . prod) :: Pair (Int,Int) -> Int)
+-- main = go "dot3" (dot :: Tree N3 (Int,Int) -> Int)
+
+-- -- Doesn't wedge.
+-- main = go "dotp" ((psum . prod) :: Pair (Int,Int) -> Int)
 
 -- main = go "prod1" (prod :: Tree N1 (Int,Int) -> Tree N1 Int)
 
@@ -133,5 +137,6 @@ main = go "dotp" ((psum . prod) :: Pair (Int,Int) -> Int)
 -- -- Working out a reify issue.
 -- main = go "sum1f" (sum :: Tree N1 Int -> Int)
 
--- -- Causes a GHC RTS crash ("internal error: stg_ap_pp_ret").
--- main = go "prodA1" (uncurry prodA :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
+-- Causes a GHC RTS crash ("internal error: stg_ap_pp_ret").
+main = go "prodA1" (uncurry prodA :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
+

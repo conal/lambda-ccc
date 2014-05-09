@@ -299,6 +299,7 @@ lamv# addr ty body = lam (VarPat (V (unpackCString# addr) ty)) body
 -- | Let expression (beta redex)
 lett :: forall a b p. (PrimBasics p, Eq1' p) =>
                       Pat a -> E p a -> E p b -> E p b
+lett UnitPat _ body = body   -- Warning: may gain termination.
 lett pat e body = lam pat body @^ e
 
 infixr 1 #

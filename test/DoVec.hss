@@ -1,9 +1,9 @@
 set-pp-renderer ascii
 set-pp-width 80
--- set-pp-type     Show
--- set-pp-coercion Abstract
-set-pp-type     Omit
-set-pp-coercion Omit
+set-pp-type     Show
+set-pp-coercion Abstract
+-- set-pp-type     Omit
+-- set-pp-coercion Omit
 
 -- rhs-of z
 
@@ -12,20 +12,27 @@ set-pp-coercion Omit
 -- reify-module
 
 binding-of main
+try (any-td (unfold go))
+try bash  -- for go unfolding
 
-repeat (any-td (repeat reify-misc))
+try (repeat (any-td (repeat reify-misc)))
+
+try bash
+
+try unshadow
 
 -- occurrence-of reifyEP ; up ; up
 -- reify-case-vec
 
 -- set-pp-type Omit
 
-down
+-- down
 
--- Remove when I'm able to reactiveate -dcore-lint
-top ; lint-module ; down
 
-binding-of main
+-- -- Remove when I'm able to reactiveate -dcore-lint
+
+-- top ; lint-module ; binding-of main
+
 
 -- Remove later:
 

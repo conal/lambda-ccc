@@ -57,5 +57,5 @@ idCT = id
 -- Diagram and Verilog
 outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()
 outGV s c = do outGWith ("pdf","")      s c
-            -- outGWith (t,"-Gdpi=200") s c
+--                outGWith ("png","-Gdpi=200") s c
                outV                     s c

@@ -47,6 +47,7 @@ Library
                     LambdaCCC.Reify
                     LambdaCCC.SReify
                     LambdaCCC.Run
+                    LambdaCCC.Examples.Linear
 
 -- I'll drop one of Reify & SReify later
 

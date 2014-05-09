@@ -1,8 +1,8 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, TypeOperators #-}
 {-# LANGUAGE ExplicitForAll, ConstraintKinds, FlexibleContexts #-}  -- For :< experiment
 
 {-# OPTIONS_GHC -Wall #-}
-{-# OPTIONS_GHC -fcontext-stack=34 #-}
+{-# OPTIONS_GHC -fcontext-stack=100 #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
@@ -40,10 +40,14 @@ import LambdaCCC.Lambda (EP,reifyEP)
 import LambdaCCC.Prim (Prim(VecSP))
 import LambdaCCC.Misc (Unop)
 
+import Circat.Misc ((:*))
 import Circat.Classes (VecCat(..))
 import Circat.Circuit (IsSourceP2)
 
-import LambdaCCC.Run
+import LambdaCCC.Encode (Encodable(..))
+import LambdaCCC.Run (run)
+
+import LambdaCCC.Examples.Linear
 
 {--------------------------------------------------------------------
     Examples
@@ -78,6 +82,9 @@ prod (as,bs) = liftA2 (*) as bs
 dot :: (Applicative f, Foldable f, Num a) => (f a, f a) -> a
 dot (as,bs) = sum (liftA2 (*) as bs)
 
+vsum :: Num a => Vec n a -> a
+vsum = foldr (+) 0
+
 sum1 :: Vec N8 Int -> Int
 sum1 = foldr (+) 0
 
@@ -102,14 +109,18 @@ p1 = prod
     Run it
 --------------------------------------------------------------------}
 
+go :: IsSourceP2 a b => String -> (a -> b) -> IO ()
+go name f = run name (reifyEP f)
+
+goEnc :: (Encodable a, Encodable b, IsSourceP2 (Encode a) (Encode b)) =>
+         String -> (a -> b) -> IO ()
+goEnc name = go name . encode
+
 -- Only works when compiled with HERMIT
 main :: IO ()
--- main = run (reifyEP f3)
 
-main = run (reifyEP sum1)
+-- main = go "vsum3" (vsum :: Vec N3 Int -> Int)
 
--- main = run (reifyEP d1)
+-- main = go "ldot2" (uncurry (<.>) :: Vec N2 Int :* Vec N2 Int -> Int)
 
--- main = run (reifyEP sq1)
-
--- main = run (reifyEP p1)
+main = goEnc "matVec-2-2" (uncurry apply :: Lin N2 N2 Int :* Vec N2 Int -> Vec N2 Int)
