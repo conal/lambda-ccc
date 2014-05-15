@@ -6,7 +6,7 @@
 {-# LANGUAGE UndecidableInstances #-} -- see below
 
 {-# OPTIONS_GHC -Wall #-}
-{-# OPTIONS_GHC -fcontext-stack=34 #-}  -- for N32
+{-# OPTIONS_GHC -fcontext-stack=35 #-}  -- for N32
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP

@@ -58,4 +58,4 @@ idCT = id
 outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()
 outGV s c = do outGWith ("pdf","")      s c
 --                outGWith ("png","-Gdpi=200") s c
-               outV                     s c
+               -- outV                     s c

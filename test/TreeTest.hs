@@ -2,7 +2,7 @@
 {-# LANGUAGE ExplicitForAll, ConstraintKinds, FlexibleContexts #-}  -- For :< experiment
 
 {-# OPTIONS_GHC -Wall #-}
-{-# OPTIONS_GHC -fcontext-stack=34 #-}
+{-# OPTIONS_GHC -fcontext-stack=38 #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -97,9 +97,9 @@ go name f = run name (reifyEP f)
 
 -- With an outer encode
 
--- go :: (Encodable a, Encodable b, IsSourceP2 (Encode a) (Encode b)) =>
---       String -> (a -> b) -> IO ()
--- go name f = run name (reifyEP (encode f))
+go' :: (Encodable a, Encodable b, IsSourceP2 (Encode a) (Encode b)) =>
+       String -> (a -> b) -> IO ()
+go' name f = run name (reifyEP (encode f))
 
 -- Only works when compiled with HERMIT
 main :: IO ()
@@ -116,7 +116,9 @@ main :: IO ()
 -- -- optimization is in place.
 -- main = go "dot1" (dot :: Tree N1 (Int,Int) -> Int)
 
--- main = go "dot3" (dot :: Tree N3 (Int,Int) -> Int)
+main = go' "dot0" (dot :: Tree N0 (Int,Int) -> Int)
+
+-- main = go' "dot2" (dot :: Tree N2 (Int,Int) -> Int)
 
 -- -- Doesn't wedge.
 -- main = go "dotp" ((psum . prod) :: Pair (Int,Int) -> Int)
@@ -126,6 +128,10 @@ main :: IO ()
 -- main = go "dot5" (dot :: Tree N5 (Int,Int) -> Int)
 
 -- main = go "squares1" (squares :: Unop (Tree N1 Int))
+
+-- main = go "squares2" (squares :: Unop (Tree N2 Int))
+
+-- main = go "squares0" (squares :: Unop (Tree N0 Int))
 
 -- main = go "psum" (psum :: Pair Int -> Int)
 
@@ -137,6 +143,6 @@ main :: IO ()
 -- -- Working out a reify issue.
 -- main = go "sum1f" (sum :: Tree N1 Int -> Int)
 
--- Causes a GHC RTS crash ("internal error: stg_ap_pp_ret").
-main = go "prodA1" (uncurry prodA :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
+-- -- Causes a GHC RTS crash ("internal error: stg_ap_pp_ret").
+-- main = go "prodA1" (uncurry prodA :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
 

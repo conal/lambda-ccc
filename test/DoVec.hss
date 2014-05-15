@@ -15,9 +15,8 @@ binding-of main
 try (any-td (unfold go))
 try bash  -- for go unfolding
 
-try (repeat (any-td (repeat reify-misc)))
-
-try bash
+-- try (repeat (any-td (repeat reify-misc)))
+-- try bash
 
 try unshadow
 

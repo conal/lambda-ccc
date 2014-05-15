@@ -51,7 +51,8 @@ class Encodable a where
 #define EncTy(n,o) type Encode (n) = o ; INS
 
 instance (Encodable a, Encodable b) => Encodable (a :* b) where
-  EncTy(a :* b, Encode a :* Encode b)
+  -- EncTy(a :* b, Encode a :* Encode b)
+  EncTy((a,b), (Encode a,Encode b))
   encode = encode *** encode
   decode = decode *** decode
 

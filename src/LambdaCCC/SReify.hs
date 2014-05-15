@@ -37,7 +37,7 @@ import PrelNames (eitherTyConName)
 
 import HERMIT.Monad (newIdH)
 import HERMIT.Core (localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
-import HERMIT.External (External,external,ExternalName)
+import HERMIT.External (External,external)
 import HERMIT.GHC hiding (mkStringExpr)
 import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
@@ -69,6 +69,7 @@ import HERMIT.Extras
   , rejectR , rejectTypeR
   , simplifyExprT
   , showPprT
+  , externC
   )
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 
@@ -99,13 +100,24 @@ triesL = Ex.triesL observing
 --------------------------------------------------------------------}
 
 -- A "standard type" is built up from `Unit`, `Bool`, `Int` (for now), pairs (of
--- standard types), sums, and functions.
+-- standard types), sums, and functions, or Encode
 
-standardTy :: Type -> Bool
-standardTy (tcView -> Just ty) = standardTy ty
-standardTy (TyConApp tc args)  = standardTC tc && all standardTy args
-standardTy (FunTy arg res)     = standardTy arg && standardTy res
-standardTy _                   = False
+standardTyT :: Type -> TransformU ()
+standardTyT (tcView -> Just ty) = standardTyT ty
+standardTyT (TyConApp tc args) | standardTC tc
+                               = mapM_ standardTyT args
+standardTyT ty@(TyConApp tc _) =
+  -- Treat Encode applications as standard.
+  do encodeTC <- findTyConT "LambdaCCC.Encode.Encode"
+     if tc == encodeTC then return () else nonStandardFail ty
+standardTyT (FunTy arg res) =
+  standardTyT arg >> standardTyT res
+standardTyT ty = nonStandardFail ty
+
+nonStandardFail :: Type -> TransformU ()
+nonStandardFail ty =
+  do s <- showPprT ty
+     fail ("non-standard type:\n" ++ s)
 
 -- TODO: Maybe use coreView instead of tcView? I think it's tcView we want,
 -- since it just looks through type synonyms and not newtypes.
@@ -189,10 +201,8 @@ reifyEval :: ReExpr
 reifyEval = unReify >>> unEval
 
 reifyOf :: CoreExpr -> TransformU CoreExpr
-reifyOf e = do unless (standardTy (exprType e)) $
-                 do s <- showPprT (exprType e)
-                    fail ("reifyOf: non-standard type:\n" ++ s)
-               appsE reifyS [exprType e] [e]
+reifyOf e = standardTyT (exprType e) >>
+            appsE reifyS [exprType e] [e]
  where
    ty = exprType e
    ki = typeKind ty
@@ -844,16 +854,15 @@ reifyMisc = triesL miscL
 -- Note: letElim is handy with reifyPolyLet to eliminate the "foo = eval
 -- foo_reified", which is usually inaccessible.
 
+reifyBash :: ReCore
+reifyBash = bashExtendedWithR [promoteR reifyMisc]
+
 {--------------------------------------------------------------------
     Plugin
 --------------------------------------------------------------------}
 
 plugin :: Plugin
 plugin = hermitPlugin (phase 0 . interactive externals)
-
-externC :: Injection a Core =>
-           ExternalName -> RewriteH a -> String -> External
-externC name rew help = external name (promoteR rew :: ReCore) [help]
 
 externals :: [External]
 externals =
@@ -912,5 +921,6 @@ externals =
     , external "uncalle1" (promoteR . unCallE1 :: String -> ReCore) ["uncall a function"]
     , externC "cast-float-apps" castFloatAppsR "float casts over apps"
     , externC "simplify-expr" simplifyExprT "Invoke GHC's simplifyExpr"
+    , externC "reify-bash" reifyBash "reify & bash"
     ]
     -- ++ Enc.externals

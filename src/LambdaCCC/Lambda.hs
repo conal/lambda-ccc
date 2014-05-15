@@ -718,6 +718,13 @@ unTreeS' = unB
 
 {-# RULES
 
+"unTreeZ'/L" forall a . unTreeZ' (L a) = a
+"unTreeS'/B" forall p . unTreeS' (B p) = p
+
+  #-}
+
+{-# RULES
+
 -- "reify/toVecZ" reifyEP toVecZ' = kPrim ToVecZP
 -- "reify/toVecS" reifyEP toVecS' = kPrim ToVecSP
 

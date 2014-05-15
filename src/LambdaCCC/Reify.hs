@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell, TypeOperators, GADTs, KindSignatures #-}
 {-# LANGUAGE ViewPatterns, PatternGuards, LambdaCase #-}
 {-# LANGUAGE FlexibleContexts, ConstraintKinds #-}
-{-# LANGUAGE MagicHash, MultiWayIf, CPP #-}
+{-# LANGUAGE MagicHash, MultiWayIf, TupleSections, CPP #-}
 {-# LANGUAGE Rank2Types #-}
 {-# OPTIONS_GHC -Wall #-}
 
@@ -22,7 +22,10 @@
 
 #define OnlyLifted
 
-module LambdaCCC.Reify (plugin) where
+module LambdaCCC.Reify
+  ( plugin
+  , caseSizedR, unCallE1
+  ) where
 
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..))
@@ -34,7 +37,7 @@ import Data.Maybe (fromMaybe)
 
 import HERMIT.Monad (newIdH)
 import HERMIT.Core (localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
-import HERMIT.External (External,external,ExternalName)
+import HERMIT.External (External,external)
 import HERMIT.GHC hiding (mkStringExpr)
 import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
@@ -64,7 +67,8 @@ import HERMIT.Extras
   , varLitE, uqVarName, typeEtaLong, simplifyE
   , anytdE, anybuE, inAppTys, isAppTy, letFloatToProg , concatProgs
   , rejectR , rejectTypeR
-  , simplifyExprT
+  , simplifyExprT, showPprT
+  , externC
   )
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 
@@ -729,19 +733,22 @@ reifyCaseWild = inReify $
 
 data NatTy = VZero | VSucc Type
 
-sizedTy :: Type -> TransformU (TyCon, NatTy,Type)
-sizedTy (TyConApp tc [len0,elemTy]) =
+typeNat :: Type -> TransformU NatTy
+typeNat (tcView -> Just ty) = typeNat ty
+typeNat len =
   do z <- findTyConT "TypeUnary.TyNat.Z"
      s <- findTyConT "TypeUnary.TyNat.S"
-     return $
-       ( tc
-       , case fromMaybe len0 (coreView len0) of
-           TyConApp ((== z) -> True) []  -> VZero
-           TyConApp ((== s) -> True) [n] -> VSucc n
-           _ -> error "sizedTy: Vec not Z or S n. Investigate."
-       , elemTy )
-sizedTy _ = fail "sizedTy: wrong # args"
+     case len of
+       TyConApp ((== z) -> True) []  -> return VZero
+       TyConApp ((== s) -> True) [n] -> return (VSucc n)
+       _ -> do str <- showPprT len
+               fail ("typeNat: not Z or S n: " ++ str)
 
+sizedTy :: Type -> TransformU (TyCon, NatTy,Type)
+sizedTy (tcView -> Just ty)   = sizedTy ty
+sizedTy (TyConApp tc [len,x]) = (tc,,x) <$> typeNat len
+sizedTy ty                    = do str <- showPprT ty
+                                   fail ("sizedTy: wrong # args: " ++ str)
 
 -- Find a structural identity function on a unary-sized type, given the names of
 -- the type and construction functions for zero and succ size.
@@ -775,14 +782,16 @@ onScrut r = caseAllR r idR idR (const idR)
 onRhs :: ReExpr -> ReExpr
 onRhs r = caseAllR idR idR idR (const (altAllR idR (const idR) r))
 
+caseSizedR :: ReExpr
+caseSizedR =
+  onScrut (do ty  <- exprType <$> idR
+              idF <- (vecId ty <+ treeId ty <+ pairId ty)
+              arr (App idF) >>> unfoldR )
+  >>> tryR (caseFloatCaseR >>> onRhs (caseReduceUnfoldR True))
+
 -- | reify a case of a known-size structure
 reifyCaseSized :: ReExpr
-reifyCaseSized =
-  inReify $
-    onScrut (do ty  <- exprType <$> idR
-                idF <- (vecId ty <+ treeId ty <+ pairId ty)
-                arr (App idF) >>> unfoldR )
-    >>> tryR (caseFloatCaseR >>> onRhs (caseReduceUnfoldR True))
+reifyCaseSized = inReify caseSizedR
 
 -- Temporary workaround. Remove when I get the reifyEP/(:<) rule working on
 -- unwrapped (:<).
@@ -856,10 +865,6 @@ reifyMisc = triesL miscL
 
 plugin :: Plugin
 plugin = hermitPlugin (phase 0 . interactive externals)
-
-externC :: Injection a Core =>
-           ExternalName -> RewriteH a -> String -> External
-externC name rew help = external name (promoteR rew :: ReCore) [help]
 
 externals :: [External]
 externals =
