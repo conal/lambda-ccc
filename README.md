@@ -6,6 +6,7 @@ See instructions in test/Tests.hs.
 
 Dependencies:
 
+*   GHC 7.8.2 or better.
 *   [hermit-extras](http://github.com/conal/hermit-extras)
 *   [type-encode](http://github.com/conal/type-encode)
 *   [circat](https://github.com/conal/circat), for circuit specification, display, and conversion to netlists.
