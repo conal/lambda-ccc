@@ -46,7 +46,7 @@ Library
                     LambdaCCC.Encode
                     LambdaCCC.Reify
                     LambdaCCC.SReify
-                    LambdaCCC.Standard
+                    LambdaCCC.NormalizeCore                    
                     LambdaCCC.Run
                     LambdaCCC.Examples.Linear
 
