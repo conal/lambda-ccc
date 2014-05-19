@@ -42,36 +42,13 @@ import HERMIT.GHC hiding (mkStringExpr)
 import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary
-  ( findIdT, observeR, callT, callNameT
-  , rulesR,inlineR,inlineMatchingPredR, simplifyR,letFloatLetR,letFloatTopR,letElimR
-  , betaReduceR, etaReduceR, letNonRecSubstSafeR
-  , unfoldR, unfoldPredR, cleanupUnfoldR
-  , caseReduceUnfoldR, caseFloatCaseR, caseFloatAppR, letSubstR
-  , castFloatAppR, bashR,bashExtendedWithR
-  -- , unshadowR   -- May need this one later
-  )
+  hiding (findTyConT, externals)  -- Use our own findTyConT FOR NOW
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
 
 import LambdaCCC.Misc ((<~))
 
-import HERMIT.Extras
-  ( Unop, Binop, apps', callSplitT, callNameSplitT, unCall, unCall1
-  , ReExpr ,ReCore, TransformU, findTyConT
-  , setNominalRole_maybe
-#ifdef OnlyLifted
-  , liftedKind, unliftedKind
-#endif
-  , collectForalls, subst, isTyLam
-  , InCoreTC
-  , tries
-  , varLitE, uqVarName, typeEtaLong, simplifyE
-  , anytdE, anybuE, inAppTys, isAppTy, letFloatToProg , concatProgs
-  , rejectR , rejectTypeR
-  , simplifyExprT
-  , showPprT
-  , externC
-  )
-import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
+import HERMIT.Extras hiding (observeR', triesL, labeled)
+import qualified HERMIT.Extras as Ex
 
 -- Drop TypeEncode for now.
 -- import TypeEncode.Plugin (encodeOf, reConstructR, reCaseR)
@@ -86,41 +63,48 @@ import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 observing :: Ex.Observing
 observing = True
 
-observeR' :: InCoreTC t => String -> RewriteH t
-observeR' = Ex.observeR' observing
+-- observeR' :: InCoreTC t => String -> RewriteH t
+-- observeR' = Ex.observeR' observing
 
-triesL :: InCoreTC t => [(String,RewriteH t)] -> RewriteH t
-triesL = Ex.triesL observing
+-- triesL :: InCoreTC t => [(String,RewriteH t)] -> RewriteH t
+-- triesL = Ex.triesL observing
 
--- labeled :: InCoreTC t => (String, RewriteH t) -> RewriteH t
--- labeled = Ex.labeled observing
+labelR :: InCoreTC t => String -> RewriteH t -> RewriteH t
+labelR = curry (Ex.labeled observing)
+
+-- TODO: stop uncurrying Ex.labeled
 
 {--------------------------------------------------------------------
     Standard types
 --------------------------------------------------------------------}
 
+-- TODO: Parametrize the rest of the module by 'standardTyT'.
+
+-- TODO: Consider how to eliminate Encode as well. Then simplify to
+-- standardTy :: Type -> Bool
+
 -- A "standard type" is built up from `Unit`, `Bool`, `Int` (for now), pairs (of
 -- standard types), sums, and functions, or Encode
 
 standardTyT :: Type -> TransformU ()
+-- standardTyT _ | trace "standardTyT" False = undefined
 standardTyT (tcView -> Just ty) = standardTyT ty
 standardTyT (TyConApp tc args) | standardTC tc
                                = mapM_ standardTyT args
+#if 1
 standardTyT ty@(TyConApp tc _) =
   -- Treat Encode applications as standard.
   do encodeTC <- findTyConT "LambdaCCC.Encode.Encode"
-     if tc == encodeTC then return () else nonStandardFail ty
+     if tc == encodeTC then successT else nonStandardFail ty
+#endif
 standardTyT (FunTy arg res) =
   standardTyT arg >> standardTyT res
 standardTyT ty = nonStandardFail ty
 
-nonStandardFail :: Type -> TransformU ()
+nonStandardFail :: Type -> TransformU a
 nonStandardFail ty =
   do s <- showPprT ty
      fail ("non-standard type:\n" ++ s)
-
--- TODO: Maybe use coreView instead of tcView? I think it's tcView we want,
--- since it just looks through type synonyms and not newtypes.
 
 standardTC :: TyCon -> Bool
 standardTC tc =
@@ -128,10 +112,15 @@ standardTC tc =
   || isPairTC tc
   || tyConName tc == eitherTyConName    -- no eitherTyCon
 
-isPairTC :: TyCon -> Bool
-isPairTC tc = isBoxedTupleTyCon tc && tupleTyConArity tc == 2
+-- TODO: Maybe I just want a standard outer shell.
 
--- TODO: Maybe move some of this functionality to HERMIT.Extras.
+-- TODO: Maybe use coreView instead of tcView? I think it's tcView we want,
+-- since it just looks through type synonyms and not newtypes.
+
+-- TODO: If I remove Encode, standardTy can be Type -> Bool
+
+standardET :: FilterE
+standardET = standardTyT =<< arr exprType
 
 {--------------------------------------------------------------------
     Reification
@@ -139,9 +128,6 @@ isPairTC tc = isBoxedTupleTyCon tc && tupleTyConArity tc == 2
 
 lamName :: Unop String
 lamName = ("LambdaCCC.Lambda." ++)
-
--- findIdE :: String -> TransformH a Id
--- findIdE = findIdT . lamName
 
 findTyConE :: String -> TransformH a TyCon
 findTyConE = findTyConT . lamName
@@ -177,26 +163,26 @@ varPatS = "varPat#"
 epS :: String
 epS = "EP"
 
--- t --> EP t
+-- t ==> EP t
 mkEP :: TransformH a Type
 mkEP = do epTC <- findTyConE epS
           return (TyConApp epTC [])
 
--- t --> EP t
+-- t ==> EP t
 epOf :: Type -> TransformH a Type
 epOf t = flip mkAppTy t <$> mkEP
 
 -- epOf t = do epTC <- findTyConE epS
 --             return (TyConApp epTC [t])
 
--- reify u --> u
+-- reify u ==> u
 unReify :: ReExpr
 unReify = unCallE1 reifyS
--- eval e --> e
+-- eval e ==> e
 unEval :: ReExpr
 unEval = unCallE1 evalS
 
--- reify (eval e) --> e
+-- reify (eval e) ==> e
 reifyEval :: ReExpr
 reifyEval = unReify >>> unEval
 
@@ -226,76 +212,67 @@ reifyR = idR >>= reifyOf
 evalR :: ReExpr
 evalR = idR >>= evalOf
 
--- reify (u v) --> reify u `appP` reify v .
+isAppT :: FilterE
+isAppT = appT successT successT (const id)
+
+{--------------------------------------------------------------------
+    Reification rewrites
+--------------------------------------------------------------------}
+
+-- reifyApp :: ReExpr
+-- reifyApp =
+--      -- inReify (labelR "castFloatAppR" castFloatAppR) <+
+--   reifyAppSimple
+--   -- Do separately, to handle non-apps
+--   -- <+ inReify (isAppT >> labelR "unfoldR" unfoldR)
+
+-- reify (u v) ==> reify u `appP` reify v .
 -- Fails if v (and hence u) has a nonstandard type.
 reifyApp :: ReExpr
-reifyApp = do App u v <- unReify
+reifyApp = labelR "reifyApp" $
+           do App u v <- unReify
               Just (a,b) <- constT (return (splitFunTy_maybe (exprType u)))
               u' <- reifyOf u
               v' <- reifyOf v
               appsE "appP" [b,a] [u', v'] -- note b,a
 
+-- I've forgotten my motivation for reifyRulesPrefix. Omit for now.
+#if 0
 -- Apply a rule to a left application prefix
 reifyRulesPrefix :: ReExpr
-reifyRulesPrefix = reifyRules <+ (reifyApp >>> appArgs reifyRulesPrefix idR)
+reifyRulesPrefix = labelR "reifyRulesPrefix" $
+                   reifyRules <+ (reifyApp >>> appArgs reifyRulesPrefix idR)
 
 -- Like appAllR, but on a reified app.
--- 'app ta tb f x --> 'app ta tb (rf f) (rx s)'
+-- 'app ta tb f x ==> 'app ta tb (rf f) (rx s)'
 appArgs :: Binop ReExpr
 appArgs rf rx = appAllR (appAllR idR rf) rx
-
-
--- reifyApps =
---   unReify >>> callSplitT >>> arr (\ (f,ts,es) -> ((f,ts),es)) >>> reifyCall
-
--- reifyCall :: TransformH ((CoreExpr,[Type]), [CoreExpr]) CoreExpr
--- reifyCall = reifyR 
+#endif
 
 -- TODO: Use arr instead of (constT (return ...))
 -- TODO: refactor so we unReify once and then try variations
 
-varEval :: Var -> TransformU CoreExpr
-varEval v = (evalOf <=< appsE1 varPS [varType v]) (varLitE v)
-
 varSubst :: [Var] -> TransformU (Unop CoreExpr)
 varSubst vs = do vs' <- mapM varEval vs
                  return (subst (vs `zip` vs'))
+ where
+   varEval :: Var -> TransformU CoreExpr
+   varEval v = (evalOf <=< appsE1 varPS [varType v]) (varLitE v)
 
--- | reify (\ x -> e)  -->  lamv x' (reify (e[x := eval (var x')]))
+-- | reify (\ x -> e)  ==>  lamv x' (reify (e[x := eval (var x')]))
 reifyLam :: ReExpr
-reifyLam = do Lam v e <- unReify
-              guardMsg (not (isTyVar v)) "reifyLam: doesn't handle type lambda"
-              sub     <- varSubst [v]
-              e'      <- reifyOf (sub e)
-              appsE "lamvP#" [varType v, exprType e] [varLitE v,e']
-
--- Pass through unless an IO
-unlessTC :: String -> ReExpr
-unlessTC name = rejectTypeR (hasTC name)
-
--- Pass through unless a dictionary construction
-unlessDict :: ReExpr
-unlessDict = rejectTypeR (dictRelated . dropForAlls)
--- unlessDict = rejectTypeR (isDictTy . snd . splitFunTys . dropForAlls)
-
--- Pass through unless an eval application
-unlessEval :: ReExpr
-unlessEval = rejectR isEval
-
--- TODO: rename "unless" to "reject"
-
-hasTC :: String -> Type -> Bool
-hasTC name (TyConApp tc [_]) = uqName (tyConName tc) == name
-hasTC _ _                    = False
-
-isEval :: CoreExpr -> Bool
-isEval (App (App (Var v) (Type _)) _) = uqVarName v == evalS
-isEval _                              = False
+reifyLam = labelR "reifyLam" $
+  do Lam v e <- unReify
+     guardMsg (not (isTyVar v)) "reifyLam: doesn't handle type lambda"
+     sub     <- varSubst [v]
+     e'      <- reifyOf (sub e)
+     appsE "lamvP#" [varType v, exprType e] [varLitE v,e']
 
 reifyPolyLet :: ReExpr
-reifyPolyLet = unReify >>>
-               do Let (NonRec (isForAllTy . varType -> True) _) _ <- idR
-                  letAllR reifyDef reifyR >>> letFloatLetR
+reifyPolyLet = labelR "reifyPolyLet" $
+  unReify >>>
+  do Let (NonRec (isForAllTy . varType -> True) _) _ <- idR
+     letAllR reifyDef reifyR >>> letFloatLetR
 
 -- reifyDef introduces foo_reified binding, which the letFloatLetR then moves up
 -- one level. Typically (always?) the "foo = eval foo_reified" definition gets
@@ -303,7 +280,7 @@ reifyPolyLet = unReify >>>
 
 -- | Turn a monomorphic let into a beta-redex.
 reifyMonoLet :: ReExpr
-reifyMonoLet =
+reifyMonoLet = labelR "reifyMonoLet" $
     unReify >>>
     do Let (NonRec v@(isForAllTy . varType -> False) rhs) body <- idR
        guardMsgM (worthLet rhs) "trivial let"
@@ -324,7 +301,8 @@ worthLet _ = return True
 --        return (Lam v body `App` rhs)
 
 reifyLetSubst :: ReExpr
-reifyLetSubst = inReify letSubstR
+reifyLetSubst = labelR "reifyLetSubst" $
+                inReify letSubstR
 
 -- TODO: Perhaps combine reifyPolyLet and reifyMonoLet into reifyLet
 
@@ -332,20 +310,20 @@ reifyLetSubst = inReify letSubstR
 
 #ifdef SplitEval
 
--- (\ vs -> e) --> (\ vs -> eval (reify e)) in preparation for rewriting reify e.
+-- (\ vs -> e) ==> (\ vs -> eval (reify e)) in preparation for rewriting reify e.
 -- For vs, take all leading type variables.
 -- Fail if e is already an eval or if it has IO or EP type.
 reifyRhs :: String -> ReExpr
-reifyRhs nm =
-  unlessDict >>> unlessTC "IO" >>> unlessTC epS >>> unlessEval >>>
-  typeEtaLong >>>
-  do (tvs,body) <- collectTyBinders <$> idR
-     eTy        <- epOf (exprType body)
-     v          <- constT $ newIdH (nm ++ "_reified") (mkForAllTys tvs eTy)
-     reified    <- mkLams tvs <$> reifyOf body
-     evald      <- evalOf (mkCoreApps (Var v) ((Type . TyVarTy) <$> tvs))
-     return $
-       Let (NonRec v reified) (mkLams tvs evald)
+reifyRhs nm = labelR ("reifyRhs " ++ nm) $
+  standardET >>
+  ( typeEtaLong >>>
+    do (tvs,body) <- collectTyBinders <$> idR
+       eTy        <- epOf (exprType body)
+       v          <- constT $ newIdH (nm ++ "_reified") (mkForAllTys tvs eTy)
+       reified    <- mkLams tvs <$> reifyOf body
+       evald      <- evalOf (mkCoreApps (Var v) ((Type . TyVarTy) <$> tvs))
+       return $
+         Let (NonRec v reified) (mkLams tvs evald) )
 
 
 reifyDef :: RewriteH CoreBind
@@ -366,11 +344,12 @@ inTyLams r = r'
              | isForAllTy (exprType e) -> etaExpandR "eta" >>> r'
              | otherwise               -> r
 
--- e --> eval (reify e) in preparation for rewriting reify e.
+-- e ==> eval (reify e) in preparation for rewriting reify e.
 -- Fail if e is already an eval or if it has IO or EP type.
 -- If there are any type lambdas, skip over them.
 reifyRhs :: ReExpr
-reifyRhs = inTyLams $
+reifyRhs = labelR "reifyRhs" $
+           inTyLams $
              unlessDict >>> unlessEval >>> unlessTC "IO" >>> unlessTC epS >>>
              reifyR >>> evalR
 
@@ -385,74 +364,38 @@ reifyProg = progBindsAnyR (const reifyDef)
 reifyModGuts :: RewriteH ModGuts
 reifyModGuts = modGutsR reifyProg
 
-inlineR' :: ReExpr
-inlineR' = do Var nm <- idR
-              _ <- observeR' ("inline " ++ uqVarName nm)
-              inlineR
-
--- Inline if not of type EP t
-inlineNonE :: ReExpr
-inlineNonE = rejectTypeR isEP >>>
-             inAppTys inlineR' -- >>> tryR simplifyE
-
--- The simplifyE is for beta-reducing type applications.
-
 -- Rewrite inside of reify applications
 inReify :: Unop ReExpr
 inReify = reifyR <~ unReify
-
-reifyInline :: ReExpr
-reifyInline = inReify inlineNonE
--- reifyInline = inReify inlineEval
 
 -- TODO: drop the non-E test, since we're already under a reify.
 
 isWrapper :: Var -> Bool
 isWrapper = ("$W" `isPrefixOf`) . uqVarName -- TODO: alternative?
 
+reifyUnfold :: ReExpr
+#if 1
+reifyUnfold = labelR "reifyUnfold" $
+              inReify unfoldR
+
+#else
+reifyUnfold = labelR "reifyUnfold" $
+              inReify unfoldSimplify
+
 unfoldSimplify :: ReExpr
-unfoldSimplify = unfoldPredR (const . not . bad) >>> cleanupUnfoldR
+unfoldSimplify = unfoldPredR (const . not . bad) >>> tryR simplifyE
  where
    bad v = isWrapper v -- || dictRelated (varType v)
-
--- unfoldSimplify = unfoldR >>> tryR postUnfold
-
--- unfoldSimplify = unfoldPredR (const . not . isWrapper) >>> tryR postUnfold
-
--- bashE :: ReExpr
--- bashE = extractR simplifyR -- bashR
-
-#if 0
-
-postUnfold :: ReExpr
-postUnfold = curry labeled "post-unfold" $
-             extractR (bashExtendedWithR (promoteR <$> simplifies))
-
--- | Simplifications to apply at the start and to the result of each unfolding
-ourSimplifies :: [ReExpr]
-ourSimplifies = map labeled
-             [ ("inline-dict"   , inlineDict)
-             -- , ("inline-wrapper", inlineWrapper)  -- breaks rewrite rules
-             ]
-
--- | Simplifications to apply at the start and to the result of each unfolding
-simplifies :: [ReExpr]
-simplifies = map labeled
-             [ ("let-elim"          , letElimR)       -- Note
-             , ("case-reduce-unfold", caseReduceUnfoldR True)
-             , ("cast-float-app"    , castFloatAppR)
-          -- , ("type-beta-reduce"  , typeBetaReduceR)  -- was looping, I think
-             ] ++ ourSimplifies
-
 #endif
 
-reifyUnfold :: ReExpr
-reifyUnfold = inReify unfoldSimplify
-
+#if 0
+-- Now handled by reifyRs
 castFloatAppsR :: ReExpr
-castFloatAppsR = go
+castFloatAppsR = labelR "castFloatAppsR" $
+                 go
  where
    go = castFloatAppR <+ (appAllR go idR >>> castFloatAppR)
+#endif
 
 -- reifyEncode :: ReExpr
 -- reifyEncode = inReify encodeTypesR
@@ -475,33 +418,19 @@ reifyRuleNames = map ("reify/" ++)
 -- Keep for now, to help us see that whether reify applications vanish.
 
 reifyRules :: ReExpr
-reifyRules = rulesR reifyRuleNames >>> cleanupUnfoldR
+reifyRules = labelR "reifyRules" $
+             rulesR reifyRuleNames >>> cleanupUnfoldR
 
--- reifyRules = (rulesR reifyRuleNames >>> tryR simplifyE)
--- #ifndef OnlyLifted
---              <+ reifyCodeF
--- #endif
-
--- reifyRules = rulesR reifyRuleNames >>> tryR (extractR tidy)
---  where
---    tidy :: ReCore
---    tidy = anybuR (promoteR (betaReduceR >>> letNonRecSubstSafeR))
-
--- -- eval e |> co  -->  eval (e |> co').
--- -- Since `eval :: E p a -> a` and `co :: a ~ b`, `co' :: E p a ~ E p b`.
--- evalCast :: ReExpr
--- evalCast = (do ep <- mkEP
---                castAllR unEval (arr (mkAppCo (mkSubCo (Refl Nominal ep))))) >>>
---            evalR              
-
--- reify (I# n) --> intL (I# n)
+-- reify (I# n) ==> intL (I# n)
 reifyIntLit :: ReExpr
-reifyIntLit = unReify >>> do _ <- callNameT "I#"
-                             e <- idR
-                             appsE "intL" [] [e]
+reifyIntLit = labelR "reifyIntLit" $
+  unReify >>> do _ <- callNameT "I#"
+                 e <- idR
+                 appsE "intL" [] [e]
 
 reifySimplifiable :: ReExpr
-reifySimplifiable = inReify simplifyE' -- (extractR bashR)
+reifySimplifiable = labelR "reifySimplifiable" $
+                    inReify simplifyE' -- (extractR bashR)
  where
    simplifyE' = repeatR $
                 simplifyE <+ anybuE (caseFloatAppR <+ caseFloatCaseR)
@@ -513,14 +442,16 @@ reifySimplifiable = inReify simplifyE' -- (extractR bashR)
 #ifndef OnlyLifted
 
 reifyDecodeF :: ReExpr
-reifyDecodeF = unReify >>>
+reifyDecodeF = labelR "reifyDecodeF" $
+               unReify >>>
                do -- (_,[Type a,Type b]) <- callNameT "TypeDecode.Encode.decodeF"
                   (Var f,[Type a,Type b]) <- callT
                   guardMsg (uqVarName f == "decodeF") "oops -- not decodeF"
                   apps' "LambdaCCC.Prim.DecodeP" [a,b] [] >>= appsE1 "kPrimEP" [FunTy a b]
 
 reifyEncodeF :: ReExpr
-reifyEncodeF = unReify >>>
+reifyEncodeF = labelR "reifyEncodeF" $
+               unReify >>>
                do -- (_,[Type a,Type b]) <- callNameT "TypeDecode.Encode.encodeF"
                   (Var f,[Type a,Type b]) <- callT
                   guardMsg (uqVarName f == "encodeF") "oops -- not encodeF"
@@ -533,16 +464,16 @@ reifyCodeF = reifyEncodeF <+ reifyDecodeF
 
 #endif
 
-#if 1
-
 reifyCast :: ReExpr
 
--- reifyCast = unReify >>>
+-- reifyCast = labelR "reifyCast" $
+--             unReify >>>
 --             do e'@(Cast e co) <- idR
 --                re <- reifyOf e
 --                appsE "castEP" [exprType e,exprType e'] [Coercion co,re]
 
-reifyCast = unReify >>>
+reifyCast = labelR "reifyCast" $
+            unReify >>>
             do e'@(Cast e co) <- idR
                case setNominalRole_maybe co of
                  Nothing  -> fail "Couldn't setNominalRole"
@@ -551,55 +482,48 @@ reifyCast = unReify >>>
                       appsE "castEP" [exprType e,exprType e'] [mkEqBox coN,re]
 
 -- -- Cheat via UnivCo:
--- reifyCast = unReify >>>
+-- reifyCast = labelR "reifyCast" $
+--             unReify >>>
 --             do e'@(Cast e _) <- idR
 --                let ty  = exprType e
 --                    ty' = exprType e'
 --                re <- reifyOf e
 --                appsE "castEP" [ty,ty'] [mkEqBox (mkUnivCo Nominal ty ty'),re]
 
--- reifyCast = (unReify &&& arr exprType) >>>
+-- reifyCast = labelR "reifyCast" $
+--             (unReify &&& arr exprType) >>>
 --             do (Cast e _, ty) <- idR
 --                re <- reifyOf e
 --                apps' "Unsafe.Coerce.unsafeCoerce" [exprType re,ty] [re]
 
 -- -- Equivalent but a bit prettier:
--- reifyCast = unReify >>>
+-- reifyCast = labelR "reifyCast" $
+--             unReify >>>
 --             do e'@(Cast e _) <- idR
 --                re <- reifyOf e
 --                appsE "castEP'" [exprType e,exprType e'] [re]
 
-#else
--- reify (e |> co)  -->  reify (encode e)
-reifyCast :: ReExpr
-reifyCast = inReify $
-              do e'@(Cast e _) <- idR
-                 let ty  = exprType e
-                     ty' = exprType e'
-                 encodeOf ty ty' e
-#endif
+reifyCast' :: ReExpr
+reifyCast' = inReify (catchesM castRs) <+ reifyCast
+ where
+   castRs =
+     [ labelR "castElimReflR" castElimReflR
+     , labelR "castElimSymR"  castElimSymR
+     , labelR "castCastR"     castCastR
+     , labelR "lamFloatCastR" lamFloatCastR
+     ]
 
--- -- This version cheats by dropping the cast entirely.
--- unCast :: ReExpr
--- unCast = do (Cast e _) <- idR
---             return e
-
--- Also try UnivCo
-
--- TODO: rework reifyCast so that we can recognize and and eliminate composed
--- inverses.
-
--- typeBetaReduceR :: ReExpr
--- typeBetaReduceR = do (isTyLam -> True) `App` _ <- idR
---                      betaReduceR >>> letNonRecSubstSafeR
+#if 0
 
 -- Given reifyEP (m d), if m is a variable and d is a dictionary,
 -- then anytdR inline >>> simplify.
 reifyMethod :: ReExpr
-reifyMethod = inReify inlineMethod
+reifyMethod = labelR "reifyMethod" $
+              inReify inlineMethod
 
 inlineMethod :: ReExpr
-inlineMethod = do (Var _, _,[d]) <- callSplitT
+inlineMethod = labelR "inlineMethod" $
+               do (Var _, _,[d]) <- callSplitT
                   guardMsg (isDictTy (exprType d)) "non-dictionary"
                   anytdE inlineR >>> simplifyE
 
@@ -612,10 +536,14 @@ dictRelated ty = any isDictTy (ran:doms)
 
 -- | Inline dictionary maker or consumer
 inlineDict :: ReExpr
-inlineDict = inlineMatchingPredR (dictRelated . varType)
+inlineDict = labelR "inlineDict" $
+             inlineMatchingPredR (dictRelated . varType)
 
 inlineWrapper :: ReExpr
-inlineWrapper = inlineMatchingPredR isWrapper
+inlineWrapper = labelR "inlineWrapper" $
+                inlineMatchingPredR isWrapper
+
+#endif
 
 -- Note: Given reify (m d a .. z), reifyApp whittles down to reify (m d).
 
@@ -628,7 +556,7 @@ inlineWrapper = inlineMatchingPredR isWrapper
 
 -- reify of case on 0-tuple or 2-tuple
 reifyTupCase :: ReExpr
-reifyTupCase =
+reifyTupCase = labelR "reifyTupCase" $
   do Case scrut@(exprType -> scrutT) wild bodyT [alt] <- unReify
      (patE,rhs) <- reifyAlt wild alt
      scrut'     <- reifyOf scrut
@@ -661,17 +589,19 @@ reifyTupCase =
    reifyAlt _ _ = fail "reifyAlt: Only handles pair patterns so far."
 
 reifyUnfoldScrut :: ReExpr
-reifyUnfoldScrut = inReify $
-                   caseAllR unfoldR idR idR (const idR)
+reifyUnfoldScrut = labelR "reifyUnfoldScrut" $
+                   inReify $
+                     caseAllR unfoldR idR idR (const idR)
 
 reifyEither :: ReExpr
 
 #if 1
 
-reifyEither = unReify >>>
-              do (_either, tys, funs@[_,_]) <- callNameSplitT "either"
-                 funs' <- mapM reifyOf funs
-                 appsE "eitherEP" tys funs'
+reifyEither = labelR "reifyEither" $
+  unReify >>>
+  do (_either, tys, funs@[_,_]) <- callNameSplitT "either"
+     funs' <- mapM reifyOf funs
+     appsE "eitherEP" tys funs'
 
 -- Since 'either f g' has a function type, there could be more parameters.
 -- I only want two. The others will get removed by reifyApp.
@@ -693,12 +623,12 @@ unEitherTy (TyConApp tc [a,b]) =
      return (a,b)
 unEitherTy _ = fail "unEitherTy: wrong shape"
 
--- reify (case scrut of { Left lv -> le ; Right rv -> re })  --> 
+-- reify (case scrut of { Left lv -> le ; Right rv -> re })  ==> 
 -- appE (eitherE (reify (\ lv -> le)) (reify (\ rv -> re))) (reify scrut)
 
 -- Now removed in the type-encode plugin
 
-reifyEither =
+reifyEither = labelR "reifyEither" $
   do Case scrut wild bodyT alts@[_,_] <- unReify
      (lt,rt) <- unEitherTy (exprType scrut)
      [le,re] <- mapM (reifyBranch wild) alts
@@ -716,14 +646,22 @@ reifyEither =
 
 #endif
 
+reifyCase :: ReExpr
+reifyCase =  inReify (labelR "caseReduceR" (caseReduceR True))
+          <+ reifyCaseWild
+          <+ reifyEither
+          <+ reifyTupCase
+          <+ onScrut unfoldR -- and simplify?
+
 -- | reify (case scrut of wild t { _ -> body })
---    --> reify (let wild = scrut in body)
+--    ==> reify (let wild = scrut in body)
 -- May be followed by let-elimination.
 -- Note: does not capture GHC's intent to reduce scrut to WHNF.
 reifyCaseWild :: ReExpr
-reifyCaseWild = inReify $
-                  do Case scrut wild _bodyTy [(DEFAULT,[],body)] <- idR
-                     return $ Let (NonRec wild scrut) body
+reifyCaseWild = labelR "reifyCaseWild" $
+  inReify $
+    do Case scrut wild _bodyTy [(DEFAULT,[],body)] <- idR
+       return $ Let (NonRec wild scrut) body
 
 -- reifyConstruct :: ReExpr
 -- reifyConstruct = inReify reConstructR
@@ -781,7 +719,7 @@ onRhs r = caseAllR idR idR idR (const (altAllR idR (const idR) r))
 
 -- | reify a case of a known-size structure
 reifyCaseSized :: ReExpr
-reifyCaseSized =
+reifyCaseSized = labelR "reifyCaseSized" $
   inReify $
     onScrut (do ty  <- exprType <$> idR
                 idF <- (vecId ty <+ treeId ty <+ pairId ty)
@@ -791,71 +729,79 @@ reifyCaseSized =
 -- Temporary workaround. Remove when I get the reifyEP/(:<) rule working on
 -- unwrapped (:<).
 reifyVecS :: ReExpr
-reifyVecS = unReify >>>
-            do (Var f,[_sn,Type a,Type n,_co]) <- callT
-               guardMsg (uqVarName f == ":<") "Not a (:<)"
-               appsE "vecSEP" [n,a] []
+reifyVecS = labelR "reifyVecS" $
+  unReify >>>
+  do (Var f,[_sn,Type a,Type n,_co]) <- callT
+     guardMsg (uqVarName f == ":<") "Not a (:<)"
+     appsE "vecSEP" [n,a] []
 
--- reifyVecS = unReify >>> unCallE ":<" >>>
+-- reifyVecS = labelR "reifyVecS" $
+--             unReify >>> unCallE ":<" >>>
 --             do [_sn,Type a,Type n,_co] <- idR
 --                appsE "vecSEP" [n,a] []
---
+-- 
 -- "callNameT failed: not a call to 'LambdaCCC.Lambda.:<."
---
--- Why?
+-- Why? Wrappers.
 
 reifyLeaf :: ReExpr
-reifyLeaf = unReify >>>
+reifyLeaf = labelR "reifyLeaf" $
+            unReify >>>
             do (Var f,[_sn,Type a,_co]) <- callT
                guardMsg (uqVarName f == "L") "Not an L"
                appsE "treeZEP" [a] []
 
 reifyBranch :: ReExpr
-reifyBranch = unReify >>>
+reifyBranch = labelR "reifyBranch" $
+              unReify >>>
               do (Var f,[_sn,Type a,Type n,_co]) <- callT
                  guardMsg (uqVarName f == "B") "Not a B"
                  appsE "treeSEP" [n,a] []
 
 -- TODO: refactor or eliminate
 
-miscL :: [(String,ReExpr)]
-miscL = [ ("reifyRulesPrefix" , reifyRulesPrefix) -- subsumes reifyRules, I think
-     -- , ("reifyRules"       , reifyRules)     -- before App
-        , ("reifyEval"        , reifyEval)      -- ''
-        , ("reifyEither"      , reifyEither)    -- ''
-        -- , ("reifyConstruct"   , reifyConstruct) -- ''
-        -- , ("reifyMethod"      , reifyMethod)    -- ''
-        , ("reifyUnfold"      , reifyUnfold)
-        -- , ("inlineMethod"     , inlineMethod)
-        -- , ("reifyCase"        , reifyCase)
-        , ("reifyCaseWild"    , reifyCaseWild)
-        , ("reifySimplifiable", reifySimplifiable)
-        , ("reifyApp"         , reifyApp)
-        , ("reifyEtaReduce"   , inReify etaReduceR)
-        , ("reifyLam"         , reifyLam)
-        , ("reifyMonoLet"     , reifyMonoLet)
-        , ("reifyLetSubst"    , reifyLetSubst)
-        , ("reifyPolyLet"     , reifyPolyLet)
-        , ("reifyTupCase"     , reifyTupCase)
-        , ("reifyCaseSized"   , reifyCaseSized)
-        , ("reifyVecS"        , reifyVecS)        -- TEMP workaround
-        , ("reifyLeaf"        , reifyLeaf)        -- TEMP workaround
-        , ("reifyBranch"      , reifyBranch)      -- TEMP workaround
-        , ("reifyUnfoldScrut" , reifyUnfoldScrut)
-    --  , ("reifyInline"      , reifyInline)
-        , ("reifyCast"        , reifyCast)
-        , ("inReify castFloatAppsR" , inReify castFloatAppsR)
-        , ("reifyIntLit"      , reifyIntLit)
-        ]
-
 reifyMisc :: ReExpr
-reifyMisc = triesL miscL
+reifyMisc = catchesM reifyRs
+
+reifyRs :: [ReExpr]
+reifyRs =
+     [ -- reifyRulesPrefix -- subsumes reifyRules
+       reifyRules     -- before App
+     , reifyEval      -- ''
+     , reifyEither    -- ''
+  -- , reifyConstruct -- ''
+  -- , reifyMethod    -- ''
+     , reifyApp
+     , reifyCast'
+     , reifyCase
+     , reifyLam
+     , reifyIntLit
+#if 0
+  -- , inlineMethod
+     , labelR "inReify etaReduceR" (inReify etaReduceR)
+     , reifyMonoLet
+     , reifyLetSubst
+     , reifyPolyLet
+     , reifyCaseSized
+     , reifyVecS        -- TEMP workaround
+     , reifyLeaf        -- TEMP workaround
+     , reifyBranch      -- TEMP workaround
+     , reifyUnfoldScrut
+--      , labelR "inReify castFloatAppsR" (inReify castFloatAppsR)
+     , reifySimplifiable
+#endif
+     , reifyUnfold
+     -- Non-reify rules
+     , labelR "castFloatAppR" castFloatAppR
+     ]
 
 -- Note: letElim is handy with reifyPolyLet to eliminate the "foo = eval
 -- foo_reified", which is usually inaccessible.
 
+-- reifyBash :: ReExpr
+-- reifyBash = bashExtendedWithE reifyRs
+
 reifyBash :: ReCore
-reifyBash = bashExtendedWithR [promoteR reifyMisc]
+reifyBash = bashExtendedWithR (promoteR <$> reifyRs)
 
 {--------------------------------------------------------------------
     Plugin
@@ -868,8 +814,8 @@ externals :: [External]
 externals =
     [ externC "reify-rules" reifyRules
         "convert some non-local vars to consts"
-    , externC "reify-rules-prefix"  reifyRulesPrefix
-         "reify-rules on an application prefix"
+--     , externC "reify-rules-prefix"  reifyRulesPrefix
+--          "reify-rules on an application prefix"
     , external "reify-rhs"
 #ifdef SplitEval
         (promoteR . reifyRhs :: String -> ReCore)
@@ -881,22 +827,21 @@ externals =
     , externC "reify-misc" reifyMisc "Simplify 'reify e'"
     -- For debugging
     , externC "unreify" unReify "Drop reify"
-    , externC "reify-inline" reifyInline "inline names where reified"
     , externC "reify-it" reifyR "apply reify"
     , externC "eval-it" evalR "apply eval"
-    , externC "reify-app" reifyApp "reify (u v) --> reify u `appP` reify v"
+    , externC "reify-app" reifyApp "reify (u v) ==> reify u `appP` reify v"
     , externC "reify-lam" reifyLam
-        "reify (\\ x -> e) --> lamv x' (reify (e[x := eval (var x')]))"
+        "reify (\\ x -> e) ==> lamv x' (reify (e[x := eval (var x')]))"
     , externC "reify-mono-let" reifyMonoLet "reify monomorphic let"
     , externC "reify-poly-let" reifyPolyLet "reify polymorphic let"
     , externC "reify-case-wild" reifyCaseWild "reify a evaluation-only case"
 --     , externC "reify-construct" reifyConstruct "re-construct under reify"
 --     , externC "reify-case" reifyCase "re-case under reify"
-    , externC "reify-method" reifyMethod "reify of a method application"
-    , externC "inline-method" inlineMethod "inline method application"
-    , externC "reify-cast" reifyCast "reify a cast"
-    , externC "reify-cast-float-apps" (inReify castFloatAppsR)
-        "reify while floating casts"
+--     , externC "reify-method" reifyMethod "reify of a method application"
+--     , externC "inline-method" inlineMethod "inline method application"
+    , externC "reify-cast'" reifyCast' "transform or reify a cast"
+--     , externC "reify-cast-float-apps" (inReify castFloatAppsR)
+--         "reify while floating casts"
     , externC "reify-int-literal" reifyIntLit "reify an Int literal"
     , externC "reify-eval" reifyEval "reify eval"
     , externC "reify-unfold" reifyUnfold "reify an unfoldable"
@@ -907,8 +852,8 @@ externals =
     , externC "reify-tup-case" reifyTupCase "reify case with unit or pair pattern"
     , externC "reify-simplifiable" reifySimplifiable "Simplify under reify"
     , externC "reify-module" reifyModGuts "reify all top-level definitions"
-    , externC "inline-dict" inlineDict "inline a dictionary-related var"
-    , externC "inline-wrapper" inlineWrapper "inline a datacon wrapper"
+--     , externC "inline-dict" inlineDict "inline a dictionary-related var"
+--     , externC "inline-wrapper" inlineWrapper "inline a datacon wrapper"
     , externC "type-eta-long" typeEtaLong "type-eta-long form"
     , externC "reify-poly-let" reifyPolyLet "reify polymorphic 'let' expression"
 --    , externC "re-simplify" reSimplify "simplifications to complement reification"
@@ -919,7 +864,7 @@ externals =
     , externC "reify-code" reifyCodeF "manual rewrites for reifying encodeF & decodeF"
 #endif
     , external "uncalle1" (promoteR . unCallE1 :: String -> ReCore) ["uncall a function"]
-    , externC "cast-float-apps" castFloatAppsR "float casts over apps"
+--     , externC "cast-float-apps" castFloatAppsR "float casts over apps"
     , externC "simplify-expr" simplifyExprT "Invoke GHC's simplifyExpr"
     , externC "reify-bash" reifyBash "reify & bash"
     ]
