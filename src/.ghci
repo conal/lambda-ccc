@@ -3,3 +3,10 @@
 :set -XMagicHash
 :set -fprint-explicit-foralls
 -- :set -fprint-explicit-kinds
+
+-- Experimental, to reduce recompiles.
+-- Running the plugin requires recompilation anyway.
+
+-- :set -i../../hermit-extras/src
+-- :set -i../../circat/src
+-- :set -package applicative-numbers
