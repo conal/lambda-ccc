@@ -25,18 +25,18 @@ import Prelude hiding (id,(.))
 
 import Control.Category (id,(.),(>>>))
 import Control.Arrow (arr)
-import Data.Functor ((<$>))
+import Data.Functor ((<$),(<$>))
 
 -- GHC
 import PrelNames (eitherTyConName)
 
 import HERMIT.Dictionary hiding (externals) -- re-exports HERMIT.Dictionary.*
-import HERMIT.External (External)
+import HERMIT.External (External,ExternalName)
 import HERMIT.GHC
 import HERMIT.Kure
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
 
-import HERMIT.Extras hiding (findTyConT, labeled)
+import HERMIT.Extras hiding (findTyConT, labeled, externC)
 import qualified HERMIT.Extras as Ex
 
 {--------------------------------------------------------------------
@@ -62,8 +62,12 @@ okay2 = const okay1
 observing :: Ex.Observing
 observing = True
 
-labelR :: InCoreTC t => String -> RewriteC t -> RewriteC t
-labelR = curry (Ex.labeled observing)
+-- labelR :: InCoreTC t => String -> RewriteC t -> RewriteC t
+-- labelR = curry (Ex.labeled observing)
+
+externC :: (Injection a Core) =>
+           ExternalName -> RewriteC a -> String -> External
+externC = externC' observing 
 
 {--------------------------------------------------------------------
     Standard types
@@ -117,14 +121,25 @@ nonStandardE = (isTypeE <+ (nonStandardTyT . arr exprType'))
     Normalization
 --------------------------------------------------------------------}
 
--- Inline names with non-standard types
-inlineNon :: ReExpr
-inlineNon = labelR "inlineNon" $
-            isVarT >> nonStandardE >> inlineR
+-- | Inline names with non-standard types or trivial bindings.
+inlineIt :: ReExpr
+inlineIt = labeledR "inlineIt" $
+           isVarT >> (inlineNonStandard <+ inlineTrivial)
+ where
+   inlineNonStandard = nonStandardE >> inlineR
+   inlineTrivial = inlineR >> accepterR (True <$ trivialExpr)
+
+#if 0
+-- Neater:
+inlineIt = labeledR "inlineIt" $
+           inlineR >> accepterR' (trivialExpr <+ nonStandardE)
+
+accepterR' = accepterR . fmap (True <$)
+#endif
 
 -- One step toward application normalization.
 appStep :: ReExpr
-appStep = labelR "appStep" $
+appStep = labeledR "appStep" $
           appT successT nonStandardE okay2 >>
           letFloatAppR <+ castFloatAppR <+ betaReduceR -- <+ ...
 
@@ -133,13 +148,23 @@ trivialExpr :: FilterE
 trivialExpr = isVarT <+ isLitT <+ castT trivialExpr id okay2
 
 -- | Trivial binding
-trivialBind :: FilterH CoreBind
+trivialBind :: FilterC CoreBind
 trivialBind = nonRecT successT trivialExpr okay2
 
+-- | Trivial binding
+trivialLet :: FilterE
+trivialLet = letT trivialBind successT okay2
+
+-- These filters could instead be predicates. Then use acceptR.
+
+#if 0
+-- letElimTrivialR sometimes wedges while trying to print the result.
+
 letElimTrivialR :: ReExpr
-letElimTrivialR = labelR "trivialLet" $
-                  letT trivialBind successT okay2 >> letSubstR
-   
+letElimTrivialR = labeledR "trivialLet" $
+                  trivialLet >> letSubstR
+#endif
+
 {--------------------------------------------------------------------
     Put it together
 --------------------------------------------------------------------}
@@ -148,23 +173,23 @@ simplifiers :: [ReCore]
 simplifiers =
   promoteR <$>
   [ appStep
-  , letElimR   -- removed unused bindings after inlining
-  , castCastR
-  , lamFloatCastR
-  , labelR "caseReduceR" (caseReduceR False)  -- let rather than subst
-  , labelR "caseFloatR" caseFloatR
-  , labelR "caseFloatArgR" (caseFloatArgR Nothing Nothing) -- ignore strictness
-  , letElimTrivialR
+  , labeledR "letElimR" letElimR   -- removed unused bindings after inlining
+  , labeledR "castCastR" castCastR
+  , labeledR "lamFloatCastR" lamFloatCastR
+  , labeledR "caseReduceR" (caseReduceR False)  -- let rather than subst
+  , labeledR "caseFloatR" caseFloatR
+  , labeledR "caseFloatArgR" (caseFloatArgR Nothing Nothing) -- ignore strictness
+--   , letElimTrivialR
   ]
 
 simplify1 :: ReCore
 simplify1 = foldr (<+) (fail "standardize: nothing to do here") simplifiers
 
 inlinePassAll :: ReCore
-inlinePassAll = anybuR (promoteR inlineNon)
+inlinePassAll = anybuR (promoteR inlineIt)
 
 inlinePass1 :: ReCore
-inlinePass1 = onetdR (promoteR inlineNon)
+inlinePass1 = onetdR (promoteR inlineIt)
 
 simplifyTD :: ReCore
 simplifyTD = anytdR (repeatR simplify1)
