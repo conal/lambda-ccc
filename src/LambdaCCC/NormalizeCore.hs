@@ -62,7 +62,7 @@ okay2 = const okay1
 observing :: Ex.Observing
 observing = True
 
-labelR :: InCoreTC t => String -> RewriteH t -> RewriteH t
+labelR :: InCoreTC t => String -> RewriteC t -> RewriteC t
 labelR = curry (Ex.labeled observing)
 
 {--------------------------------------------------------------------
@@ -100,7 +100,7 @@ nonStandardFail ty =
   do s <- showPprT ty
      fail ("non-standard type:\n" ++ s)
 
-nonStandardTyT :: TransformH Type ()
+nonStandardTyT :: TransformC Type ()
 nonStandardTyT = notM (standardTyT =<< idR)
 
 nonStandardE :: FilterE

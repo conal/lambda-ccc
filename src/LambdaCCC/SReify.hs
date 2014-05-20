@@ -63,13 +63,13 @@ import qualified HERMIT.Extras as Ex
 observing :: Ex.Observing
 observing = True
 
--- observeR' :: InCoreTC t => String -> RewriteH t
+-- observeR' :: InCoreTC t => String -> RewriteC t
 -- observeR' = Ex.observeR' observing
 
--- triesL :: InCoreTC t => [(String,RewriteH t)] -> RewriteH t
+-- triesL :: InCoreTC t => [(String,RewriteC t)] -> RewriteC t
 -- triesL = Ex.triesL observing
 
-labelR :: InCoreTC t => String -> RewriteH t -> RewriteH t
+labelR :: InCoreTC t => String -> RewriteC t -> RewriteC t
 labelR = curry (Ex.labeled observing)
 
 -- TODO: stop uncurrying Ex.labeled
@@ -129,14 +129,14 @@ standardET = standardTyT =<< arr exprType
 lamName :: Unop String
 lamName = ("LambdaCCC.Lambda." ++)
 
-findTyConE :: String -> TransformH a TyCon
+findTyConE :: String -> TransformC a TyCon
 findTyConE = findTyConT . lamName
 
 appsE :: String -> [Type] -> [CoreExpr] -> TransformU CoreExpr
 appsE = apps' . lamName
 
 -- -- | Uncall a named function
--- unCallE :: String -> TransformH CoreExpr [CoreExpr]
+-- unCallE :: String -> TransformC CoreExpr [CoreExpr]
 -- unCallE = unCall . lamName
 
 -- | Uncall a named function
@@ -147,7 +147,7 @@ unCallE1 = unCall1 . lamName
 appsE1 :: String -> [Type] -> CoreExpr -> TransformU CoreExpr
 appsE1 str ts e = appsE str ts [e]
 
--- callNameLam :: String -> TransformH CoreExpr (CoreExpr, [CoreExpr])
+-- callNameLam :: String -> TransformC CoreExpr (CoreExpr, [CoreExpr])
 -- callNameLam = callNameT . lamName
 
 -- Some names
@@ -164,12 +164,12 @@ epS :: String
 epS = "EP"
 
 -- t ==> EP t
-mkEP :: TransformH a Type
+mkEP :: TransformC a Type
 mkEP = do epTC <- findTyConE epS
           return (TyConApp epTC [])
 
 -- t ==> EP t
-epOf :: Type -> TransformH a Type
+epOf :: Type -> TransformC a Type
 epOf t = flip mkAppTy t <$> mkEP
 
 -- epOf t = do epTC <- findTyConE epS
@@ -326,11 +326,11 @@ reifyRhs nm = labelR ("reifyRhs " ++ nm) $
          Let (NonRec v reified) (mkLams tvs evald) )
 
 
-reifyDef :: RewriteH CoreBind
+reifyDef :: RewriteC CoreBind
 reifyDef = do NonRec v _ <- idR
               nonRecAllR idR (reifyRhs (uqVarName v))
 
-reifyProg :: RewriteH CoreProg
+reifyProg :: RewriteC CoreProg
 reifyProg = progBindsT (const (tryR reifyDef >>> letFloatToProg)) concatProgs
 
 #else
@@ -353,15 +353,15 @@ reifyRhs = labelR "reifyRhs" $
              unlessDict >>> unlessEval >>> unlessTC "IO" >>> unlessTC epS >>>
              reifyR >>> evalR
 
-reifyDef :: RewriteH CoreBind
+reifyDef :: RewriteC CoreBind
 reifyDef = nonRecAllR idR reifyRhs
 
-reifyProg :: RewriteH CoreProg
+reifyProg :: RewriteC CoreProg
 reifyProg = progBindsAnyR (const reifyDef)
 
 #endif
 
-reifyModGuts :: RewriteH ModGuts
+reifyModGuts :: RewriteC ModGuts
 reifyModGuts = modGutsR reifyProg
 
 -- Rewrite inside of reify applications

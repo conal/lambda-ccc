@@ -67,8 +67,8 @@ p1 (a :# b) = b :# a
 psum :: Num a => Pair a -> a
 psum (a :# b) = a + b
 
-tsum :: Num a => Tree n a -> a
-tsum = foldT id (+)
+-- tsum :: Num a => Tree n a -> a
+-- tsum = foldT id (+)
 
 -- dot :: (IsNat n, Num a) => Tree n a -> Tree n a -> a
 -- dot as bs = tsum (prod as bs)
@@ -79,8 +79,11 @@ prod = fmap (uncurry (*))
 prodA :: (Applicative f, Num a) => Binop (f a)
 prodA = liftA2 (*)
 
-dot :: Num a => Tree n (a,a) -> a
-dot = tsum . prod
+-- dot :: Num a => Tree n (a,a) -> a
+-- dot = tsum . prod
+
+dot :: (Functor f, Foldable f, Num a) => f (a,a) -> a
+dot = sum . prod
 
 squares :: (Functor f, Num a) => f a -> f a
 squares = fmap (\ x -> x * x)
@@ -92,14 +95,14 @@ squares' = fmap (^ (2 :: Int))
     Run it
 --------------------------------------------------------------------}
 
-go :: IsSourceP2 a b => String -> (a -> b) -> IO ()
-go name f = run name (reifyEP f)
+go' :: IsSourceP2 a b => String -> (a -> b) -> IO ()
+go' name f = run name (reifyEP f)
+
+go :: (Encodable a, Encodable b, IsSourceP2 (Encode a) (Encode b)) =>
+      String -> (a -> b) -> IO ()
+go name f = go' name (encode f)
 
 -- With an outer encode
-
-go' :: (Encodable a, Encodable b, IsSourceP2 (Encode a) (Encode b)) =>
-       String -> (a -> b) -> IO ()
-go' name f = run name (reifyEP (encode f))
 
 -- Only works when compiled with HERMIT
 main :: IO ()
@@ -116,9 +119,9 @@ main :: IO ()
 -- -- optimization is in place.
 -- main = go "dot1" (dot :: Tree N1 (Int,Int) -> Int)
 
-main = go' "dot0" (dot :: Tree N0 (Int,Int) -> Int)
+-- main = go "dot0" (dot :: Tree N0 (Int,Int) -> Int)
 
--- main = go' "dot2" (dot :: Tree N2 (Int,Int) -> Int)
+-- main = go "dot2" (dot :: Tree N2 (Int,Int) -> Int)
 
 -- -- Doesn't wedge.
 -- main = go "dotp" ((psum . prod) :: Pair (Int,Int) -> Int)
@@ -140,9 +143,11 @@ main = go' "dot0" (dot :: Tree N0 (Int,Int) -> Int)
 -- -- Not working yet: the (^) is problematic.
 -- main = go "squares2" (squares' :: Unop (Tree N0 Int))
 
--- -- Working out a reify issue.
--- main = go "sum1f" (sum :: Tree N1 Int -> Int)
+-- Working out a reify issue.
+main = go "sum2f" (sum :: Tree N2 Int -> Int)
 
--- -- Causes a GHC RTS crash ("internal error: stg_ap_pp_ret").
+-- -- Causes a GHC RTS crash ("internal error: stg_ap_pp_ret") with Reify.
+-- -- Seemingly infinite rewrite loop with Standard.
 -- main = go "prodA1" (uncurry prodA :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
 
+-- main = go "prodA0" (uncurry prodA :: (Tree N0 Int,Tree N0 Int) -> Tree N0 Int)
