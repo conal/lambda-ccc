@@ -20,10 +20,13 @@
 -- Statically typed lambda expressions
 ----------------------------------------------------------------------
 
-module LambdaCCC.Encode (Encodable(..)) where
+module LambdaCCC.Encode (Encodable(..),(-->)) where
 
-import Control.Arrow ((***),(+++))
+import Control.Arrow ((+++)) -- ,(***)
 import Data.Monoid (Any(..),All(..))
+
+-- transformers
+import Data.Functor.Identity
 
 import TypeUnary.TyNat (Z,S)
 import TypeUnary.Vec (Vec(..),unConsV)
@@ -39,6 +42,12 @@ infixr 1 -->
 
 -- (-->) :: Category k =>
 --          (a' `k` a) -> (b `k` b') -> ((a `k` b) -> (a' `k` b'))
+
+-- Slightly different from Arrow.***. No lazy pattern.
+-- Makes neater code.
+infixr 3 ***
+(***) :: (a -> c) -> (b -> d) -> (a :* b -> c :* d)
+(f *** g) (x,y) = (f x, g y)
 
 -- Inlining!
 #define INS {-# INLINE encode #-} ; {-# INLINE decode #-}
@@ -111,3 +120,4 @@ RepEncode(All,Bool,All,getAll)
 --     In the type instance declaration for ‘Encode’
 --     In the instance declaration for ‘Encodable (Any)’
 
+RepEncode(Identity a, a, Identity, runIdentity)
