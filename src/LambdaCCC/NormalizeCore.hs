@@ -80,7 +80,8 @@ externC = externC' observing
 
 watchR :: String -> Unop ReExpr
 #ifdef LintDie
-watchR lab r = lintingExprR lab (labeledR lab r) -- hard error
+watchR lab r = -- lintExprT >> -- TEMP
+               lintingExprR lab (labeledR lab r) -- hard error
 #else
 watchR lab r = labeledR lab r >>> lintExprR  -- fail on core lint error.
 #endif
@@ -195,7 +196,6 @@ inlineNon = watchR "inlineNon" $
 
 accepterR' :: (Functor m, Monad m) => Transform c m a () -> Rewrite c m a
 accepterR' = accepterR . (True <$)
-
 
 -- One step toward application normalization.
 appStep :: ReExpr
