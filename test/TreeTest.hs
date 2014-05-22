@@ -33,6 +33,9 @@ import Control.Applicative (Applicative(..),liftA2)
 
 import Data.Foldable (Foldable(..),sum)
 
+-- transformers
+import Data.Functor.Identity
+
 import TypeUnary.TyNat
 import TypeUnary.Nat (IsNat)
 
@@ -143,11 +146,16 @@ main :: IO ()
 -- -- Not working yet: the (^) is problematic.
 -- main = go "squares2" (squares' :: Unop (Tree N0 Int))
 
--- Working out a reify issue.
-main = go "sum2f" (sum :: Tree N2 Int -> Int)
+-- -- Working out a reify issue.
+-- main = go "sum2f" (sum :: Tree N2 Int -> Int)
 
 -- -- Causes a GHC RTS crash ("internal error: stg_ap_pp_ret") with Reify.
 -- -- Seemingly infinite rewrite loop with Standard.
 -- main = go "prodA1" (uncurry prodA :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
 
--- main = go "prodA0" (uncurry prodA :: (Tree N0 Int,Tree N0 Int) -> Tree N0 Int)
+main = go "prodA0" (uncurry prodA :: (Tree N0 Int,Tree N0 Int) -> Tree N0 Int)
+
+-- main = go "idA" (uncurry f)
+--  where
+--    f :: Identity Bool -> Identity Bool -> Identity (Bool,Bool)
+--    f = liftA2 (,)
