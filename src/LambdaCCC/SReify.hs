@@ -865,7 +865,7 @@ externals =
 #endif
     , external "uncalle1" (promoteR . unCallE1 :: String -> ReCore) ["uncall a function"]
 --     , externC "cast-float-apps" castFloatAppsR "float casts over apps"
-    , externC "simplify-expr" simplifyExprT "Invoke GHC's simplifyExpr"
+    , externC "simplify-expr" simplifyExprR "Invoke GHC's simplifyExpr"
     , externC "reify-bash" reifyBash "reify & bash"
     ]
     -- ++ Enc.externals
