@@ -31,7 +31,7 @@ import Data.Functor ((<$),(<$>))
 import PrelNames (eitherTyConName)
 
 import HERMIT.Dictionary hiding (externals) -- re-exports HERMIT.Dictionary.*
-import HERMIT.External (External,ExternalName)
+import HERMIT.External (External,ExternalName,external,(.+),CmdTag(Loop))
 import HERMIT.GHC
 import HERMIT.Kure
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
@@ -60,7 +60,7 @@ okay2 = const okay1
 -- (Observing, observeR', triesL, labeled)
 
 observing :: Ex.Observing
-observing = True
+observing = False
 
 -- labelR :: InCoreTC t => String -> RewriteC t -> RewriteC t
 -- labelR = curry (Ex.labeled observing)
@@ -68,6 +68,22 @@ observing = True
 externC :: (Injection a Core) =>
            ExternalName -> RewriteC a -> String -> External
 externC = externC' observing 
+
+-- watchR :: InCoreTC a => String -> Unop (RewriteC a)
+-- watchR = labeledR
+
+-- There's a HERMIT bug (I'm pretty sure) that introduces core-lint errors. Here
+-- we can either turn them into a soft or hard error (rewrite failure or error).
+-- See <https://github.com/ku-fpg/hermit/issues/103>
+
+#define LintDie
+
+watchR :: String -> Unop ReExpr
+#ifdef LintDie
+watchR lab r = lintingExprR lab (labeledR lab r) -- hard error
+#else
+watchR lab r = labeledR lab r >>> lintExprR  -- fail on core lint error.
+#endif
 
 {--------------------------------------------------------------------
     Standard types
@@ -118,51 +134,116 @@ nonStandardE = (isTypeE <+ (nonStandardTyT . arr exprType'))
 -- TODO: If I remove Encode, standardTy can be Type -> Bool
 
 {--------------------------------------------------------------------
+    Specialized traversal
+--------------------------------------------------------------------}
+
+-- For inlining, I want to stay out of recursive bindings.
+
+oneNoRecRhs :: Unop ReExpr
+oneNoRecRhs r = go
+ where
+   go = foldr (<+) (fail "oneNoRecRhs: nothing to do here")
+          [ r
+          , appOneR go go
+          , lamOneR skipT go
+          , letNonRecOneR skipT go go   -- or not?
+          , caseOneR go skipT skipT (const (altOneR skipT (const skipT) go))
+          , castOneR go skipT
+          , tickOneR skipT go
+          -- No type or coercion
+          ]
+
+-- TODO: Handle recursive let but not in RHS.
+
+skipT :: Monad m => Transform c m a b
+skipT = fail "untried"
+
+{--------------------------------------------------------------------
     Normalization
 --------------------------------------------------------------------}
 
--- | Inline names with non-standard types or trivial bindings.
-inlineIt :: ReExpr
-inlineIt = labeledR "inlineIt" $
-           isVarT >> (inlineNonStandard <+ inlineTrivial)
- where
-   inlineNonStandard = nonStandardE >> inlineR
-   inlineTrivial = inlineR >> accepterR (True <$ trivialExpr)
+inlineFilt :: FilterE -> ReExpr
+inlineFilt filt = inlineR >>> accepterR' filt
 
-#if 0
--- Neater:
-inlineIt = labeledR "inlineIt" $
-           inlineR >> accepterR' (trivialExpr <+ nonStandardE)
+-- -- | Inline names with non-standard types or trivial bindings.
+-- inlineIt :: ReExpr
+-- inlineIt = watchR "inlineIt" $
+--            isVarT >> (inlineNonStandard <+ inlineTrivial)
+--  where
+--    inlineNonStandard = nonStandardE >> inlineR
+--    inlineTrivial = inlineR >> accepterR (True <$ trivialExpr)
 
-accepterR' = accepterR . fmap (True <$)
-#endif
+-- inlineIt :: ReExpr
+-- inlineIt = watchR "inlineIt" $
+--            inlineR >>> accepterR' (trivialExpr <+ nonStandardE)
+
+inlineTrivial :: ReExpr
+inlineTrivial = watchR "inlineTrivial" $
+                inlineFilt trivialExpr
+
+-- Maybe drop inlineTrivial in favor of letElimTrivialR
+
+inlineNon :: ReExpr
+inlineNon = watchR "inlineNon" $
+            inlineFilt nonStandardE
+
+-- TODO: Maybe re-implement inlineNon to check type *first*.
+
+-- inlineIt :: ReExpr
+-- inlineIt = watchR "inlineIt" $
+--            inlineFilt (trivialExpr <+ nonStandardE)
+
+accepterR' :: (Functor m, Monad m) => Transform c m a () -> Rewrite c m a
+accepterR' = accepterR . (True <$)
+
 
 -- One step toward application normalization.
 appStep :: ReExpr
-appStep = labeledR "appStep" $
-          appT successT nonStandardE okay2 >>
-          letFloatAppR <+ castFloatAppR <+ betaReduceR -- <+ ...
+appStep = appT successT nonStandardE okay2 >>
+          (  watchR "letFloatAppR" letFloatAppR
+          <+ watchR "betaReduceR"  betaReduceR
+          )
+
+-- appStep = watchR "appStep" $
+--           appT successT nonStandardE okay2 >>
+--           (letFloatAppR <+ betaReduceR)
 
 -- | Trivial expression: for now, literals, variables, casts of trivial.
 trivialExpr :: FilterE
-trivialExpr = isVarT <+ isLitT <+ castT trivialExpr id okay2
+trivialExpr = setFailMsg "Non-trivial" $
+              isTypeE <+ isVarT <+ isLitT
+           <+ trivialLam
+           <+ castT trivialExpr id okay2
 
--- | Trivial binding
 trivialBind :: FilterC CoreBind
 trivialBind = nonRecT successT trivialExpr okay2
 
--- | Trivial binding
 trivialLet :: FilterE
 trivialLet = letT trivialBind successT okay2
 
+trivialLam :: FilterE
+trivialLam = lamT id trivialExpr okay2
+
+trivialBetaRedex :: FilterE
+trivialBetaRedex = appT trivialLam successT okay2
+
 -- These filters could instead be predicates. Then use acceptR.
 
-#if 0
--- letElimTrivialR sometimes wedges while trying to print the result.
-
 letElimTrivialR :: ReExpr
-letElimTrivialR = labeledR "trivialLet" $
+letElimTrivialR = watchR "trivialLet" $
                   trivialLet >> letSubstR
+
+betaReduceTrivial :: ReExpr
+betaReduceTrivial = watchR "betaReduceTrivial" $
+                    trivialBetaRedex >> betaReduceR
+
+#if 0
+simplifyCastR :: ReExpr
+simplifyCastR = watchR "simplifyCastR" $
+                castT id id okay2 >>
+                simplifyExprR
+
+-- ACK! simplifyExprR reports false positives, causing rewrite loop.
 #endif
 
 {--------------------------------------------------------------------
@@ -173,40 +254,57 @@ simplifiers :: [ReCore]
 simplifiers =
   promoteR <$>
   [ appStep
-  , labeledR "letElimR" letElimR   -- removed unused bindings after inlining
-  , labeledR "castCastR" castCastR
-  , labeledR "lamFloatCastR" lamFloatCastR
-  , labeledR "caseReduceR" (caseReduceR False)  -- let rather than subst
-  , labeledR "caseFloatR" caseFloatR
-  , labeledR "caseFloatArgR" (caseFloatArgR Nothing Nothing) -- ignore strictness
---   , letElimTrivialR
+  , betaReduceTrivial
+  , watchR "letElimR" letElimR   -- removed unused bindings after inlining
+  , watchR "castFloatAppR'" castFloatAppR'
+  , watchR "castCastR" castCastR
+  , watchR "lamFloatCastR" lamFloatCastR
+  , watchR "caseReduceR" (caseReduceR False)  -- let rather than subst
+  , watchR "caseFloatR" caseFloatR
+  -- , watchR "caseWildR" caseWildR
+  -- Wedging:
+  -- , watchR "caseFloatArgR" (caseFloatArgR Nothing Nothing) -- ignore strictness
+  , inlineTrivial
+  , letElimTrivialR
   ]
 
-simplify1 :: ReCore
-simplify1 = foldr (<+) (fail "standardize: nothing to do here") simplifiers
+simplifyOne :: ReCore
+simplifyOne = foldr (<+) (fail "standardize: nothing to do here") simplifiers
 
-inlinePassAll :: ReCore
-inlinePassAll = anybuR (promoteR inlineIt)
+-- inlinePassAll :: ReCore
+-- inlinePassAll = anybuR (promoteR inlineNon)
 
-inlinePass1 :: ReCore
-inlinePass1 = onetdR (promoteR inlineIt)
+inlinePassOne :: ReCore
+inlinePassOne = promoteR (oneNoRecRhs inlineNon)
+
+-- inlinePassOne = onetdR (promoteR inlineNon)
+
+bashE' :: ReExpr
+bashE' = watchR "bashR" (extractR bashR)
+
+-- bashE' = watchR "bashR" (extractR bashR >>> lintExprR)
+
+-- Without this lintExprR, I sometimes get bad Core. Hm!
+
+bashR' :: ReCore
+bashR' = promoteR bashE'
 
 simplifyTD :: ReCore
-simplifyTD = anytdR (repeatR simplify1)
+simplifyTD = repeatR (anytdR (repeatR simplifyOne) >>> tryR bashR')
 
-deepPass :: ReCore
-deepPass = inlinePass1 >>> tryR simplifyTD
+-- deepPass :: ReCore
+-- deepPass = inlinePassOne >>> tryR simplifyTD
 
 bashSimplifiers :: ReCore
 bashSimplifiers = bashExtendedWithR (promoteR <$> simplifiers)
 
-normalizeCore1 :: ReCore
-normalizeCore1 = tryR bashSimplifiers >>>
-                 repeatR (inlinePass1 >>> tryR bashSimplifiers)
+normalizeCoreBash :: ReCore
+normalizeCoreBash = tryR bashSimplifiers >>>
+                    repeatR (inlinePassOne >>> tryR bashSimplifiers)
 
-normalizeCore2 :: ReCore
-normalizeCore2 = tryR simplifyTD >>>
-                 repeatR (inlinePass1 >>> tryR simplifyTD)
+normalizeCore' :: ReCore
+normalizeCore' = tryR simplifyTD >>>
+                 repeatR (inlinePassOne >>> tryR simplifyTD)
 
 {--------------------------------------------------------------------
     Plugin
@@ -217,13 +315,24 @@ plugin = hermitPlugin (phase 0 . interactive externals)
 
 externals :: [External]
 externals =
-    [ externC "simplify-expr" simplifyExprT "Invoke GHC's simplifyExpr"
-    , externC "lam-float-cast" lamFloatCastR "Float lambda through case"
-    , externC "cast-cast" castCastR "Coalesce nested casts"
-    , externC "simplify1" simplify1 "Locally simplify for normalization, without inlining"
-    , externC "inline-pass-all" inlinePass1 "Bottom-up inlining pass for normalization"
-    , externC "inline-pass-1" inlinePass1 "Single inlining found top-down"
+    [ externC "simplify-one" simplifyOne "Locally simplify for normalization, without inlining"
+    , externC "app-step" appStep "Normalize an application"
+    , externC "inline-trivial" inlineTrivial "Inline trivial definition"
+    , externC "let-elim-trivial" letElimTrivialR "Eliminate trivial binding"
+    , externC "inline-non" inlineNon "Inline if non-standard type"
+    , externC "inline-pass-one" inlinePassOne "Inlining pass for normalization"
     , externC "bash-simplifiers" bashSimplifiers "Bash with normalization simplifiers (no inlining)"
-    , externC "normalize-core-1" normalizeCore1 "Normalize via bash"
-    , externC "normalize-core-2" normalizeCore2 "Normalize not via bash"
+    , externC "simplify-td" simplifyTD "top-down normalize simplification"
+    , externC "normalize-core-bash" normalizeCoreBash "Normalize via bash"
+    , externC "normalize-core'" normalizeCore' "Normalize not via bash"
+    , externC "repeat" normalizeCore' "Normalize not via bash"
+    -- Move to HERMIT.Extras:
+    , externC "cast-float-app'" castFloatAppR' "cast-float-app with transitivity"
+    , externC "cast-cast" castCastR "Coalesce nested casts"
+    , externC "un-cast-cast" unCastCastR "Uncoalesce to nested casts"
+    , externC "lam-float-cast" lamFloatCastR "Float lambda through case"
+    , externC "simplify-expr" simplifyExprR "Invoke GHC's simplifyExpr"
+    , externC "case-wild" caseWildR "case of wild ==> let (doesn't preserve evaluation)"
+    , external "repeat" (repeatN :: Int -> Unop (RewriteH Core))
+       [ "Repeat a rewrite n times." ] .+ Loop
     ]
