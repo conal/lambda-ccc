@@ -67,7 +67,7 @@ import HERMIT.Extras
   , varLitE, uqVarName, typeEtaLong, simplifyE
   , anytdE, anybuE, inAppTys, isAppTy, letFloatToProg , concatProgs
   , rejectR , rejectTypeR
-  , simplifyExprT, showPprT
+  , simplifyExprR, showPprT
   , TransformC, RewriteC, externC
   )
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
@@ -924,6 +924,6 @@ externals =
     , externC "reify-code" reifyCodeF "manual rewrites for reifying encodeF & decodeF"
 #endif
     , external "uncalle1" (promoteR . unCallE1 :: String -> ReCore) ["uncall a function"]
-    , externC "simplify-expr" simplifyExprT "Invoke GHC's simplifyExpr"
+    , externC "simplify-expr" simplifyExprR "Invoke GHC's simplifyExpr"
     ]
     -- ++ Enc.externals
