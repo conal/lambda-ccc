@@ -26,6 +26,7 @@ Library
   Build-Depends:    base < 5
                   , ghc >= 7.6
                   , ghc-prim
+                  , transformers
                   , containers
                   , constraints
                   , kure >= 2.16.0
@@ -44,8 +45,8 @@ Library
                     LambdaCCC.CCC
                     LambdaCCC.ToCCC
                     LambdaCCC.Encode
-                    LambdaCCC.Reify
-                    LambdaCCC.SReify
+--                     LambdaCCC.Reify
+--                     LambdaCCC.SReify
                     LambdaCCC.NormalizeCore                    
                     LambdaCCC.Run
                     LambdaCCC.Examples.Linear
