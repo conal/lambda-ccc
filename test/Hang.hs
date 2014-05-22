@@ -38,7 +38,7 @@ import TypeUnary.TyNat
 import LambdaCCC.Encode (Encodable(..))
 
 -- Good
-#if 0
+#if 1
 hang1 :: (Identity Bool, Identity ()) -> Identity (Bool,())
 hang1 = uncurry (liftA2 (,))
 
@@ -65,7 +65,7 @@ hang = encode hang1
 #endif
 
 -- Good
-#if 1
+#if 0
 hang1 :: (Vec N1 Bool, Vec N1 ()) -> Vec N1 (Bool,())
 hang1 = uncurry (liftA2 (,))
 
