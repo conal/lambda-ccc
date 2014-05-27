@@ -20,7 +20,7 @@
 -- Statically typed lambda expressions
 ----------------------------------------------------------------------
 
-module LambdaCCC.Encode (Encodable(..),(-->)) where
+module LambdaCCC.Encode (Encodable(..),(-->),recode) where
 
 import Control.Arrow ((+++)) -- ,(***)
 import Data.Monoid (Any(..),All(..))
@@ -52,6 +52,9 @@ infixr 3 ***
 -- Inlining!
 #define INS {-# INLINE encode #-} ; {-# INLINE decode #-}
 
+-- | Encoding and decoding. Must be inverses, and @'Encode' a@ must have a
+-- standard type. A type is standard iff it is '()', 'Bool', 'Int' (for now), or
+-- a binary product, sum, or function over standard types.
 class Encodable a where
   type Encode a
   encode :: a -> Encode a
@@ -121,3 +124,7 @@ RepEncode(All,Bool,All,getAll)
 --     In the instance declaration for ‘Encodable (Any)’
 
 RepEncode(Identity a, a, Identity, runIdentity)
+
+-- | Identity via 'encode' and decode.
+recode :: Encodable a => a -> a
+recode = decode . encode
