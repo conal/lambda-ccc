@@ -132,7 +132,7 @@ standardTC tc =
 
 nonStandardFail :: Type -> TransformU a
 nonStandardFail ty =
-  do s <- showPprT ty
+  do s <- showPprT . return ty
      fail ("non-standard type:\n" ++ s)
 
 nonStandardTyT :: TransformC Type ()
