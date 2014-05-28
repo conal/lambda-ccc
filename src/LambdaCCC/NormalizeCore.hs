@@ -21,11 +21,13 @@
 module LambdaCCC.NormalizeCore where
 
 -- TODO: explicit exports
-import Prelude hiding (id,(.))
+import Prelude hiding (id,(.),(>>))
+import qualified Prelude
 
 import Control.Category (id,(.),(>>>))
 import Control.Arrow (arr)
 import Data.Functor ((<$),(<$>))
+import Data.Monoid (mempty)
 
 -- GHC
 import PrelNames (eitherTyConName)
@@ -43,6 +45,8 @@ import qualified HERMIT.Extras as Ex
     HERMIT tools
 --------------------------------------------------------------------}
 
+#if 0
+
 -- Move to HERMIT.Extras
 
 -- Handy for filtering with congruence transforms
@@ -52,6 +56,16 @@ okay1 = const ()
 
 okay2 :: a -> b -> ()
 okay2 = const okay1
+
+#else
+-- Use mempty instead okayN
+
+-- Tighten the type of (>>). (Alternatively, choose a different operator.)
+infixl 1 >>
+(>>) :: Monad m => m () -> m b -> m b
+(>>) = (Prelude.>>)
+#endif
+
 
 {--------------------------------------------------------------------
     Observing
@@ -199,13 +213,13 @@ accepterR' = accepterR . (True <$)
 
 -- One step toward application normalization.
 appStep :: ReExpr
-appStep = appT successT nonStandardE okay2 >>
+appStep = appT successT nonStandardE mempty >>
           (  watchR "letFloatAppR" letFloatAppR
           <+ watchR "betaReduceR"  betaReduceR
           )
 
 -- appStep = watchR "appStep" $
---           appT successT nonStandardE okay2 >>
+--           appT successT nonStandardE mempty >>
 --           (letFloatAppR <+ betaReduceR)
 
 -- | Trivial expression: for now, literals, variables, casts of trivial.
@@ -213,19 +227,19 @@ trivialExpr :: FilterE
 trivialExpr = setFailMsg "Non-trivial" $
               isTypeE <+ isVarT <+ isLitT
            <+ trivialLam
-           <+ castT trivialExpr id okay2
+           <+ castT trivialExpr id mempty
 
 trivialBind :: FilterC CoreBind
-trivialBind = nonRecT successT trivialExpr okay2
+trivialBind = nonRecT successT trivialExpr mempty
 
 trivialLet :: FilterE
-trivialLet = letT trivialBind successT okay2
+trivialLet = letT trivialBind successT mempty
 
 trivialLam :: FilterE
-trivialLam = lamT id trivialExpr okay2
+trivialLam = lamT id trivialExpr mempty
 
 trivialBetaRedex :: FilterE
-trivialBetaRedex = appT trivialLam successT okay2
+trivialBetaRedex = appT trivialLam successT mempty
 
 -- These filters could instead be predicates. Then use acceptR.
 
@@ -240,7 +254,7 @@ betaReduceTrivial = watchR "betaReduceTrivial" $
 #if 0
 simplifyCastR :: ReExpr
 simplifyCastR = watchR "simplifyCastR" $
-                castT id id okay2 >>
+                castT id id mempty >>
                 simplifyExprR
 
 -- ACK! simplifyExprR reports false positives, causing rewrite loop.
@@ -325,7 +339,6 @@ externals =
     , externC "simplify-td" simplifyTD "top-down normalize simplification"
     , externC "normalize-core-bash" normalizeCoreBash "Normalize via bash"
     , externC "normalize-core'" normalizeCore' "Normalize not via bash"
-    , externC "repeat" normalizeCore' "Normalize not via bash"
     -- Move to HERMIT.Extras:
     , externC "cast-float-app'" castFloatAppR' "cast-float-app with transitivity"
     , externC "cast-cast" castCastR "Coalesce nested casts"

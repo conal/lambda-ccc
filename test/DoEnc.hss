@@ -1,14 +1,31 @@
+-- set-auto-corelint True
 set-pp-renderer ascii
 set-pp-width 80
+
 set-pp-type     Show
-set-pp-coercion Abstract
+set-pp-coercion Kind
 
-rhs-of x6
+-- set-pp-type     Abstract
+-- set-pp-coercion Abstract
 
-try post-unfold
+-- set-pp-type     Omit
+-- set-pp-coercion Omit
 
-any-td (repeat reify-misc)
+-- occurrence-of recode ; up ; up ; up
 
-set-pp-type Omit
+-- any-td squash-code
 
-top ; lint-module ; binding-of x6
+-- try encode-simplify
+
+rhs-of e
+try encode-simplify
+
+-- try simplify  -- For dictionaries
+-- down -- past cast
+
+-- recode
+-- try encode-simplify
+
+-- encode t d ...
+-- down  -- encode t d
+-- super-inline
