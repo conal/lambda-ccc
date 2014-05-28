@@ -45,8 +45,8 @@ Library
                     LambdaCCC.CCC
                     LambdaCCC.ToCCC
                     LambdaCCC.Encode
---                     LambdaCCC.Reify
---                     LambdaCCC.SReify
+                    LambdaCCC.Reify
+                    LambdaCCC.SReify
 
                     LambdaCCC.NormalizeCore
                     LambdaCCC.CoreEncode

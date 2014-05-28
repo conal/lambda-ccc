@@ -18,7 +18,13 @@ set-pp-coercion Kind
 -- try encode-simplify
 
 rhs-of e
+
 try encode-simplify
+
+top ; down -- to prog
+
+dump-stash
+-- try (any-td drop-stashed-let)
 
 -- try simplify  -- For dictionaries
 -- down -- past cast

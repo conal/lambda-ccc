@@ -28,7 +28,7 @@ import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..))
 import Data.Foldable (msum)
 import Control.Monad ((<=<),unless)
-import Control.Arrow (Arrow(..),(>>>))
+import Control.Arrow (Arrow(..),(>>>),(<<<))
 import Data.List (isPrefixOf,find)
 import Data.Maybe (fromMaybe)
 
@@ -103,7 +103,7 @@ standardTyT ty = nonStandardFail ty
 
 nonStandardFail :: Type -> TransformU a
 nonStandardFail ty =
-  do s <- showPprT ty
+  do s <- showPprT <<< return ty
      fail ("non-standard type:\n" ++ s)
 
 standardTC :: TyCon -> Bool

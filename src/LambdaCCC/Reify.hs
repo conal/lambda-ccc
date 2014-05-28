@@ -741,13 +741,13 @@ typeNat len =
      case len of
        TyConApp ((== z) -> True) []  -> return VZero
        TyConApp ((== s) -> True) [n] -> return (VSucc n)
-       _ -> do str <- showPprT len
+       _ -> do str <- return len >>> showPprT
                fail ("typeNat: not Z or S n: " ++ str)
 
 sizedTy :: Type -> TransformU (TyCon, NatTy,Type)
 sizedTy (tcView -> Just ty)   = sizedTy ty
 sizedTy (TyConApp tc [len,x]) = (tc,,x) <$> typeNat len
-sizedTy ty                    = do str <- showPprT ty
+sizedTy ty                    = do str <- return ty >>> showPprT
                                    fail ("sizedTy: wrong # args: " ++ str)
 
 -- Find a structural identity function on a unary-sized type, given the names of
