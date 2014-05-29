@@ -2,11 +2,11 @@
 set-pp-renderer ascii
 set-pp-width 80
 
-set-pp-type     Show
-set-pp-coercion Kind
+-- set-pp-type     Show
+-- set-pp-coercion Kind
 
--- set-pp-type     Abstract
--- set-pp-coercion Abstract
+set-pp-type     Abstract
+set-pp-coercion Abstract
 
 -- set-pp-type     Omit
 -- set-pp-coercion Omit
@@ -17,13 +17,13 @@ set-pp-coercion Kind
 
 -- try encode-simplify
 
-rhs-of e
+down  -- to definitions
 
-try encode-simplify
+-- rhs-of e
+-- try encode-simplify
+-- top ; down -- to prog
+-- try dump-stash
 
-top ; down -- to prog
-
-dump-stash
 -- try (any-td drop-stashed-let)
 
 -- try simplify  -- For dictionaries
