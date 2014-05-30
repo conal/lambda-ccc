@@ -30,7 +30,6 @@ import Data.Functor ((<$),(<$>))
 import Control.Applicative (liftA2)
 import Data.Monoid (mempty)
 import Data.List (intercalate)
-import Data.Char (isUpper)
 
 -- GHC
 import PrelNames (eitherTyConName)
@@ -40,7 +39,7 @@ import HERMIT.Dictionary hiding (externals) -- re-exports HERMIT.Dictionary.*
 import HERMIT.External (External,ExternalName,external,(.+),CmdTag(Loop))
 import HERMIT.GHC
 import HERMIT.Kure
-import HERMIT.Monad (saveDef,lookupDef,newIdH)
+import HERMIT.Monad (saveDef,newIdH,Label)
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
 
 import HERMIT.Extras hiding (findTyConT)
@@ -77,33 +76,10 @@ caseNoVarR =
   do Case _ _ _ [(DataAlt _,[],rhs)] <- id
      return rhs
 
-#if 0
-cacheNameT :: (Functor m, Monad m, HasDynFlags m, Outputable a) =>
-              Transform c m a String
-cacheNameT = tweakName <$> showPprT
- where
-   tweakName = intercalate "_" . map dropModules . words
-   dropModules (c:rest) | not (isUpper c) = c : dropModules rest
-   dropModules (break (== '.') -> (_,'.':rest)) = dropModules rest
-   dropModules s = s
-
 -- Build a dictionary for a given PredType, memoizing in the stash.
 memoDict :: TransformH PredType CoreExpr
-memoDict = memoR buildDictionaryT'
-
-memoR :: Outputable a => Unop (TransformM c a CoreExpr)
-memoR r = do lab <- cacheNameT
-             constT (defExpr <$> lookupDef lab)
-               <+ do e' <- r
-                     v <- constT (newIdH lab (exprType e'))
-                     constT (saveDef lab (Def v e'))
-                     return (Let (NonRec v e') (Var v))
-#endif
-
--- Build a dictionary for a given PredType, memoizing in the stash.
-memoDict :: TransformH PredType CoreExpr
-memoDict = do lab <- tweakName <$> showPprT
-              constT (defExpr <$> lookupDef lab)
+memoDict = do lab <- stashLabel
+              findDef lab
                 <+ do dict <- buildDictionaryT'
                       -- Stash if non-trivial
                       ((isVarT $* dict) >> return dict)
@@ -114,23 +90,11 @@ memoDict = do lab <- tweakName <$> showPprT
 -- Memoize a transformation. Don't introduce a let binding (for later floating),
 -- which would interfere with additional simplification.
 memoR :: Unop ReExpr
-memoR r = do lab <- tweakName <$> showPprT
-             constT (defExpr <$> lookupDef lab)
+memoR r = do lab <- stashLabel
+             findDef lab
                <+ do e' <- r
                      saveDefNoFloat lab e'
                      return e'
-
--- More refactoring
-
-tweakName :: Unop String
-tweakName = intercalate "_" . map dropModules . words
- where
-   dropModules (c:rest) | not (isUpper c) = c : dropModules rest
-   dropModules (break (== '.') -> (_,'.':rest)) = dropModules rest
-   dropModules s = s
-
-defExpr :: CoreDef -> CoreExpr
-defExpr (Def _ expr) = expr
 
 {--------------------------------------------------------------------
     Observing
@@ -511,6 +475,7 @@ simplifiers =
   -- , watchR "castFloatCaseR" castFloatCaseR
   , watchR "pairCastR" pairCastR
   , watchR "caseNoVarR" caseNoVarR
+  , watchR "inlineWorkerR" inlineWorkerR
   ]
 #ifndef UseBash
   ++ bashSimplifiers
