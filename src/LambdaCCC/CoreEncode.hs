@@ -51,23 +51,10 @@ import LambdaCCC.Misc ((<~))
     HERMIT tools
 --------------------------------------------------------------------}
 
-repr :: Role
-repr = Representational
-
--- Use mempty instead okayN
-
 -- Tighten the type of (>>). (Alternatively, choose a different operator.)
 infixl 1 >>
 (>>) :: Monad m => m () -> m b -> m b
 (>>) = (Prelude.>>)
-
--- | \ x :: a -> (e `cast` co)  ==> (\ x -> e) `cast` (<a> -> co)
-castFloatLamR :: ReExpr
-castFloatLamR =
-  do Lam x (e `Cast` co) <- id
-     return $
-       Lam x e `mkCast`
-         mkFunCo repr (mkReflCo repr (varType x)) co
 
 -- | case e of { Con -> rhs }  ==>  rhs
 -- Warning: can gain definedness when e == _|_.
@@ -76,10 +63,15 @@ caseNoVarR =
   do Case _ _ _ [(DataAlt _,[],rhs)] <- id
      return rhs
 
+#define Memo
+
+#ifdef Memo
+
 -- Build a dictionary for a given PredType, memoizing in the stash.
 memoDict :: TransformH PredType CoreExpr
-memoDict = do lab <- stashLabel
-              findDef lab
+memoDict = -- traceR "memoDict" .
+           do lab <- stashLabel
+              findDef True lab
                 <+ do dict <- buildDictionaryT'
                       -- Stash if non-trivial
                       ((isVarT $* dict) >> return dict)
@@ -87,14 +79,40 @@ memoDict = do lab <- stashLabel
                              constT (saveDef lab (Def v dict))
                              return (Let (NonRec v dict) (Var v))
 
+
 -- Memoize a transformation. Don't introduce a let binding (for later floating),
 -- which would interfere with additional simplification.
 memoR :: Unop ReExpr
 memoR r = do lab <- stashLabel
-             findDef lab
+             findDef True lab
                <+ do e' <- r
                      saveDefNoFloat lab e'
                      return e'
+
+#else
+
+zoink
+
+memoDict :: TransformH PredType CoreExpr
+memoDict = buildDictionaryT'
+
+memoR :: Unop ReExpr
+memoR = id
+
+#endif
+
+-- -- | 'betaReduceR' but using 'castFloatAppR'' if needed to reveal a redex.
+-- betaReduceCastR :: ReExpr
+-- betaReduceCastR = castFloatAppR' >>> castAllR betaReduceR id
+
+-- | Combine `castFloatLamR` and `castCastR`
+castLamCastR :: ReExpr
+castLamCastR = castAllR castLamsFloatR id >>> castCastR
+-- castLamCastR = castAllR castFloatLamR id >>> castCastR
+
+-- | Float a cast through nested lambdas
+castLamsFloatR :: ReExpr
+castLamsFloatR = tryR (lamAllR id castLamsFloatR) >>> castFloatLamR
 
 {--------------------------------------------------------------------
     Observing
@@ -189,6 +207,16 @@ unCallD1 f = do [_d,e] <- unCall f
 unCallDE1 :: String -> ReExpr
 unCallDE1 = unCallD1 . encName
 
+oneOccT :: FilterE
+oneOccT =
+  do Let (NonRec v _) body <- id
+     guardMsg (varOccCount v body <= 1) "oneOccT: multiple occurrences"
+
+-- | 'letSubstR' in non-recursive let if there's just one occurrence of the
+-- bound variable
+letSubstOneOccR :: ReExpr
+letSubstOneOccR = oneOccT >> letSubstR
+
 {--------------------------------------------------------------------
     Super inlining
 --------------------------------------------------------------------}
@@ -204,10 +232,11 @@ inlineR' :: ReExpr
 inlineR' = watchR "inlineR" inlineR
 
 superInlineSimplifyR :: ReExpr
-superInlineSimplifyR = memoR $
-                       simplifyAll . superInlineR
+superInlineSimplifyR = -- bracketR "superInlineSimplifyR" $
+                       memoR $
+                       tryR (anytdE unshadowExprR) . simplifyAll . superInlineR
 
--- TODO: Memoize superInlineR
+-- TODO: remove the unshadowing later
 
 {--------------------------------------------------------------------
     Standard types
@@ -467,15 +496,19 @@ simplifiers =
   [ watchR "letElimTrivialR" letElimTrivialR
   -- , watchR "betaReduceTrivial" betaReduceTrivial
   , watchR "letElimR" letElimR   -- removed unused bindings after inlining
-  , watchR "castFloatAppR'" castFloatAppR'
-  , watchR "castCastR" castCastR
-  , watchR "lamFloatCastR" lamFloatCastR
-  -- , watchR "castFloatLamR" castFloatLamR
+  , watchR "letSubstOneOccR" letSubstOneOccR
   -- , watchR "caseReduceR" (caseReduceR False)  -- let rather than subst  ??
   -- , watchR "castFloatCaseR" castFloatCaseR
-  , watchR "pairCastR" pairCastR
   , watchR "caseNoVarR" caseNoVarR
   , watchR "inlineWorkerR" inlineWorkerR
+  -- Casts
+  , watchR "castCastR" castCastR
+  , watchR "pairCastR" pairCastR
+  , watchR "castLamCastR" castLamCastR
+  , watchR "castFloatAppR'" castFloatAppR'
+  -- , watchR "castFloatLamR" castFloatLamR
+  -- , watchR "betaReduceCastR" betaReduceCastR
+  -- , watchR "lamFloatCastR" lamFloatCastR
   ]
 #ifndef UseBash
   ++ bashSimplifiers
@@ -549,7 +582,14 @@ externals =
     , externC "squash-code" squashCode "super-inline on encode-related"
 --     , externC "unfolds" unfolds "Misc unfoldings for type encoding"
     , externC "recode-scrutinee" recodeScrutineeR "Recode case scrutinee"
+--     , externC "beta-reduce-cast" betaReduceCastR 
+--         "betaReduceR but using lamFloatCastR if needed to reveal a lambda."
+    , externC "cast-lam-cast" castLamCastR "combine cast-float-lam and cast-cast"
+    , externC "cast-lams-float" castLamsFloatR
+       "Float a cast through nested lambdas"
     -- Move to HERMIT.Extras:
+    , externC "let-subst-one-occ" letSubstOneOccR
+        "letSubstR if at most one occurrence"
     , externC "dump-stash" dumpStashR "Dump the stash into the program"
     , externC "drop-stashed-let" dropStashedLetR "..."
     , externC "cast-float-case" castFloatCaseR
