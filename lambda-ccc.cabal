@@ -45,15 +45,16 @@ Library
                     LambdaCCC.CCC
                     LambdaCCC.ToCCC
                     LambdaCCC.Encode
-                    LambdaCCC.Reify
-                    LambdaCCC.SReify
-
-                    LambdaCCC.NormalizeCore
                     LambdaCCC.CoreEncode
                     LambdaCCC.Run
                     LambdaCCC.Examples.Linear
+-- Phasing out:
 
--- I'll drop one of Reify & SReify later
+--                     LambdaCCC.Reify
+--                     LambdaCCC.SReify
+--                     LambdaCCC.NormalizeCore
+
+
 
 --                     LambdaCCC.Ty
 --                     LambdaCCC.MkStringExpr

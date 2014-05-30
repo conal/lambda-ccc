@@ -38,7 +38,7 @@ import HERMIT.GHC
 import HERMIT.Kure
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
 
-import HERMIT.Extras hiding (findTyConT, labeled, externC)
+import HERMIT.Extras hiding (findTyConT)
 import qualified HERMIT.Extras as Ex
 
 {--------------------------------------------------------------------
@@ -76,14 +76,10 @@ infixl 1 >>
 observing :: Ex.Observing
 observing = False
 
--- labelR :: InCoreTC t => String -> RewriteC t -> RewriteC t
+-- labelR :: InCoreTC t => String -> RewriteH t -> RewriteH t
 -- labelR = curry (Ex.labeled observing)
 
-externC :: (Injection a Core) =>
-           ExternalName -> RewriteC a -> String -> External
-externC = externC' observing 
-
--- watchR :: InCoreTC a => String -> Unop (RewriteC a)
+-- watchR :: InCoreTC a => String -> Unop (RewriteH a)
 -- watchR = labeledR
 
 -- There's a HERMIT bug (I'm pretty sure) that introduces core-lint errors. Here
@@ -95,9 +91,9 @@ externC = externC' observing
 watchR :: String -> Unop ReExpr
 #ifdef LintDie
 watchR lab r = -- lintExprT >> -- TEMP
-               lintingExprR lab (labeledR lab r) -- hard error
+               lintingExprR lab (labeled observing (lab,r)) -- hard error
 #else
-watchR lab r = labeledR lab r >>> lintExprR  -- fail on core lint error.
+watchR lab r = labeled observing (lab,r) >>> lintExprR  -- fail on core lint error.
 #endif
 
 {--------------------------------------------------------------------
@@ -135,7 +131,7 @@ nonStandardFail ty =
   do s <- showPprT . return ty
      fail ("non-standard type:\n" ++ s)
 
-nonStandardTyT :: TransformC Type ()
+nonStandardTyT :: TransformH Type ()
 nonStandardTyT = notM (standardTyT =<< idR)
 
 nonStandardE :: FilterE
@@ -229,7 +225,7 @@ trivialExpr = setFailMsg "Non-trivial" $
            <+ trivialLam
            <+ castT trivialExpr id mempty
 
-trivialBind :: FilterC CoreBind
+trivialBind :: FilterH CoreBind
 trivialBind = nonRecT successT trivialExpr mempty
 
 trivialLet :: FilterE

@@ -35,15 +35,15 @@ import Data.Char (isUpper)
 -- GHC
 import PrelNames (eitherTyConName)
 
-import HERMIT.Core (CoreDef(..))
+import HERMIT.Core (CoreDef(..),CoreProg)
 import HERMIT.Dictionary hiding (externals) -- re-exports HERMIT.Dictionary.*
 import HERMIT.External (External,ExternalName,external,(.+),CmdTag(Loop))
 import HERMIT.GHC
 import HERMIT.Kure
-import HERMIT.Monad (saveDef,lookupDef)
+import HERMIT.Monad (saveDef,lookupDef,newIdH)
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
 
-import HERMIT.Extras hiding (findTyConT, labeled, externC)
+import HERMIT.Extras hiding (findTyConT)
 import qualified HERMIT.Extras as Ex
 
 import LambdaCCC.Misc ((<~))
@@ -77,9 +77,31 @@ caseNoVarR =
   do Case _ _ _ [(DataAlt _,[],rhs)] <- id
      return rhs
 
+#if 0
+cacheNameT :: (Functor m, Monad m, HasDynFlags m, Outputable a) =>
+              Transform c m a String
+cacheNameT = tweakName <$> showPprT
+ where
+   tweakName = intercalate "_" . map dropModules . words
+   dropModules (c:rest) | not (isUpper c) = c : dropModules rest
+   dropModules (break (== '.') -> (_,'.':rest)) = dropModules rest
+   dropModules s = s
+
 -- Build a dictionary for a given PredType, memoizing in the stash.
--- TODO: insert in the module.
-memoDict :: TransformC PredType CoreExpr
+memoDict :: TransformH PredType CoreExpr
+memoDict = memoR buildDictionaryT'
+
+memoR :: Outputable a => Unop (TransformM c a CoreExpr)
+memoR r = do lab <- cacheNameT
+             constT (defExpr <$> lookupDef lab)
+               <+ do e' <- r
+                     v <- constT (newIdH lab (exprType e'))
+                     constT (saveDef lab (Def v e'))
+                     return (Let (NonRec v e') (Var v))
+#endif
+
+-- Build a dictionary for a given PredType, memoizing in the stash.
+memoDict :: TransformH PredType CoreExpr
 memoDict = do lab <- tweakName <$> showPprT
               constT (defExpr <$> lookupDef lab)
                 <+ do dict <- buildDictionaryT'
@@ -88,12 +110,27 @@ memoDict = do lab <- tweakName <$> showPprT
                        <+ do v <- newIdT lab
                              constT (saveDef lab (Def v dict))
                              return (Let (NonRec v dict) (Var v))
+
+-- Memoize a transformation. Don't introduce a let binding (for later floating),
+-- which would interfere with additional simplification.
+memoR :: Unop ReExpr
+memoR r = do lab <- tweakName <$> showPprT
+             constT (defExpr <$> lookupDef lab)
+               <+ do e' <- r
+                     saveDefNoFloat lab e'
+                     return e'
+
+-- More refactoring
+
+tweakName :: Unop String
+tweakName = intercalate "_" . map dropModules . words
  where
-   defExpr (Def _ expr) = expr
-   tweakName = intercalate "_" . map dropModules . words
    dropModules (c:rest) | not (isUpper c) = c : dropModules rest
    dropModules (break (== '.') -> (_,'.':rest)) = dropModules rest
    dropModules s = s
+
+defExpr :: CoreDef -> CoreExpr
+defExpr (Def _ expr) = expr
 
 {--------------------------------------------------------------------
     Observing
@@ -104,18 +141,16 @@ memoDict = do lab <- tweakName <$> showPprT
 observing :: Ex.Observing
 observing = False
 
-externC :: (Injection a Core) =>
-           ExternalName -> RewriteC a -> String -> External
-externC = externC' observing 
-
 -- #define LintDie
 
-watchR :: String -> Unop ReExpr
 #ifdef LintDie
-watchR lab r = lintingExprR lab (labeledR lab r) -- hard error
+watchR :: String -> Unop ReExpr
+watchR lab r = lintingExprR lab (labeled observing (lab,r)) -- hard error
 #else
 -- watchR lab r = labeledR lab r >>> lintExprR  -- Fail softly on core lint error.
-watchR lab r = labeledR lab r  -- don't lint
+watchR :: Injection a CoreTC =>
+          String -> RewriteH a -> RewriteH a
+watchR lab r = labeled observing (lab,r)  -- don't lint
 #endif
 
 skipT :: Monad m => Transform c m a b
@@ -132,7 +167,7 @@ trivialExpr = setFailMsg "Non-trivial" $
            <+ trivialLam
            <+ castT trivialExpr id mempty
 
-trivialBind :: FilterC CoreBind
+trivialBind :: FilterH CoreBind
 trivialBind = nonRecT successT trivialExpr mempty
 
 trivialLet :: FilterE
@@ -147,11 +182,11 @@ trivialBetaRedex = appT trivialLam successT mempty
 -- These filters could instead be predicates. Then use acceptR.
 
 letElimTrivialR :: ReExpr
-letElimTrivialR = watchR "trivialLet" $
+letElimTrivialR = -- watchR "trivialLet" $
                   trivialLet >> letSubstR
 
 betaReduceTrivial :: ReExpr
-betaReduceTrivial = watchR "betaReduceTrivial" $
+betaReduceTrivial = -- watchR "betaReduceTrivial" $
                     trivialBetaRedex >> betaReduceR
 
 {--------------------------------------------------------------------
@@ -161,7 +196,7 @@ betaReduceTrivial = watchR "betaReduceTrivial" $
 encName :: Unop String
 encName = ("LambdaCCC.Encode." ++)
 
-findTyConE :: String -> TransformC a TyCon
+findTyConE :: String -> TransformH a TyCon
 findTyConE = findTyConT . encName
 
 appsE :: String -> [Type] -> [CoreExpr] -> TransformU CoreExpr
@@ -174,7 +209,7 @@ appsE1 str ts e = appsE str ts [e]
 -- TODO: Try switching from TransformU
 
 -- | Uncall a named function
-unCallE :: String -> TransformC CoreExpr [CoreExpr]
+unCallE :: String -> TransformH CoreExpr [CoreExpr]
 unCallE = unCall . encName
 
 -- | Uncall a named function
@@ -204,7 +239,11 @@ superInlineR = -- watchR "superInlineR" $
 inlineR' :: ReExpr
 inlineR' = watchR "inlineR" inlineR
 
--- TODO: Memoize superInlineR applied to `recode ty dict`, which can take a long time.
+superInlineSimplifyR :: ReExpr
+superInlineSimplifyR = memoR $
+                       simplifyAll . superInlineR
+
+-- TODO: Memoize superInlineR
 
 {--------------------------------------------------------------------
     Standard types
@@ -279,7 +318,7 @@ encodeTyR = tyConAppE1 "Encode"
 encodableR :: ReType
 encodableR = tyConAppE1 "Encodable"
 
-encodeDictT :: TransformC Type CoreExpr
+encodeDictT :: TransformH Type CoreExpr
 encodeDictT = memoDict . encodableR
 -- encodeDictT = buildDictionaryT' . encodableR
 
@@ -345,6 +384,11 @@ unEncodeTy =
 inEncode :: Unop ReExpr
 inEncode = encodeR <~ unEncode
 
+-- Avoid constructing a new dictionary
+-- inEncode r =
+--   unEncode >>
+--   appAllR id (appAllR id (appAllR id r))  -- encode t dict e
+
 -- -- | Recognize encode with type and dictionary arguments.
 -- isEncode :: FilterE
 -- isEncode = unEncode >>> mempty
@@ -361,7 +405,24 @@ squashCode =
     Encode transformations
 --------------------------------------------------------------------}
 
--- encode (u v)  ==> (encode u `cast` (Encode a -> Encode b)) (encode v)
+-- | Is a variable applied to zero or more types
+isVarTyAppsT :: FilterE
+isVarTyAppsT = isVarT <+ appT isVarTyAppsT isTypeE mempty
+
+-- isVarTyAppsT = do { (Var _,_,[]) <- callSplitT ; return () }
+
+encodeVar :: ReExpr
+encodeVar = (unEncode >>> isVarTyAppsT) >>
+            appAllR superInlineSimplifyR id
+
+-- encodeVar =
+--   inEncode $
+--     do (Var _,_,[]) <- callSplitT
+--        unfoldR >>> tryR simplifyAll
+
+-- TODO: Cache!
+
+-- | encode (u v)  ==> (encode u `cast` (Encode a -> Encode b)) (encode v)
 -- where u :: a -> b, v :: a.
 encodeDistribApp :: ReExpr
 encodeDistribApp =
@@ -387,36 +448,6 @@ encodeLamR = (unEncode >>> lamT id id mempty) >>
 --   encName <$> ["encode","recode","recode","(-->)"] ++
 --   []
 
--- Experimental utilities
-
-infixr 8 $*
-($*) :: Monad m => Transform c m a b -> a -> Transform c m q b
-t $* x = t . return x
-
-pairT :: ReExpr -> ReExpr -> ReExpr
-pairT ra rb =
-  do [_,_,a,b] <- snd <$> callNameT "GHC.Tuple.(,)"
-     liftA2 pair (ra $* a) (rb $* b)
- where
-   pair x y = mkCoreTup [x,y]
-
-listT :: Monad m => [Transform c m a b] -> Transform c m [a] [b]
-listT rs =
-  do es <- id
-     guardMsg (length rs == length es) "listT: length mismatch"
-     sequence (zipWith ($*) rs es)
-
--- | (,) ta' tb' (a `cast` coa) (b `cast` cob)  ==>
---   (,) ta tb a b `cast` coab
---  where `coa :: ta ~R ta'`, `cob :: tb ~R tb'`, and
---  `coab :: (ta,tb) ~R (ta',tb')`.
-pairCastR :: ReExpr
-pairCastR =
-  do [_,_,Cast a coa,Cast b cob] <- snd <$> callNameT "GHC.Tuple.(,)"
-     return $
-       Cast (mkCoreTup [a,b])
-            (mkTyConAppCo repr pairTyCon [coa,cob])
-
 -- TODO: For more flexibility, split the transformation in two pieces:
 -- 
 --    (,) ta' tb (a `cast` coa) b ==> (,) ta tb a b `cast` coab
@@ -440,31 +471,37 @@ recodeScrutineeR = caseAllR recodeR id id (const id)
 --          -> (Int -> Rewrite c m CoreAlt)
 --          -> Rewrite c m CoreExpr
 
-
 {--------------------------------------------------------------------
     Put it together
 --------------------------------------------------------------------}
 
 encoders :: [ReExpr]
 encoders =
-  [ watchR "encodeDistribApp" encodeDistribApp
+  [ watchR "encodeVar" encodeVar
+  , watchR "encodeDistribApp" encodeDistribApp
   , watchR "encodeLamR" encodeLamR
+  -- , watchR "recodeScrutineeR" recodeScrutineeR
   ] 
 
 oneEncode :: ReExpr
 oneEncode = orR encoders
 
 encodePass :: ReCore
-encodePass = anytdR (promoteR oneEncode)
+encodePass = watchR "encodePass" $
+             anytdR (promoteR oneEncode)
 
 -- simplifyOne :: ReExpr
 -- simplifyOne = orR simplifiers
 -- -- simplifyOne = foldr (<+) (fail "standardize: nothing to do here") simplifiers
 
+#define UseBash
+
+simplifyAll :: ReExpr
+
 simplifiers :: [ReExpr]
 simplifiers =
   [ watchR "letElimTrivialR" letElimTrivialR
-  , watchR "betaReduceTrivial" betaReduceTrivial
+  -- , watchR "betaReduceTrivial" betaReduceTrivial
   , watchR "letElimR" letElimR   -- removed unused bindings after inlining
   , watchR "castFloatAppR'" castFloatAppR'
   , watchR "castCastR" castCastR
@@ -474,8 +511,8 @@ simplifiers =
   -- , watchR "castFloatCaseR" castFloatCaseR
   , watchR "pairCastR" pairCastR
   , watchR "caseNoVarR" caseNoVarR
-  , watchR "recodeScrutineeR" recodeScrutineeR
   ]
+#ifndef UseBash
   ++ bashSimplifiers
 
 -- From bashComponents.
@@ -504,12 +541,22 @@ bashSimplifiers =
   , watchR "castElimSymR" castElimSymR
   ]
 
-simplifyAll :: ReExpr
-simplifyAll = bashUsingE (promoteR <$> simplifiers)
+simplifyAll = watchR "simplifyAll" $
+              bashUsingE (promoteR <$> simplifiers)
+
+#else
+
+simplifyAll = watchR "simplifyAll" $
+              bashExtendedWithE (promoteR <$> simplifiers)
+
+#endif
 
 simplifyOne :: ReExpr
 simplifyOne = orR simplifiers
 -- simplifyOne = foldr (<+) (fail "standardize: nothing to do here") simplifiers
+
+simplifyAllRhs :: RewriteH CoreProg
+simplifyAllRhs = progRhsAnyR simplifyAll
 
 {--------------------------------------------------------------------
     Plugin
@@ -523,14 +570,16 @@ externals =
     [ externC "simplify-one" simplifyOne
         "Locally simplify for normalization, without inlining"
     , externC "simplify-all" simplifyAll "Bash with normalization simplifiers (no inlining)"
+    , externC "simplify-all-rhs" simplifyAllRhs "simplify-all on all top-level RHSs"
     , externC "encode-pass" encodePass "a single top-down encoding pass"
+    , externC "encode-distrib-app" encodeDistribApp
+        "encode (u v) ==> (encode u) (encode v)"
+    , externC "encode-lam" encodeLamR "Encode a lambda"
+    , externC "encode-var" encodeVar "Encode a variable applied to zero or more types"
     , externC "unencode" unEncode "drop encode application"
     , externC "encode" encodeR "e ==> encode e"
     , externC "decode" decodeR "e ==> decode e"
     , externC "recode" recodeR "e ==> recode e"
-    , externC "encode-distrib-app" encodeDistribApp
-        "encode (u v) ==> (encode u) (encode v)"
-    , externC "encode-lam" encodeLamR "Encode a lambda"
     , externC "super-inline" superInlineR "Transitive inlining with bash"
     , externC "squash-code" squashCode "super-inline on encode-related"
 --     , externC "unfolds" unfolds "Misc unfoldings for type encoding"

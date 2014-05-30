@@ -67,8 +67,7 @@ import HERMIT.Extras
   , varLitE, uqVarName, typeEtaLong, simplifyE
   , anytdE, anybuE, inAppTys, isAppTy, letFloatToProg , concatProgs
   , rejectR , rejectTypeR
-  , simplifyExprR, showPprT
-  , TransformC, RewriteC, externC
+  , simplifyExprR, showPprT, externC
   )
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 
@@ -85,13 +84,13 @@ import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 observing :: Ex.Observing
 observing = False
 
-observeR' :: InCoreTC t => String -> RewriteC t
+observeR' :: InCoreTC t => String -> RewriteH t
 observeR' = Ex.observeR' observing
 
-triesL :: InCoreTC t => [(String,RewriteC t)] -> RewriteC t
+triesL :: InCoreTC t => [(String,RewriteH t)] -> RewriteH t
 triesL = Ex.triesL observing
 
--- labeled :: InCoreTC t => (String, RewriteC t) -> RewriteC t
+-- labeled :: InCoreTC t => (String, RewriteH t) -> RewriteH t
 -- labeled = Ex.labeled observing
 
 {--------------------------------------------------------------------
@@ -101,17 +100,17 @@ triesL = Ex.triesL observing
 lamName :: Unop String
 lamName = ("LambdaCCC.Lambda." ++)
 
--- findIdE :: String -> TransformC a Id
+-- findIdE :: String -> TransformH a Id
 -- findIdE = findIdT . lamName
 
-findTyConE :: String -> TransformC a TyCon
+findTyConE :: String -> TransformH a TyCon
 findTyConE = findTyConT . lamName
 
 appsE :: String -> [Type] -> [CoreExpr] -> TransformU CoreExpr
 appsE = apps' . lamName
 
 -- -- | Uncall a named function
--- unCallE :: String -> TransformC CoreExpr [CoreExpr]
+-- unCallE :: String -> TransformH CoreExpr [CoreExpr]
 -- unCallE = unCall . lamName
 
 -- | Uncall a named function
@@ -122,7 +121,7 @@ unCallE1 = unCall1 . lamName
 appsE1 :: String -> [Type] -> CoreExpr -> TransformU CoreExpr
 appsE1 str ts e = appsE str ts [e]
 
--- callNameLam :: String -> TransformC CoreExpr (CoreExpr, [CoreExpr])
+-- callNameLam :: String -> TransformH CoreExpr (CoreExpr, [CoreExpr])
 -- callNameLam = callNameT . lamName
 
 -- Some names
@@ -140,12 +139,12 @@ epS :: String
 epS = "EP"
 
 -- t --> EP t
-mkEP :: TransformC a Type
+mkEP :: TransformH a Type
 mkEP = do epTC <- findTyConE epS
           return (TyConApp epTC [])
 
 -- t --> EP t
-epOf :: Type -> TransformC a Type
+epOf :: Type -> TransformH a Type
 epOf t = flip mkAppTy t <$> mkEP
 
 -- epOf t = do epTC <- findTyConE epS
@@ -248,7 +247,7 @@ appArgs rf rx = appAllR (appAllR idR rf) rx
 -- reifyApps =
 --   unReify >>> callSplitT >>> arr (\ (f,ts,es) -> ((f,ts),es)) >>> reifyCall
 
--- reifyCall :: TransformC ((CoreExpr,[Type]), [CoreExpr]) CoreExpr
+-- reifyCall :: TransformH ((CoreExpr,[Type]), [CoreExpr]) CoreExpr
 -- reifyCall = reifyR 
 
 -- TODO: Use arr instead of (constT (return ...))
@@ -348,11 +347,11 @@ reifyRhs nm =
        Let (NonRec v reified) (mkLams tvs evald)
 
 
-reifyDef :: RewriteC CoreBind
+reifyDef :: RewriteH CoreBind
 reifyDef = do NonRec v _ <- idR
               nonRecAllR idR (reifyRhs (uqVarName v))
 
-reifyProg :: RewriteC CoreProg
+reifyProg :: RewriteH CoreProg
 reifyProg = progBindsT (const (tryR reifyDef >>> letFloatToProg)) concatProgs
 
 #else
@@ -374,15 +373,15 @@ reifyRhs = inTyLams $
              unlessDict >>> unlessEval >>> unlessTC "IO" >>> unlessTC epS >>>
              reifyR >>> evalR
 
-reifyDef :: RewriteC CoreBind
+reifyDef :: RewriteH CoreBind
 reifyDef = nonRecAllR idR reifyRhs
 
-reifyProg :: RewriteC CoreProg
+reifyProg :: RewriteH CoreProg
 reifyProg = progBindsAnyR (const reifyDef)
 
 #endif
 
-reifyModGuts :: RewriteC ModGuts
+reifyModGuts :: RewriteH ModGuts
 reifyModGuts = modGutsR reifyProg
 
 inlineR' :: ReExpr

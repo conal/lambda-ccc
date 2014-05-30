@@ -11,27 +11,8 @@ set-pp-coercion Abstract
 -- set-pp-type     Omit
 -- set-pp-coercion Omit
 
--- occurrence-of recode ; up ; up ; up
-
--- any-td squash-code
-
--- try encode-simplify
-
 down  -- to definitions
 
--- rhs-of e
--- try encode-simplify
--- top ; down -- to prog
--- try dump-stash
-
--- try (any-td drop-stashed-let)
-
--- try simplify  -- For dictionaries
--- down -- past cast
-
--- recode
--- try encode-simplify
-
--- encode t d ...
--- down  -- encode t d
--- super-inline
+encode-pass
+try dump-stash
+try simplify-all-rhs
