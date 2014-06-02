@@ -30,6 +30,7 @@ import Data.Functor ((<$),(<$>))
 import Control.Applicative (liftA2)
 import Data.Monoid (mempty)
 import Data.List (intercalate)
+import qualified Data.Set as S
 
 -- GHC
 import PrelNames (eitherTyConName)
@@ -108,11 +109,35 @@ memoR = id
 -- | Combine `castFloatLamR` and `castCastR`
 castLamCastR :: ReExpr
 castLamCastR = castAllR castLamsFloatR id >>> castCastR
--- castLamCastR = castAllR castFloatLamR id >>> castCastR
 
 -- | Float a cast through nested lambdas
 castLamsFloatR :: ReExpr
 castLamsFloatR = tryR (lamAllR id castLamsFloatR) >>> castFloatLamR
+
+-- | (\ x :: a -> e)  ==>
+--   cast (\ x' :: a' -> e[x:= cast x' (sym co)]) (co -> <b>)
+-- where all of the occurrences of x in e look like cast x' co.
+lamCastVarR :: ReExpr
+lamCastVarR =
+  do Lam x body <- id
+     Just co <- return (castOccsSame x body)
+     let co' = mkSymCo co
+     x' <- constT $ newIdH (uqVarName x ++ "'") (pSnd (coercionKind co))
+     let sub = subst [(x, Var x' `mkCast` co')]
+     return $
+       Lam x' (sub body) `mkCast`
+         mkFunCo repr co' (mkReflCo repr (exprType' body))
+
+-- | Combine `lamCastVarR` and `castCastR`
+lamCastVarCastR :: ReExpr
+lamCastVarCastR = castAllR lamCastVarR id >>> castCastR
+
+-- | \ x :: () -> f (e :: ())  ==>  f
+etaReduceUnitR :: ReExpr
+etaReduceUnitR =
+  lamT (acceptR (isUnitTy . varType))
+       (appT id (notM isTypeE >> acceptR (isUnitTy . exprType)) const)
+       (flip const)
 
 {--------------------------------------------------------------------
     Observing
@@ -398,15 +423,28 @@ squashCode =
     Encode transformations
 --------------------------------------------------------------------}
 
--- | Is a variable applied to zero or more types
-isVarTyAppsT :: FilterE
-isVarTyAppsT = isVarT <+ appT isVarTyAppsT isTypeE mempty
+-- | Is a variable applied to zero or more types and dictionaries
+isVarTyDictAppsT :: FilterE
+isVarTyDictAppsT =
+  setFailMsg "not a variable applied to types and dictionaries" $
+  isVarT <+ appT isVarTyDictAppsT (isTypeE <+ isDictE) mempty
 
--- isVarTyAppsT = do { (Var _,_,[]) <- callSplitT ; return () }
+-- isVarTyDictAppsT = do { (Var _,_,[]) <- callSplitT ; return () }
+
+isPrim :: Id -> Bool
+isPrim = flip S.member primNames . uqVarName
+ where
+   primNames :: S.Set String
+   primNames = S.fromList
+     [ "not", "||" ]  -- for now
+
+-- TODO: Add prims
+-- TODO: Use fqVarName
 
 encodeVar :: ReExpr
-encodeVar = (unEncode >>> isVarTyAppsT) >>
-            appAllR superInlineSimplifyR id
+encodeVar = (unEncode >>> isVarTyDictAppsT) >>
+            appAllR superInlineSimplifyR
+                    (tryR (unfoldPredR (flip (const (not . isPrim)))))
 
 -- encodeVar =
 --   inEncode $
@@ -499,6 +537,7 @@ simplifiers =
   , watchR "letSubstOneOccR" letSubstOneOccR
   -- , watchR "caseReduceR" (caseReduceR False)  -- let rather than subst  ??
   -- , watchR "castFloatCaseR" castFloatCaseR
+  , watchR "etaReduceUnitR" etaReduceUnitR
   , watchR "caseNoVarR" caseNoVarR
   , watchR "inlineWorkerR" inlineWorkerR
   -- Casts
@@ -506,6 +545,8 @@ simplifiers =
   , watchR "pairCastR" pairCastR
   , watchR "castLamCastR" castLamCastR
   , watchR "castFloatAppR'" castFloatAppR'
+  -- , watchR "lamCastVarR" lamCastVarR  -- loops with castLamCastR. specialize.
+--  , watchR "lamCastVarCastR" lamCastVarCastR
   -- , watchR "castFloatLamR" castFloatLamR
   -- , watchR "betaReduceCastR" betaReduceCastR
   -- , watchR "lamFloatCastR" lamFloatCastR
@@ -570,6 +611,7 @@ externals =
     , externC "simplify-all" simplifyAll "Bash with normalization simplifiers (no inlining)"
     , externC "simplify-all-rhs" simplifyAllRhs "simplify-all on all top-level RHSs"
     , externC "encode-pass" encodePass "a single top-down encoding pass"
+    , externC "one-encode" oneEncode "a single encoding step"
     , externC "encode-distrib-app" encodeDistribApp
         "encode (u v) ==> (encode u) (encode v)"
     , externC "encode-lam" encodeLamR "Encode a lambda"
@@ -587,7 +629,12 @@ externals =
     , externC "cast-lam-cast" castLamCastR "combine cast-float-lam and cast-cast"
     , externC "cast-lams-float" castLamsFloatR
        "Float a cast through nested lambdas"
+    , externC "lam-cast-var" lamCastVarR "move casts from bound variables"
+    , externC "lam-cast-var-cast" lamCastVarCastR
+       "move casts from bound variables in lambda when cast"
     -- Move to HERMIT.Extras:
+    , externC "eta-reduce-unit" etaReduceUnitR
+        "\\ x :: () -> f (e :: ())  ==>  f"
     , externC "let-subst-one-occ" letSubstOneOccR
         "letSubstR if at most one occurrence"
     , externC "dump-stash" dumpStashR "Dump the stash into the program"
