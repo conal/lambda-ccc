@@ -107,7 +107,9 @@ PrimEncode(Int)
 RepEncode(Pair a, a :* a, toP, fromP)
 
 RepEncode(Vec Z a, Unit, \ () -> ZVec, \ ZVec -> ())
-RepEncode(Vec (S n) a, a :* Vec n a, uncurry (:<), unConsV)
+RepEncode(Vec (S n) a, a :* Vec n a, (\ (a,b) -> a :< b), unConsV)
+-- RepEncode(Vec (S n) a, a :* Vec n a, uncurry (:<), unConsV)
+-- The non-lazy pattern match gives tighter code than uncurry
 
 RepEncode(Tree Z a, a, toL, unL)
 RepEncode(Tree (S n) a, Pair (Tree n a), toB, unB)
