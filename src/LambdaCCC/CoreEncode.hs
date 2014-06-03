@@ -26,6 +26,7 @@ import qualified Prelude
 
 import Control.Category (id,(.),(>>>))
 import Control.Arrow (arr)
+import Control.Monad (unless)
 import Data.Functor ((<$),(<$>))
 import Control.Applicative (liftA2)
 import Data.Monoid (mempty)
@@ -80,7 +81,6 @@ memoDict = -- traceR "memoDict" .
                              constT (saveDef lab (Def v dict))
                              return (Let (NonRec v dict) (Var v))
 
-
 -- Memoize a transformation. Don't introduce a let binding (for later floating),
 -- which would interfere with additional simplification.
 memoR :: Unop ReExpr
@@ -102,9 +102,9 @@ memoR = id
 
 #endif
 
--- -- | 'betaReduceR' but using 'castFloatAppR'' if needed to reveal a redex.
--- betaReduceCastR :: ReExpr
--- betaReduceCastR = castFloatAppR' >>> castAllR betaReduceR id
+-- | 'betaReduceR' but using 'castFloatAppR'' if needed to reveal a redex.
+betaReduceCastR :: ReExpr
+betaReduceCastR = castFloatAppR' >>> castAllR betaReduceR id
 
 -- | Combine `castFloatLamR` and `castCastR`
 castLamCastR :: ReExpr
@@ -119,6 +119,7 @@ castLamsFloatR = tryR (lamAllR id castLamsFloatR) >>> castFloatLamR
 -- where all of the occurrences of x in e look like cast x' co.
 lamCastVarR :: ReExpr
 lamCastVarR =
+  anytdE castElimSymR .
   do Lam x body <- id
      Just co <- return (castOccsSame x body)
      let co' = mkSymCo co
@@ -132,12 +133,134 @@ lamCastVarR =
 lamCastVarCastR :: ReExpr
 lamCastVarCastR = castAllR lamCastVarR id >>> castCastR
 
+-- An alternative to lamCastVarR
+
+-- | (\ x -> e)  ==>  (\ x' -> e [x := x' `cast` sym co]) `cast` (sym co -> <b>)
+-- where :: a, e :: b, normalizeTypeT r a --> (co,a'), x' :: a'
+lamNormalizeVarR :: Role -> ReExpr
+lamNormalizeVarR r =
+  do Lam x e <- id
+     guardMsg (not (isTyVar x)) "lamNormalizeVarR: type lambda"
+     let a = varType  x
+     (co,a') <- normalizeTypeT r $* a
+     guardMsg (not (isReflCo co)) "lamNormalizeVarR: already normal"
+#if 0
+     aStr  <- showPprT $* a
+     aStr' <- showPprT $* a'
+     _ <- traceR ("lamNormalizeVarR: " ++ aStr ++ " --> " ++ aStr')
+#endif
+     let co' = mkSymCo co
+     x' <- constT $ newIdH (uqVarName x ++ "'") a'
+     return $
+       Lam x' (subst [(x, Var x' `mkCast` co')] e)
+        `mkCast` (mkFunCo r co' (mkReflCo r (exprType e)))
+
 -- | \ x :: () -> f (e :: ())  ==>  f
 etaReduceUnitR :: ReExpr
+
 etaReduceUnitR =
-  lamT (acceptR (isUnitTy . varType))
-       (appT id (notM isTypeE >> acceptR (isUnitTy . exprType)) const)
-       (flip const)
+  do Lam x (App e x') <- id
+     unless (isUnitTy ( varType x )) $
+       do tyStr <- showPprT $* varType x
+          fail $ "etaReduceUnitR: Bound variable of type " ++ tyStr
+     guardMsg (isUnitTy (exprType x')) "etaReduceUnitR: Argument not of unit type"
+     return e
+
+-- etaReduceUnitR =
+--   do Lam x (App e x') <- id
+--      guardMsg (isUnitTy ( varType x )) "etaReduceUnitR: Bound variable not of unit type"
+--      guardMsg (isUnitTy (exprType x')) "etaReduceUnitR: Argument not of unit type"
+--      return e
+
+-- etaReduceUnitR =
+--   lamT (acceptR (isUnitTy . varType))
+--        (appT id (notM isTypeE >> acceptR (isUnitTy . exprType)) const)
+--        (flip const)
+
+-- | (co -> co') ==> (co,co')
+unFunCo_maybe :: Coercion -> Maybe (Coercion,Coercion)
+unFunCo_maybe (TyConAppCo _r t [co,co']) | isFunTyCon t = Just (co,co')
+-- Cheat:
+unFunCo_maybe _                                         = Nothing
+
+-- | (\ x -> e) `cast` (co -> co')  ==>
+--   (\ x' -> e [x := x' `cast` sym co] `cast` co')
+castIntoLamR :: ReExpr
+castIntoLamR = do Lam x e `Cast` (unFunCo_maybe -> Just (co,co')) <- id
+                  x' <- constT (newIdH (uqVarName x ++ "'") (coercionDom co))
+                  let e' = subst [(x, Var x' `mkCast` SymCo co)] e
+                  return $ Lam x' (e' `mkCast` co')
+
+-- | (\ a -> e) `cast` (forall a. co)  ==>  (\ a -> e `cast` co)
+castIntoTyLamR :: ReExpr
+castIntoTyLamR =
+  do Lam a e `Cast` ForAllCo a' co <- id
+     let e' | a == a'   = e
+            | otherwise = subst [(a, Var a')] e
+     return $
+       Lam a' (e' `mkCast` co)
+
+-- | u v `cast` co  ==>  (u `cast` (refl -> co)) v
+castIntoAppR :: ReExpr
+castIntoAppR = do ty <- exprTypeT
+                  App u v `Cast` co <- id
+                  let role  = coercionRole co
+                      funCo = mkFunCo role (mkReflCo role ty) co
+                  return $ App (u `mkCast` funCo) v
+
+coercionDom, coercionRan :: Coercion -> Type
+coercionDom = pFst . coercionKind
+coercionRan = pSnd . coercionKind
+
+-- | (let b in e) `cast` co  ==>  let b in e `cast` co
+castIntoLetR :: ReExpr
+castIntoLetR =
+  do Let b e `Cast` co <- id
+     return $ Let b (e `mkCast` co)
+
+-- | cast (case s of p -> e) co ==> case s of p -> cast e co
+-- (Alias for 'caseFloatCastR')
+castIntoCaseR :: ReExpr
+castIntoCaseR = caseFloatCastR
+
+-- | (,) ta' tb' (a `cast` coa) (b `cast` cob)  ==>
+--   (,) ta tb a b `cast` coab
+--  where `coa :: ta ~R ta'`, `cob :: tb ~R tb'`, and
+--  `coab :: (ta,tb) ~R (ta',tb')`.
+castIntoPairR :: ReExpr
+castIntoPairR =
+  do ab' <- unPairR
+     case ab' of
+       (Cast a coa,Cast b cob) ->
+         return $
+           Cast (mkCoreTup [a,b])
+                (mkTyConAppCo repr pairTyCon [coa,cob])
+       (a,Cast b cob) ->
+         return $
+           Cast (mkCoreTup [a,b])
+                (mkTyConAppCo repr pairTyCon [refl a,cob])
+       (Cast a coa,b) ->
+         return $
+           Cast (mkCoreTup [a,b])
+                (mkTyConAppCo repr pairTyCon [coa,refl b])
+       _ -> fail "castIntoPairR pair of non-casts"
+ where
+   refl = mkReflCo repr . exprType
+
+-- TODO: Refactor
+-- TODO: Do I always want repr here?
+
+-- | Move cast into an expression
+castIntoR :: ReExpr
+castIntoR = isCastE >>  -- optimization
+  orR [ watchR "castIntoPairR"  castIntoPairR
+--       , watchR "castIntoAppR"   castIntoAppR
+      , watchR "castIntoLamR"   castIntoLamR
+      , watchR "castIntoTyLamR" castIntoTyLamR
+      , watchR "castIntoLetR"   castIntoLetR
+      , watchR "castIntoCaseR"  castIntoCaseR
+      , watchR "castCastR"      castCastR
+      ]
 
 {--------------------------------------------------------------------
     Observing
@@ -247,7 +370,7 @@ letSubstOneOccR = oneOccT >> letSubstR
 --------------------------------------------------------------------}
 
 superInlineR :: ReExpr
-superInlineR = -- watchR "superInlineR" $
+superInlineR = watchR "superInlineR" $
                anytdE (repeatR inlineR')
 
 -- superInlineR = watchR "superInlineR" $
@@ -444,14 +567,13 @@ isPrim = flip S.member primNames . uqVarName
 encodeVar :: ReExpr
 encodeVar = (unEncode >>> isVarTyDictAppsT) >>
             appAllR superInlineSimplifyR
-                    (tryR (unfoldPredR (flip (const (not . isPrim)))))
+                    id
+                    -- (tryR (unfoldPredR (flip (const (not . isPrim)))))
 
 -- encodeVar =
 --   inEncode $
 --     do (Var _,_,[]) <- callSplitT
 --        unfoldR >>> tryR simplifyAll
-
--- TODO: Cache!
 
 -- | encode (u v)  ==> (encode u `cast` (Encode a -> Encode b)) (encode v)
 -- where u :: a -> b, v :: a.
@@ -515,7 +637,7 @@ encoders =
   ] 
 
 oneEncode :: ReExpr
-oneEncode = orR encoders
+oneEncode = orR encoders -- >>> simplifyAll
 
 encodePass :: ReCore
 encodePass = watchR "encodePass" $
@@ -541,15 +663,21 @@ simplifiers =
   , watchR "caseNoVarR" caseNoVarR
   , watchR "inlineWorkerR" inlineWorkerR
   -- Casts
+--   , castIntoR
+
   , watchR "castCastR" castCastR
-  , watchR "pairCastR" pairCastR
+  , watchR "castIntoPairR" castIntoPairR
   , watchR "castLamCastR" castLamCastR
   , watchR "castFloatAppR'" castFloatAppR'
-  -- , watchR "lamCastVarR" lamCastVarR  -- loops with castLamCastR. specialize.
+
+  , watchR "lamNormalizeVarR" (lamNormalizeVarR repr)
+
+--   , watchR "lamCastVarR" lamCastVarR  -- loops with castLamCastR. specialize.
 --  , watchR "lamCastVarCastR" lamCastVarCastR
   -- , watchR "castFloatLamR" castFloatLamR
-  -- , watchR "betaReduceCastR" betaReduceCastR
+  , watchR "betaReduceCastR" betaReduceCastR
   -- , watchR "lamFloatCastR" lamFloatCastR
+
   ]
 #ifndef UseBash
   ++ bashSimplifiers
@@ -569,7 +697,7 @@ bashSimplifiers =
   , watchR "caseFloatAppR" caseFloatAppR
   , watchR "caseFloatCaseR" caseFloatCaseR
   , watchR "caseFloatLetR" caseFloatLetR
-  , watchR "caseFloatCastR" caseFloatCastR  -- Watch this one
+  -- , watchR "caseFloatCastR" caseFloatCastR  -- Watch this one
   , watchR "letFloatAppR" letFloatAppR
   , watchR "letFloatArgR" letFloatArgR
   , watchR "letFloatLamR" letFloatLamR
@@ -641,13 +769,22 @@ externals =
     , externC "drop-stashed-let" dropStashedLetR "..."
     , externC "cast-float-case" castFloatCaseR
         "Float cast upward through case. Inverse to 'caseFloatCastR', so don't use both rules!"
-    , externC "pair-cast" pairCastR
-        "(,) ta' tb' (a `cast` coa) (b `cast` cob) ==> (,) ta tb a b `cast` coab"
     , externC "cast-float-app'" castFloatAppR' "cast-float-app with transitivity"
     , externC "cast-cast" castCastR "Coalesce nested casts"
     , externC "un-cast-cast" unCastCastR "Uncoalesce to nested casts"
     , externC "lam-float-cast" lamFloatCastR "Float lambda through cast"
     , externC "cast-float-lam" castFloatLamR "Float cast through lambda"
+
+    , externC "cast-into" castIntoR "Move cast into expression"
+    , externC "cast-into-pair"  castIntoPairR "..."
+    , externC "cast-into-app"   castIntoAppR "..."
+    , externC "cast-into-lam"   castIntoLamR "..."
+    , externC "cast-into-tylam" castIntoTyLamR "..."
+    , externC "cast-into-let"   castIntoLetR "..."
+    , externC "cast-into-case"  castIntoCaseR "..."
+
+    , externC "lam-normalize-var" (lamNormalizeVarR repr) "..."
+
     , externC "simplify-expr" simplifyExprR "Invoke GHC's simplifyExpr"
     , externC "case-wild" caseWildR "case of wild ==> let (doesn't preserve evaluation)"
     , external "repeat" (repeatN :: Int -> Unop (RewriteH Core))
