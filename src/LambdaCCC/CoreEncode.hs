@@ -262,6 +262,17 @@ castIntoR = isCastE >>  -- optimization
       , watchR "castCastR"      castCastR
       ]
 
+-- caseReduceUnfoldsR :: Bool -> ReExpr
+-- caseReduceUnfoldsR sub = caseReduceR sub <+ onScrutineeR unfoldR
+
+-- caseReduceUnfoldsR sub = go
+--  where
+--    go = caseReduceR sub <+
+--         (onScrutineeR (unfoldR >>> tryR simplifyAll) >>> go)
+
+onScrutineeR :: Unop ReExpr
+onScrutineeR r = caseAllR r id id (const id)
+
 {--------------------------------------------------------------------
     Observing
 --------------------------------------------------------------------}
@@ -363,7 +374,10 @@ oneOccT =
 -- | 'letSubstR' in non-recursive let if there's just one occurrence of the
 -- bound variable
 letSubstOneOccR :: ReExpr
-letSubstOneOccR = oneOccT >> letSubstR
+letSubstOneOccR =
+  oneOccT >>
+  letNonRecT id (notM isEncode) id mempty >>
+  letNonRecSubstR
 
 {--------------------------------------------------------------------
     Super inlining
@@ -440,6 +454,12 @@ nonStandardE = isTypeE <+ (nonStandardTyT . arr exprType')
 
 -- TODO: If I remove Encode, standardTy can be Type -> Bool
 
+unfoldNonstandardR :: ReExpr
+unfoldNonstandardR = nonStandardE >> unfoldR
+
+unfoldNonstandardScrutR :: ReExpr
+unfoldNonstandardScrutR = caseAllR unfoldNonstandardR id id (const id)
+
 {--------------------------------------------------------------------
     Simple Encode/Encodable wrapping/unwrapping
 --------------------------------------------------------------------}
@@ -471,8 +491,8 @@ encodeR = -- nonStandardE >>
              appsE "encode" [ty] [dict,e]
 
 decodeR :: ReExpr
-decodeR = cleanupUnfoldR .
-          appAllR squashCode id .
+decodeR = -- cleanupUnfoldR .
+          -- appAllR squashCode id .
           do e    <- idR
              ty   <- unEncodeTy $* exprType e
              dict <- encodeDictT $* ty
@@ -488,10 +508,12 @@ decodeR = cleanupUnfoldR .
 
 -- Alternatively,
 
--- | e ==> recode e ==> decode (encode e), and inline & simplify decode.
+-- | e ==> recode e ==> decode (let x = encode e in x) ==> let x = encode e in decode x
 recodeR :: ReExpr
 recodeR = -- watchR "recodeR" $
-          decodeR . encodeR
+          nonStandardE >>
+          notM isDecode >>
+          letFloatArgR . decodeR . letIntroR "enc" . encodeR
 
 -- inlineDecodeR :: ReExpr
 -- inlineDecodeR = appAllR (isDecode >> squashCode) id
@@ -501,6 +523,10 @@ recodeR = -- watchR "recodeR" $
 -- recodeSquashR = watchR "recodeSquashR" $
 --                 nonStandardE >>
 --                 (recodeR >>> appAllR squashCode id)
+
+isEncode, isDecode :: FilterE
+isEncode = return () . unEncode
+isDecode = return () . unDecode
 
 -- encode a ==> a
 unEncode :: ReExpr
@@ -615,7 +641,19 @@ encodeLamR = (unEncode >>> lamT id id mempty) >>
 -- | case e of alts  ==>  case recode e of alts
 -- Warning, can loop. Must simplify.
 recodeScrutineeR :: ReExpr
-recodeScrutineeR = caseAllR recodeR id id (const id)
+recodeScrutineeR =
+  letAllR (nonRecAllR id rhs) id .
+  letFloatCaseR .
+  caseAllR recodeR id id (const id)
+ where
+   rhs = id -- simplifyAll . encodePassE
+
+-- | case (decode ...) of alts. super-inline scrutinee and case-reduce.
+-- Will kick in after recodeScrutineeR.
+decodedScrutineeR :: ReExpr
+decodedScrutineeR =
+  caseReduceR False .  -- True?
+  caseAllR (isDecode >> superInlineSimplifyR) id id (const id)
 
 -- caseAllR :: (ExtendPath c Crumb, ReadPath c Crumb, AddBindings c, Monad m)
 --          => Rewrite c m CoreExpr
@@ -633,15 +671,19 @@ encoders =
   [ watchR "encodeVar" encodeVar
   , watchR "encodeDistribApp" encodeDistribApp
   , watchR "encodeLamR" encodeLamR
-  -- , watchR "recodeScrutineeR" recodeScrutineeR
+  -- , watchR "recodeScrutineeR" recodeScrutineeR  -- or in simplifiers?
   ] 
 
 oneEncode :: ReExpr
 oneEncode = orR encoders -- >>> simplifyAll
 
-encodePass :: ReCore
-encodePass = watchR "encodePass" $
-             anytdR (promoteR oneEncode)
+encodePassE :: ReExpr
+encodePassE = watchR "encodePassR" $
+              anytdE oneEncode
+
+encodePassCore :: ReCore
+encodePassCore = watchR "encodePassRhs" $
+                 anytdR (promoteR oneEncode)
 
 -- simplifyOne :: ReExpr
 -- simplifyOne = orR simplifiers
@@ -678,6 +720,8 @@ simplifiers =
   , watchR "betaReduceCastR" betaReduceCastR
   -- , watchR "lamFloatCastR" lamFloatCastR
 
+  -- , watchR "recodeScrutineeR" recodeScrutineeR  -- or in encoders?
+  , watchR "unfoldNonstandardScrutR" unfoldNonstandardScrutR
   ]
 #ifndef UseBash
   ++ bashSimplifiers
@@ -738,7 +782,7 @@ externals =
         "Locally simplify for normalization, without inlining"
     , externC "simplify-all" simplifyAll "Bash with normalization simplifiers (no inlining)"
     , externC "simplify-all-rhs" simplifyAllRhs "simplify-all on all top-level RHSs"
-    , externC "encode-pass" encodePass "a single top-down encoding pass"
+    , externC "encode-pass" encodePassCore "a single top-down encoding pass"
     , externC "one-encode" oneEncode "a single encoding step"
     , externC "encode-distrib-app" encodeDistribApp
         "encode (u v) ==> (encode u) (encode v)"
@@ -747,11 +791,13 @@ externals =
     , externC "unencode" unEncode "drop encode application"
     , externC "encode" encodeR "e ==> encode e"
     , externC "decode" decodeR "e ==> decode e"
-    , externC "recode" recodeR "e ==> recode e"
+    , externC "recode" recodeR "e ==> recode e"         --TODO: 495
     , externC "super-inline" superInlineR "Transitive inlining with bash"
     , externC "squash-code" squashCode "super-inline on encode-related"
 --     , externC "unfolds" unfolds "Misc unfoldings for type encoding"
     , externC "recode-scrutinee" recodeScrutineeR "Recode case scrutinee"
+    , externC "decoded-scrutinee" decodedScrutineeR "case of decode"
+    , externC "unfold-nonstandard-scrut" unfoldNonstandardScrutR "..."
 --     , externC "beta-reduce-cast" betaReduceCastR 
 --         "betaReduceR but using lamFloatCastR if needed to reveal a lambda."
     , externC "cast-lam-cast" castLamCastR "combine cast-float-lam and cast-cast"
@@ -761,6 +807,8 @@ externals =
     , externC "lam-cast-var-cast" lamCastVarCastR
        "move casts from bound variables in lambda when cast"
     -- Move to HERMIT.Extras:
+--     , externC "case-reduce-unfolds" (caseReduceUnfoldsR False)
+--         "multiple unfolds on case scrutinee, followed by case-reduce"
     , externC "eta-reduce-unit" etaReduceUnitR
         "\\ x :: () -> f (e :: ())  ==>  f"
     , externC "let-subst-one-occ" letSubstOneOccR
