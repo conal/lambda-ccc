@@ -50,6 +50,30 @@ import qualified HERMIT.Extras as Ex
 import LambdaCCC.Misc ((<~))
 
 {--------------------------------------------------------------------
+    Observing
+--------------------------------------------------------------------}
+
+-- (Observing, observeR', triesL, labeled)
+
+observing :: Ex.Observing
+observing = False
+
+-- #define LintDie
+
+#ifdef LintDie
+watchR :: String -> Unop ReExpr
+watchR lab r = lintingExprR lab (labeled observing (lab,r)) -- hard error
+#else
+-- watchR lab r = labeledR lab r >>> lintExprR  -- Fail softly on core lint error.
+watchR :: Injection a CoreTC =>
+          String -> RewriteH a -> RewriteH a
+watchR lab r = labeled observing (lab,r)  -- don't lint
+#endif
+
+skipT :: Monad m => Transform c m a b
+skipT = fail "untried"
+
+{--------------------------------------------------------------------
     HERMIT tools
 --------------------------------------------------------------------}
 
@@ -143,7 +167,6 @@ lamNormalizeVarR r =
      guardMsg (not (isTyVar x)) "lamNormalizeVarR: type lambda"
      let a = varType  x
      (co,a') <- normalizeTypeT r $* a
-     guardMsg (not (isReflCo co)) "lamNormalizeVarR: already normal"
 #if 0
      aStr  <- showPprT $* a
      aStr' <- showPprT $* a'
@@ -180,16 +203,16 @@ etaReduceUnitR =
 -- | (co -> co') ==> (co,co')
 unFunCo_maybe :: Coercion -> Maybe (Coercion,Coercion)
 unFunCo_maybe (TyConAppCo _r t [co,co']) | isFunTyCon t = Just (co,co')
--- Cheat:
 unFunCo_maybe _                                         = Nothing
 
 -- | (\ x -> e) `cast` (co -> co')  ==>
 --   (\ x' -> e [x := x' `cast` sym co] `cast` co')
 castIntoLamR :: ReExpr
-castIntoLamR = do Lam x e `Cast` (unFunCo_maybe -> Just (co,co')) <- id
-                  x' <- constT (newIdH (uqVarName x ++ "'") (coercionDom co))
-                  let e' = subst [(x, Var x' `mkCast` SymCo co)] e
-                  return $ Lam x' (e' `mkCast` co')
+castIntoLamR =
+  do Lam x e `Cast` (unFunCo_maybe -> Just (co,co')) <- id
+     x' <- constT (newIdH (uqVarName x ++ "'") (coercionDom co))
+     let e' = subst [(x, Var x' `mkCast` mkSymCo co)] e
+     return $ Lam x' (e' `mkCast` co')
 
 -- | (\ a -> e) `cast` (forall a. co)  ==>  (\ a -> e `cast` co)
 castIntoTyLamR :: ReExpr
@@ -272,30 +295,6 @@ castIntoR = isCastE >>  -- optimization
 
 onScrutineeR :: Unop ReExpr
 onScrutineeR r = caseAllR r id id (const id)
-
-{--------------------------------------------------------------------
-    Observing
---------------------------------------------------------------------}
-
--- (Observing, observeR', triesL, labeled)
-
-observing :: Ex.Observing
-observing = False
-
--- #define LintDie
-
-#ifdef LintDie
-watchR :: String -> Unop ReExpr
-watchR lab r = lintingExprR lab (labeled observing (lab,r)) -- hard error
-#else
--- watchR lab r = labeledR lab r >>> lintExprR  -- Fail softly on core lint error.
-watchR :: Injection a CoreTC =>
-          String -> RewriteH a -> RewriteH a
-watchR lab r = labeled observing (lab,r)  -- don't lint
-#endif
-
-skipT :: Monad m => Transform c m a b
-skipT = fail "untried"
 
 {--------------------------------------------------------------------
     Triviality
@@ -399,6 +398,11 @@ superInlineSimplifyR = -- bracketR "superInlineSimplifyR" $
                        tryR (anytdE unshadowExprR) . simplifyAll . superInlineR
 
 -- TODO: remove the unshadowing later
+
+superInlineSimplifyEncodeR :: ReExpr
+superInlineSimplifyEncodeR =
+  do (_,[_ty,_dict]) <- callNameT (encName "encode")
+     superInlineSimplifyR
 
 {--------------------------------------------------------------------
     Standard types
@@ -592,8 +596,7 @@ isPrim = flip S.member primNames . uqVarName
 
 encodeVar :: ReExpr
 encodeVar = (unEncode >>> isVarTyDictAppsT) >>
-            appAllR superInlineSimplifyR
-                    id
+            appAllR superInlineSimplifyR id
                     -- (tryR (unfoldPredR (flip (const (not . isPrim)))))
 
 -- encodeVar =
@@ -617,9 +620,7 @@ encodeDistribApp =
 
 encodeLamR :: ReExpr
 encodeLamR = (unEncode >>> lamT id id mempty) >>
-             (cleanupUnfoldR . appAllR squashCode id)
-
--- TODO: Use legit coercion.
+             appAllR superInlineSimplifyR id
 
 -- unfolds :: ReExpr
 -- unfolds = watchR "unfolds" $
@@ -668,14 +669,16 @@ decodedScrutineeR =
 
 encoders :: [ReExpr]
 encoders =
-  [ watchR "encodeVar" encodeVar
+  [ watchR "encodeDecode" encodeDecode
+  , watchR "encodeVar" encodeVar
   , watchR "encodeDistribApp" encodeDistribApp
   , watchR "encodeLamR" encodeLamR
   -- , watchR "recodeScrutineeR" recodeScrutineeR  -- or in simplifiers?
   ] 
 
 oneEncode :: ReExpr
-oneEncode = orR encoders -- >>> simplifyAll
+oneEncode = superInlineSimplifyEncodeR    -- experiment
+-- oneEncode = orR encoders -- >>> simplifyAll
 
 encodePassE :: ReExpr
 encodePassE = watchR "encodePassR" $
@@ -705,6 +708,7 @@ simplifiers =
   , watchR "caseNoVarR" caseNoVarR
   , watchR "inlineWorkerR" inlineWorkerR
   -- Casts
+  , watchR "optimizeCastR" optimizeCastR
 --   , castIntoR
 
   , watchR "castCastR" castCastR
@@ -806,7 +810,9 @@ externals =
     , externC "lam-cast-var" lamCastVarR "move casts from bound variables"
     , externC "lam-cast-var-cast" lamCastVarCastR
        "move casts from bound variables in lambda when cast"
+    , externC "super-inline-simplify-encode" superInlineSimplifyEncodeR "..."
     -- Move to HERMIT.Extras:
+    , externC "optimize-cast" optimizeCastR "..."
 --     , externC "case-reduce-unfolds" (caseReduceUnfoldsR False)
 --         "multiple unfolds on case scrutinee, followed by case-reduce"
     , externC "eta-reduce-unit" etaReduceUnitR
