@@ -98,25 +98,25 @@ PrimEncode(Int)
 
 #define EEncTy(n,o) EncTy(n,Encode(o))
 
-#define RepEncode(n,o,wrap,unwrap) \
+#define RepEncode(n,o,unwrap,wrap) \
   instance Encodable (o) => Encodable (n) where \
     { EEncTy(n,o) ; encode = encode . (unwrap) ; decode = (wrap) . decode }
 
 -- TODO: Can we get some help from the Newtype class?
 
-RepEncode(Pair a, a :* a, toP, fromP)
+RepEncode(Pair a, a :* a, fromP, toP)
 
-RepEncode(Vec Z a, Unit, \ () -> ZVec, \ ZVec -> ())
-RepEncode(Vec (S n) a, a :* Vec n a, (\ (a,b) -> a :< b), unConsV)
--- RepEncode(Vec (S n) a, a :* Vec n a, uncurry (:<), unConsV)
+RepEncode(Vec Z a, (), \ ZVec -> (), \ () -> ZVec)
+RepEncode(Vec (S n) a, a :* Vec n a, unConsV, (\ (a,b) -> a :< b))
+-- RepEncode(Vec (S n) a, a :* Vec n a, unConsV, uncurry (:<))
 -- The non-lazy pattern match gives tighter code than uncurry
 
-RepEncode(Tree Z a, a, toL, unL)
-RepEncode(Tree (S n) a, Pair (Tree n a), toB, unB)
+RepEncode(Tree Z a, a, unL, toL)
+RepEncode(Tree (S n) a, Pair (Tree n a), unB, toB)
 
 -- Standard newtypes:
-RepEncode(Any,Bool,Any,getAny)
-RepEncode(All,Bool,All,getAll)
+RepEncode(Any,Bool,getAny,Any)
+RepEncode(All,Bool,getAll,All)
 -- etc
 
 --     Application is no smaller than the instance head
@@ -125,7 +125,7 @@ RepEncode(All,Bool,All,getAll)
 --     In the type instance declaration for ‘Encode’
 --     In the instance declaration for ‘Encodable (Any)’
 
-RepEncode(Identity a, a, Identity, runIdentity)
+RepEncode(Identity a, a, runIdentity, Identity)
 
 -- | Identity via 'encode' and decode.
 recode :: Encodable a => a -> a
