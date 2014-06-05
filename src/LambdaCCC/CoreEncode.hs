@@ -36,7 +36,7 @@ import qualified Data.Set as S
 -- GHC
 import PrelNames (eitherTyConName)
 
-import HERMIT.Core (CoreDef(..),CoreProg)
+import HERMIT.Core (CoreDef(..))
 import HERMIT.Dictionary hiding (externals) -- re-exports HERMIT.Dictionary.*
 import HERMIT.External (External,ExternalName,external,(.+),CmdTag(Loop))
 import HERMIT.GHC
@@ -56,7 +56,7 @@ import LambdaCCC.Misc ((<~))
 -- (Observing, observeR', triesL, labeled)
 
 observing :: Ex.Observing
-observing = False
+observing = True
 
 -- #define LintDie
 
@@ -99,25 +99,28 @@ caseNoVarR =
 
 #ifdef Memo
 
+bragMemo :: Bool
+bragMemo = True
+
 -- Build a dictionary for a given PredType, memoizing in the stash.
 memoDict :: TransformH PredType CoreExpr
 memoDict = -- traceR "memoDict" .
            do lab <- stashLabel
-              findDef True lab
+              findDefT bragMemo lab
                 <+ do dict <- buildDictionaryT'
                       -- Stash if non-trivial
                       ((isVarT $* dict) >> return dict)
                        <+ do v <- newIdT lab
-                             constT (saveDef lab (Def v dict))
+                             saveDefT bragMemo lab (Def v dict)
                              return (Let (NonRec v dict) (Var v))
 
 -- Memoize a transformation. Don't introduce a let binding (for later floating),
 -- which would interfere with additional simplification.
 memoR :: Unop ReExpr
 memoR r = do lab <- stashLabel
-             findDef True lab
+             findDefT bragMemo lab
                <+ do e' <- r
-                     saveDefNoFloat lab e'
+                     saveDefNoFloat bragMemo lab e'
                      return e'
 
 #else
@@ -560,6 +563,8 @@ unEncodeTy =
 inEncode :: Unop ReExpr
 inEncode = encodeR <~ unEncode
 
+-- TODO: Rework inEncode so that we don't have to build dictionaries.
+
 -- Avoid constructing a new dictionary
 -- inEncode r =
 --   unEncode >>
@@ -596,18 +601,20 @@ isPrim = flip S.member primNames . uqVarName
    primNames = S.fromList
      [ "not", "||" ]  -- for now
 
--- TODO: Add prims
+-- TODO: Extend prims
 -- TODO: Use fqVarName
 
-encodeVar :: ReExpr
-encodeVar = (unEncode >>> isVarTyDictAppsT) >>
-            appAllR superInlineSimplifyR id
-                    -- (tryR (unfoldPredR (flip (const (not . isPrim)))))
+encodeUnfold :: ReExpr
+encodeUnfold = inEncode $
+                 isVarTyDictAppsT >>
+                 unfoldPredR (flip (const (not . isPrim)))
 
--- encodeVar =
---   inEncode $
---     do (Var _,_,[]) <- callSplitT
---        unfoldR >>> tryR simplifyAll
+-- | Encode a variable applied to types and dictionaries by super-inlining the
+-- 'encode' with its type and dictionary argument, and then simplifying.
+-- Memoize the the 'encode' part and the overall result.
+encodeSuperVar :: ReExpr
+encodeSuperVar = (unEncode >>> isVarTyDictAppsT) >>
+                 memoR (simplifyAll . appAllR superInlineSimplifyR id)
 
 -- | encode (u v)  ==> (encode u `cast` (Encode a -> Encode b)) (encode v)
 -- where u :: a -> b, v :: a.
@@ -703,9 +710,9 @@ trivialDecodeCoT =
 decodeSimpleCastR :: ReExpr
 decodeSimpleCastR = unDecode >>> castT id trivialEncodeCoT const
 
--- | encode (e |> (co :: Encode a ~ a))  ==>  e
+-- | encode e |> (co :: Encode a ~ a)  ==>  e
 encodeSimpleCastR :: ReExpr
-encodeSimpleCastR = unEncode >>> castT id trivialDecodeCoT const
+encodeSimpleCastR = castT unEncode trivialDecodeCoT const
 
 {--------------------------------------------------------------------
     Put it together
@@ -714,12 +721,13 @@ encodeSimpleCastR = unEncode >>> castT id trivialDecodeCoT const
 encoders :: [ReExpr]
 encoders =
   [ watchR "encodeDecode" encodeDecode
-  , watchR "encodeVar" encodeVar
+  , watchR "decodeSimpleCastR" decodeSimpleCastR
+  , watchR "encodeSimpleCastR" encodeSimpleCastR
+  , watchR "encodeUnfold" encodeUnfold
+  , watchR "encodeSuperVar" encodeSuperVar
   , watchR "encodeDistribApp" encodeDistribApp
   , watchR "encodeLamR" encodeLamR
   -- , watchR "recodeScrutineeR" recodeScrutineeR  -- or in simplifiers?
-  , watchR "decodeSimpleCastR" decodeSimpleCastR
-  , watchR "encodeSimpleCastR" encodeSimpleCastR
   ]
 
 oneEncode :: ReExpr
@@ -727,11 +735,11 @@ oneEncode :: ReExpr
 oneEncode = orR encoders -- >>> simplifyAll
 
 encodePassE :: ReExpr
-encodePassE = watchR "encodePassR" $
+encodePassE = -- watchR "encodePassR" $
               anytdE oneEncode
 
 encodePassCore :: ReCore
-encodePassCore = watchR "encodePassRhs" $
+encodePassCore = -- watchR "encodePassRhs" $
                  anytdR (promoteR oneEncode)
 
 -- simplifyOne :: ReExpr
@@ -819,7 +827,7 @@ simplifyOne :: ReExpr
 simplifyOne = orR simplifiers
 -- simplifyOne = foldr (<+) (fail "standardize: nothing to do here") simplifiers
 
-simplifyAllRhs :: RewriteH CoreProg
+simplifyAllRhs :: ReProg
 simplifyAllRhs = progRhsAnyR simplifyAll
 
 {--------------------------------------------------------------------
@@ -840,7 +848,8 @@ externals =
     , externC "encode-distrib-app" encodeDistribApp
         "encode (u v) ==> (encode u) (encode v)"
     , externC "encode-lam" encodeLamR "Encode a lambda"
-    , externC "encode-var" encodeVar "Encode a variable applied to zero or more types"
+    , externC "encode-unfold" encodeUnfold
+        "Encode by unfolding a variable applied to zero or more types and dictionaries"
     , externC "unencode" unEncode "drop encode application"
     , externC "encode" encodeR "e ==> encode e"
     , externC "decode" decodeR "e ==> decode e"
