@@ -102,26 +102,31 @@ caseNoVarR =
 bragMemo :: Bool
 bragMemo = True
 
--- Build a dictionary for a given PredType, memoizing in the stash.
-memoDict :: TransformH PredType CoreExpr
-memoDict = -- traceR "memoDict" .
-           do lab <- stashLabel
-              findDefT bragMemo lab
-                <+ do dict <- buildDictionaryT'
-                      -- Stash if non-trivial
-                      ((isVarT $* dict) >> return dict)
-                       <+ do v <- newIdT lab
-                             saveDefT bragMemo lab (Def v dict)
-                             return (Let (NonRec v dict) (Var v))
-
 -- Memoize a transformation. Don't introduce a let binding (for later floating),
 -- which would interfere with additional simplification.
-memoR :: Unop ReExpr
+memoR :: Outputable a => Unop (TransformM c a CoreExpr)
 memoR r = do lab <- stashLabel
              findDefT bragMemo lab
                <+ do e' <- r
                      saveDefNoFloat bragMemo lab e'
                      return e'
+
+-- Build a dictionary for a given PredType, memoizing in the stash.
+memoDict :: TransformH PredType CoreExpr
+memoDict = memoR buildDictionaryT'
+
+-- Or stash it. I don't think I want to, since dictionaries get eliminated.
+
+-- memoDict = -- traceR "memoDict" .
+--            do lab <- stashLabel
+--               findDefT bragMemo lab
+--                 <+ do dict <- buildDictionaryT'
+--                       -- Stash if non-trivial
+--                       ((isVarT $* dict) >> return dict)
+--                        <+ do v <- newIdT lab
+--                              saveDefT bragMemo lab (Def v dict)
+--                              return (Let (NonRec v dict) (Var v))
+
 
 #else
 
@@ -312,7 +317,7 @@ onScrutineeR r = caseAllR r id id (const id)
 -- | Trivial expression: for now, literals, variables, casts of trivial.
 trivialExpr :: FilterE
 trivialExpr = setFailMsg "Non-trivial" $
-              isTypeE <+ isVarT <+ isLitT
+              isTypeE <+ isVarT <+ isCoercionE <+ isDictE <+ isLitT
            <+ trivialLam
            <+ castT trivialExpr id mempty
 
