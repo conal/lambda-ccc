@@ -73,8 +73,8 @@ watchR lab r = labeled observing (lab,r)  -- don't lint
 
 nowatchR :: Injection a CoreTC =>
             String -> RewriteH a -> RewriteH a
-nowatchR = watchR
--- nowatchR _ = id
+-- nowatchR = watchR
+nowatchR _ = id
 
 skipT :: Monad m => Transform c m a b
 skipT = fail "untried"
@@ -392,17 +392,17 @@ letSubstOneOccR =
 --------------------------------------------------------------------}
 
 superInlineR :: ReExpr
-superInlineR = watchR "superInlineR" $
+superInlineR = -- watchR "superInlineR" $
                anytdE (repeatR inlineR')
 
 -- superInlineR = watchR "superInlineR" $
 --                bashUsingE (inlineR' : simplifiers)
 
 inlineR' :: ReExpr
-inlineR' = nowatchR "inlineR" inlineR
+inlineR' = {- watchR "inlineR" -} inlineR
 
 superInlineSimplifyR :: ReExpr
-superInlineSimplifyR = -- bracketR "superInlineSimplifyR" $
+superInlineSimplifyR = watchR "superInlineSimplifyR" $
                        memoR $
                        tryR (anytdE unshadowExprR) . simplifyAll . superInlineR
 
@@ -830,6 +830,11 @@ simplifyOne = orR simplifiers
 simplifyAllRhs :: ReProg
 simplifyAllRhs = progRhsAnyR simplifyAll
 
+encodeDumpSimplifyR :: ReProg
+encodeDumpSimplifyR =
+  watchR "encodeDumpSimplifyR" $
+  extractR encodePassCore >>> tryR dumpStashR >>> tryR simplifyAllRhs
+
 {--------------------------------------------------------------------
     Plugin
 --------------------------------------------------------------------}
@@ -839,7 +844,9 @@ plugin = hermitPlugin (phase 0 . interactive externals)
 
 externals :: [External]
 externals =
-    [ externC "simplify-one" simplifyOne
+    [ externC "encode-dump-simplify" encodeDumpSimplifyR
+        "..."
+    , externC "simplify-one" simplifyOne
         "Locally simplify for normalization, without inlining"
     , externC "simplify-all" simplifyAll "Bash with normalization simplifiers (no inlining)"
     , externC "simplify-all-rhs" simplifyAllRhs "simplify-all on all top-level RHSs"
