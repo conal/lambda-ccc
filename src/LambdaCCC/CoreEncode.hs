@@ -618,8 +618,8 @@ encodeSuperVar = (unEncode >>> isVarTyDictAppsT) >>
 
 -- | encode (u v)  ==> (encode u `cast` (Encode a -> Encode b)) (encode v)
 -- where u :: a -> b, v :: a.
-encodeDistribApp :: ReExpr
-encodeDistribApp =
+encodeApp :: ReExpr
+encodeApp =
   do encB <- exprTypeT  -- Encode b
      unEncode >>>
        appT encodeR encodeR (\ encU encV ->
@@ -725,7 +725,7 @@ encoders =
   , watchR "encodeSimpleCastR" encodeSimpleCastR
   , watchR "encodeUnfold" encodeUnfold
   , watchR "encodeSuperVar" encodeSuperVar
-  , watchR "encodeDistribApp" encodeDistribApp
+  , watchR "encodeApp" encodeApp
   , watchR "encodeLamR" encodeLamR
   -- , watchR "recodeScrutineeR" recodeScrutineeR  -- or in simplifiers?
   ]
@@ -852,7 +852,7 @@ externals =
     , externC "simplify-all-rhs" simplifyAllRhs "simplify-all on all top-level RHSs"
     , externC "encode-pass" encodePassCore "a single top-down encoding pass"
     , externC "one-encode" oneEncode "a single encoding step"
-    , externC "encode-distrib-app" encodeDistribApp
+    , externC "encode-distrib" encodeApp
         "encode (u v) ==> (encode u) (encode v)"
     , externC "encode-lam" encodeLamR "Encode a lambda"
     , externC "encode-unfold" encodeUnfold
