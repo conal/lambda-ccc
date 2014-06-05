@@ -685,18 +685,27 @@ decodedScrutineeR =
 --          -> Rewrite c m CoreExpr
 
 
+-- | co :: a ~ Encode a
 trivialEncodeCoT :: FilterH Coercion
 trivialEncodeCoT =
   do Pair a b' <- arr coercionKind
      b <- unEncodeTy $* b'
      guardMsg (a `eqType` b) "not a ~ Encode a"
 
+-- | co :: Encode a ~ a
+trivialDecodeCoT :: FilterH Coercion
+trivialDecodeCoT =
+  do Pair b' a <- arr coercionKind
+     b <- unEncodeTy $* b'
+     guardMsg (b `eqType` a) "not Encode a ~ a"
+
 -- | decode (e |> (co :: a ~ Encode a))  ==>  e
 decodeSimpleCastR :: ReExpr
 decodeSimpleCastR = unDecode >>> castT id trivialEncodeCoT const
 
--- TODO: Dual rule for encode?
 -- | encode (e |> (co :: Encode a ~ a))  ==>  e
+encodeSimpleCastR :: ReExpr
+encodeSimpleCastR = unEncode >>> castT id trivialDecodeCoT const
 
 {--------------------------------------------------------------------
     Put it together
@@ -710,6 +719,7 @@ encoders =
   , watchR "encodeLamR" encodeLamR
   -- , watchR "recodeScrutineeR" recodeScrutineeR  -- or in simplifiers?
   , watchR "decodeSimpleCastR" decodeSimpleCastR
+  , watchR "encodeSimpleCastR" encodeSimpleCastR
   ]
 
 oneEncode :: ReExpr
