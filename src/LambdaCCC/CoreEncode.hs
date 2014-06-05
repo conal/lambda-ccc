@@ -56,7 +56,7 @@ import LambdaCCC.Misc ((<~))
 -- (Observing, observeR', triesL, labeled)
 
 observing :: Ex.Observing
-observing = True
+observing = False
 
 -- #define LintDie
 
@@ -586,13 +586,13 @@ squashCode =
     Encode transformations
 --------------------------------------------------------------------}
 
--- | Is a variable applied to zero or more types and dictionaries
-isVarTyDictAppsT :: FilterE
-isVarTyDictAppsT =
+-- | Is a variable applied to zero or more types, dictionaries, and coercions
+isVarTrivArgsT :: FilterE
+isVarTrivArgsT =
   setFailMsg "not a variable applied to types and dictionaries" $
-  isVarT <+ appT isVarTyDictAppsT (isTypeE <+ isDictE) mempty
-
--- isVarTyDictAppsT = do { (Var _,_,[]) <- callSplitT ; return () }
+  isVarT <+ appT isVarTrivArgsT isTrivE mempty
+ where
+   isTrivE = isTypeE <+ isDictE <+ isCoercionE
 
 isPrim :: Id -> Bool
 isPrim = flip S.member primNames . uqVarName
@@ -606,14 +606,14 @@ isPrim = flip S.member primNames . uqVarName
 
 encodeUnfold :: ReExpr
 encodeUnfold = inEncode $
-                 isVarTyDictAppsT >>
+                 isVarTrivArgsT >>
                  unfoldPredR (flip (const (not . isPrim)))
 
 -- | Encode a variable applied to types and dictionaries by super-inlining the
 -- 'encode' with its type and dictionary argument, and then simplifying.
 -- Memoize the the 'encode' part and the overall result.
-encodeSuperVar :: ReExpr
-encodeSuperVar = (unEncode >>> isVarTyDictAppsT) >>
+encodeVarSuper :: ReExpr
+encodeVarSuper = (unEncode >>> isVarTrivArgsT) >>
                  memoR (simplifyAll . appAllR superInlineSimplifyR id)
 
 -- | encode (u v)  ==> (encode u `cast` (Encode a -> Encode b)) (encode v)
@@ -724,7 +724,7 @@ encoders =
   , watchR "decodeSimpleCastR" decodeSimpleCastR
   , watchR "encodeSimpleCastR" encodeSimpleCastR
   , watchR "encodeUnfold" encodeUnfold
-  , watchR "encodeSuperVar" encodeSuperVar
+  , watchR "encodeVarSuper" encodeVarSuper
   , watchR "encodeApp" encodeApp
   , watchR "encodeLamR" encodeLamR
   -- , watchR "recodeScrutineeR" recodeScrutineeR  -- or in simplifiers?
@@ -857,6 +857,7 @@ externals =
     , externC "encode-lam" encodeLamR "Encode a lambda"
     , externC "encode-unfold" encodeUnfold
         "Encode by unfolding a variable applied to zero or more types and dictionaries"
+    , externC "encode-var-super" encodeVarSuper ".."
     , externC "unencode" unEncode "drop encode application"
     , externC "encode" encodeR "e ==> encode e"
     , externC "decode" decodeR "e ==> decode e"
