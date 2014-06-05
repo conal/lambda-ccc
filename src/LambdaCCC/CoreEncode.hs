@@ -68,7 +68,13 @@ watchR lab r = lintingExprR lab (labeled observing (lab,r)) -- hard error
 watchR :: Injection a CoreTC =>
           String -> RewriteH a -> RewriteH a
 watchR lab r = labeled observing (lab,r)  -- don't lint
+
 #endif
+
+nowatchR :: Injection a CoreTC =>
+            String -> RewriteH a -> RewriteH a
+nowatchR = watchR
+-- nowatchR _ = id
 
 skipT :: Monad m => Transform c m a b
 skipT = fail "untried"
@@ -176,17 +182,17 @@ lamNormalizeVarR r =
      x' <- constT $ newIdH (uqVarName x ++ "'") a'
      return $
        Lam x' (subst [(x, Var x' `mkCast` co')] e)
-        `mkCast` (mkFunCo r co' (mkReflCo r (exprType e)))
+        `mkCast` (mkFunCo r co' (mkReflCo r (exprType' e)))
 
 -- | \ x :: () -> f (e :: ())  ==>  f
 etaReduceUnitR :: ReExpr
-
 etaReduceUnitR =
   do Lam x (App e x') <- id
-     unless (isUnitTy ( varType x )) $
+     xTy' <- exprTypeT $* x'  -- fail if x' is Type t
+     guardMsg (isUnitTy xTy') "etaReduceUnitR: Argument not of unit type"
+     unless (isUnitTy (varType x)) $
        do tyStr <- showPprT $* varType x
           fail $ "etaReduceUnitR: Bound variable of type " ++ tyStr
-     guardMsg (isUnitTy (exprType x')) "etaReduceUnitR: Argument not of unit type"
      return e
 
 -- etaReduceUnitR =
@@ -390,7 +396,7 @@ superInlineR = watchR "superInlineR" $
 --                bashUsingE (inlineR' : simplifiers)
 
 inlineR' :: ReExpr
-inlineR' = watchR "inlineR" inlineR
+inlineR' = nowatchR "inlineR" inlineR
 
 superInlineSimplifyR :: ReExpr
 superInlineSimplifyR = -- bracketR "superInlineSimplifyR" $
@@ -514,8 +520,7 @@ decodeR = -- cleanupUnfoldR .
 
 -- | e ==> recode e ==> decode (let x = encode e in x) ==> let x = encode e in decode x
 recodeR :: ReExpr
-recodeR = -- watchR "recodeR" $
-          nonStandardE >>
+recodeR = nonStandardE >>
           notM isDecode >>
           letFloatArgR . decodeR . letIntroR "enc" . encodeR
 
@@ -618,9 +623,25 @@ encodeDistribApp =
            in
              App (Cast encU co) encV)
 
+-- encodeLamR :: ReExpr
+-- encodeLamR = (unEncode >>> lamT id id mempty) >>
+--              appAllR superInlineSimplifyR id
+
+-- | encode (\ x :: a -> e :: b)  ==>
+--   \ x' :: Encode a -> encode (e[x := decode x'])
+-- via a few unfolds and simplifications.
 encodeLamR :: ReExpr
-encodeLamR = (unEncode >>> lamT id id mempty) >>
-             appAllR superInlineSimplifyR id
+encodeLamR = (unEncode >>> lamT id id mempty) >>  -- check for encode (\ x -> e)
+    simplifyAll
+  . onetdE (unfoldNameR (encName "-->"))
+  . unfoldR                        -- $fEncodable(->)_$cencode
+  . simplifyE . unfoldR            -- encode
+
+--    encode f
+-- == $fEncodable(->)_$cencode f
+-- == (decode --> encode) f
+-- == encode . f . decode
+-- == \ y -> encode (f (decode y)).
 
 -- unfolds :: ReExpr
 -- unfolds = watchR "unfolds" $
@@ -663,6 +684,20 @@ decodedScrutineeR =
 --          -> (Int -> Rewrite c m CoreAlt)
 --          -> Rewrite c m CoreExpr
 
+
+trivialEncodeCoT :: FilterH Coercion
+trivialEncodeCoT =
+  do Pair a b' <- arr coercionKind
+     b <- unEncodeTy $* b'
+     guardMsg (a `eqType` b) "not a ~ Encode a"
+
+-- | decode (e |> (co :: a ~ Encode a))  ==>  e
+decodeSimpleCastR :: ReExpr
+decodeSimpleCastR = unDecode >>> castT id trivialEncodeCoT const
+
+-- TODO: Dual rule for encode?
+-- | encode (e |> (co :: Encode a ~ a))  ==>  e
+
 {--------------------------------------------------------------------
     Put it together
 --------------------------------------------------------------------}
@@ -674,11 +709,12 @@ encoders =
   , watchR "encodeDistribApp" encodeDistribApp
   , watchR "encodeLamR" encodeLamR
   -- , watchR "recodeScrutineeR" recodeScrutineeR  -- or in simplifiers?
-  ] 
+  , watchR "decodeSimpleCastR" decodeSimpleCastR
+  ]
 
 oneEncode :: ReExpr
-oneEncode = superInlineSimplifyEncodeR    -- experiment
--- oneEncode = orR encoders -- >>> simplifyAll
+-- oneEncode = superInlineSimplifyEncodeR    -- experiment
+oneEncode = orR encoders -- >>> simplifyAll
 
 encodePassE :: ReExpr
 encodePassE = watchR "encodePassR" $
@@ -692,40 +728,43 @@ encodePassCore = watchR "encodePassRhs" $
 -- simplifyOne = orR simplifiers
 -- -- simplifyOne = foldr (<+) (fail "standardize: nothing to do here") simplifiers
 
+
+
 #define UseBash
 
 simplifyAll :: ReExpr
 
 simplifiers :: [ReExpr]
 simplifiers =
-  [ watchR "letElimTrivialR" letElimTrivialR
-  -- , watchR "betaReduceTrivial" betaReduceTrivial
-  , watchR "letElimR" letElimR   -- removed unused bindings after inlining
-  , watchR "letSubstOneOccR" letSubstOneOccR
-  -- , watchR "caseReduceR" (caseReduceR False)  -- let rather than subst  ??
-  -- , watchR "castFloatCaseR" castFloatCaseR
-  , watchR "etaReduceUnitR" etaReduceUnitR
-  , watchR "caseNoVarR" caseNoVarR
-  , watchR "inlineWorkerR" inlineWorkerR
+  [ nowatchR "letElimTrivialR" letElimTrivialR
+  -- , nowatchR "betaReduceTrivial" betaReduceTrivial
+  , nowatchR "letElimR" letElimR   -- removed unused bindings after inlining
+  , nowatchR "letSubstOneOccR" letSubstOneOccR
+  -- , nowatchR "caseReduceR" (caseReduceR False)  -- let rather than subst  ??
+  -- , nowatchR "castFloatCaseR" castFloatCaseR
+  , nowatchR "etaReduceUnitR" etaReduceUnitR
+  , nowatchR "caseNoVarR" caseNoVarR
+  , nowatchR "inlineWorkerR" inlineWorkerR
   -- Casts
-  , watchR "optimizeCastR" optimizeCastR
+  , nowatchR "optimizeCastR" optimizeCastR
 --   , castIntoR
 
-  , watchR "castCastR" castCastR
-  , watchR "castIntoPairR" castIntoPairR
-  , watchR "castLamCastR" castLamCastR
-  , watchR "castFloatAppR'" castFloatAppR'
+  , nowatchR "castCastR" castCastR
+  , nowatchR "castIntoPairR" castIntoPairR
+  , nowatchR "castLamCastR" castLamCastR
+  , nowatchR "castFloatAppR'" castFloatAppR'
 
-  , watchR "lamNormalizeVarR" (lamNormalizeVarR repr)
+  , nowatchR "lamNormalizeVarR" (lamNormalizeVarR repr)
 
---   , watchR "lamCastVarR" lamCastVarR  -- loops with castLamCastR. specialize.
---  , watchR "lamCastVarCastR" lamCastVarCastR
-  -- , watchR "castFloatLamR" castFloatLamR
-  , watchR "betaReduceCastR" betaReduceCastR
-  -- , watchR "lamFloatCastR" lamFloatCastR
+--   , nowatchR "lamCastVarR" lamCastVarR  -- loops with castLamCastR. specialize.
+--  , nowatchR "lamCastVarCastR" lamCastVarCastR
+  -- , nowatchR "castFloatLamR" castFloatLamR
+  , nowatchR "betaReduceCastR" betaReduceCastR
+  -- , nowatchR "lamFloatCastR" lamFloatCastR
 
-  -- , watchR "recodeScrutineeR" recodeScrutineeR  -- or in encoders?
-  , watchR "unfoldNonstandardScrutR" unfoldNonstandardScrutR
+  -- , nowatchR "recodeScrutineeR" recodeScrutineeR  -- or in encoders?
+
+  -- , nowatchR "unfoldNonstandardScrutR" unfoldNonstandardScrutR
   ]
 #ifndef UseBash
   ++ bashSimplifiers
@@ -733,35 +772,35 @@ simplifiers =
 -- From bashComponents.
 bashSimplifiers :: [ReExpr]
 bashSimplifiers =
-  [ watchR "betaReduceR" betaReduceR
-  , watchR "(caseReduceR True)" (caseReduceR True)
-  , watchR "(caseReduceIdR True)" (caseReduceIdR True)
-  , watchR "caseElimSeqR" caseElimSeqR
-  , watchR "unfoldBasicCombinatorR" unfoldBasicCombinatorR
-  , watchR "inlineCaseAlternativeR" inlineCaseAlternativeR
-  , watchR "etaReduceR" etaReduceR
+  [ nowatchR "betaReduceR" betaReduceR
+  , nowatchR "(caseReduceR True)" (caseReduceR True)
+  , nowatchR "(caseReduceIdR True)" (caseReduceIdR True)
+  , nowatchR "caseElimSeqR" caseElimSeqR
+  , nowatchR "unfoldBasicCombinatorR" unfoldBasicCombinatorR
+  , nowatchR "inlineCaseAlternativeR" inlineCaseAlternativeR
+  , nowatchR "etaReduceR" etaReduceR
   -- letNonRecSubstSafeR was undoing my dictionary `let` bindings.
-  -- , watchR "letNonRecSubstSafeR" letNonRecSubstSafeR
-  , watchR "caseFloatAppR" caseFloatAppR
-  , watchR "caseFloatCaseR" caseFloatCaseR
-  , watchR "caseFloatLetR" caseFloatLetR
-  -- , watchR "caseFloatCastR" caseFloatCastR  -- Watch this one
-  , watchR "letFloatAppR" letFloatAppR
-  , watchR "letFloatArgR" letFloatArgR
-  , watchR "letFloatLamR" letFloatLamR
-  , watchR "letFloatLetR" letFloatLetR
-  , watchR "letFloatCaseR" letFloatCaseR
-  , watchR "letFloatCastR" letFloatCastR
-  , watchR "castElimReflR" castElimReflR
-  , watchR "castElimSymR" castElimSymR
+  -- , nowatchR "letNonRecSubstSafeR" letNonRecSubstSafeR
+  , nowatchR "caseFloatAppR" caseFloatAppR
+  , nowatchR "caseFloatCaseR" caseFloatCaseR
+  , nowatchR "caseFloatLetR" caseFloatLetR
+  -- , nowatchR "caseFloatCastR" caseFloatCastR  -- Watch this one
+  , nowatchR "letFloatAppR" letFloatAppR
+  , nowatchR "letFloatArgR" letFloatArgR
+  , nowatchR "letFloatLamR" letFloatLamR
+  , nowatchR "letFloatLetR" letFloatLetR
+  , nowatchR "letFloatCaseR" letFloatCaseR
+  , nowatchR "letFloatCastR" letFloatCastR
+  , nowatchR "castElimReflR" castElimReflR
+  , nowatchR "castElimSymR" castElimSymR
   ]
 
-simplifyAll = watchR "simplifyAll" $
+simplifyAll = -- watchR "simplifyAll" $
               bashUsingE (promoteR <$> simplifiers)
 
 #else
 
-simplifyAll = watchR "simplifyAll" $
+simplifyAll = -- watchR "simplifyAll" $
               bashExtendedWithE (promoteR <$> simplifiers)
 
 #endif
@@ -801,6 +840,7 @@ externals =
 --     , externC "unfolds" unfolds "Misc unfoldings for type encoding"
     , externC "recode-scrutinee" recodeScrutineeR "Recode case scrutinee"
     , externC "decoded-scrutinee" decodedScrutineeR "case of decode"
+    , externC "unfold-nonstandard" unfoldNonstandardR "..."
     , externC "unfold-nonstandard-scrut" unfoldNonstandardScrutR "..."
 --     , externC "beta-reduce-cast" betaReduceCastR 
 --         "betaReduceR but using lamFloatCastR if needed to reveal a lambda."
