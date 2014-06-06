@@ -104,7 +104,7 @@ bragMemo = True
 
 -- Memoize a transformation. Don't introduce a let binding (for later floating),
 -- which would interfere with additional simplification.
-memoR :: Outputable a => Unop (TransformM c a CoreExpr)
+memoR :: Outputable a => Unop (TransformH a CoreExpr)
 memoR r = do lab <- stashLabel
              findDefT bragMemo lab
                <+ do e' <- r
@@ -731,17 +731,15 @@ oneEncode = orR encoders -- >>> simplifyAll
 
 encodePassE :: ReExpr
 encodePassE = -- watchR "encodePassR" $
-              anytdE oneEncode
+              anytdE (repeatR oneEncode)
 
 encodePassCore :: ReCore
 encodePassCore = -- watchR "encodePassRhs" $
-                 anytdR (promoteR oneEncode)
+                 anytdR (promoteR (repeatR oneEncode))
 
 -- simplifyOne :: ReExpr
 -- simplifyOne = orR simplifiers
 -- -- simplifyOne = foldr (<+) (fail "standardize: nothing to do here") simplifiers
-
-
 
 #define UseBash
 
