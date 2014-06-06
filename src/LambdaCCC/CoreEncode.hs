@@ -108,7 +108,7 @@ memoR :: Outputable a => Unop (TransformM c a CoreExpr)
 memoR r = do lab <- stashLabel
              findDefT bragMemo lab
                <+ do e' <- r
-                     saveDefNoFloat bragMemo lab e'
+                     saveDefNoFloatT bragMemo lab $* e'
                      return e'
 
 -- Build a dictionary for a given PredType, memoizing in the stash.
@@ -117,14 +117,14 @@ memoDict = memoR buildDictionaryT'
 
 -- Or stash it. I don't think I want to, since dictionaries get eliminated.
 
--- memoDict = -- traceR "memoDict" .
+-- memoDict' = -- traceR "memoDict" .
 --            do lab <- stashLabel
 --               findDefT bragMemo lab
 --                 <+ do dict <- buildDictionaryT'
 --                       -- Stash if non-trivial
 --                       ((isVarT $* dict) >> return dict)
 --                        <+ do v <- newIdT lab
---                              saveDefT bragMemo lab (Def v dict)
+--                              saveDefT bragMemo lab $* Def v dict
 --                              return (Let (NonRec v dict) (Var v))
 
 
@@ -290,22 +290,20 @@ castIntoPairR =
 -- | Move cast into an expression
 castIntoR :: ReExpr
 castIntoR = isCastE >>  -- optimization
-  orR [ watchR "castIntoPairR"  castIntoPairR
---       , watchR "castIntoAppR"   castIntoAppR
-      , watchR "castIntoLamR"   castIntoLamR
-      , watchR "castIntoTyLamR" castIntoTyLamR
-      , watchR "castIntoLetR"   castIntoLetR
-      , watchR "castIntoCaseR"  castIntoCaseR
-      , watchR "castCastR"      castCastR
+  orR [ nowatchR "castIntoPairR"  castIntoPairR
+--       , nowatchR "castIntoAppR"   castIntoAppR
+      , nowatchR "castIntoLamR"   castIntoLamR
+      , nowatchR "castIntoTyLamR" castIntoTyLamR
+      , nowatchR "castIntoLetR"   castIntoLetR
+      , nowatchR "castIntoCaseR"  castIntoCaseR
+      , nowatchR "castCastR"      castCastR
       ]
 
--- caseReduceUnfoldsR :: Bool -> ReExpr
--- caseReduceUnfoldsR sub = caseReduceR sub <+ onScrutineeR unfoldR
-
--- caseReduceUnfoldsR sub = go
---  where
---    go = caseReduceR sub <+
---         (onScrutineeR (unfoldR >>> tryR simplifyAll) >>> go)
+-- | Given a case scrutinee of non-standard type, case-reduce the whole
+-- expression, or unfold the scrutinee.
+caseReduceUnfoldsR :: ReExpr
+caseReduceUnfoldsR = caseT nonStandardE id id (const id) mempty >>
+                     (caseReduceR False <+ onScrutineeR unfoldR)
 
 onScrutineeR :: Unop ReExpr
 onScrutineeR r = caseAllR r id id (const id)
@@ -556,28 +554,16 @@ unDecode = unCallDE1 "decode"
 encodeDecode :: ReExpr
 encodeDecode = unEncode >>> unDecode
 
--- isEncode :: Type -> Bool
--- isEncode (TyConApp (tyConName -> name) [_]) = uqName name == "encode"
--- isEncode _                                  = False
-
 unEncodeTy :: ReType
 unEncodeTy =
   tyConApp1T (acceptR ((== "Encode") . uqName . tyConName)) id (const id)
 
 -- Rewrite inside of encode applications
 inEncode :: Unop ReExpr
-inEncode = encodeR <~ unEncode
+inEncode r = isEncode >> appArgR r  -- encode t dict e
 
--- TODO: Rework inEncode so that we don't have to build dictionaries.
-
--- Avoid constructing a new dictionary
--- inEncode r =
---   unEncode >>
---   appAllR id (appAllR id (appAllR id r))  -- encode t dict e
-
--- -- | Recognize encode with type and dictionary arguments.
--- isEncode :: FilterE
--- isEncode = unEncode >>> mempty
+appArgR :: Unop ReExpr
+appArgR = appAllR id
 
 squashCode :: ReExpr
 squashCode =
@@ -610,9 +596,19 @@ isPrim = flip S.member primNames . uqVarName
 -- TODO: Use fqVarName
 
 encodeUnfold :: ReExpr
+
+-- encodeUnfold = unEncode >>>
+--                (isVarTrivArgsT >>
+--                 unfoldPredR (flip (const (not . isPrim)))) >>>
+--                encodeR
+
 encodeUnfold = inEncode $
                  isVarTrivArgsT >>
-                 unfoldPredR (flip (const (not . isPrim)))
+                 unfoldPredR (flip (const (not . isPrim))) 
+
+-- encodeUnfold = inEncode $
+--                  isVarTrivArgsT >>
+--                  unfoldPredR (flip (const (not . isPrim)))
 
 -- | Encode a variable applied to types and dictionaries by super-inlining the
 -- 'encode' with its type and dictionary argument, and then simplifying.
@@ -655,22 +651,11 @@ encodeLamR = (unEncode >>> lamT id id mempty) >>  -- check for encode (\ x -> e)
 -- == encode . f . decode
 -- == \ y -> encode (f (decode y)).
 
--- unfolds :: ReExpr
--- unfolds = watchR "unfolds" $
---           unfoldNamesR $
---   encName <$> ["encode","recode","recode","(-->)"] ++
---   []
+-- | encode (case e of p -> rhs) ==> case e of p -> encode rhs
+encodeCaseR :: ReExpr
+encodeCaseR = unEncode >>> caseAllR id id encodeTyR (const (onAltRhs encodeR))
 
--- TODO: For more flexibility, split the transformation in two pieces:
--- 
---    (,) ta' tb (a `cast` coa) b ==> (,) ta tb a b `cast` coab
--- 
--- where `coa :: ta ~R ta'`, and `coab :: (ta,tb) ~R (ta',tb)`.
--- Similarly for tb'.
-
--- mkTyConAppCo :: Role -> TyCon -> [Coercion] -> Coercion
-
--- callNameT :: MonadCatch m => String -> Transform c m CoreExpr (CoreExpr, [CoreExpr])
+-- TODO: Reuse encode application with type and dictionary
 
 -- | case e of alts  ==>  case recode e of alts
 -- Warning, can loop. Must simplify.
@@ -719,6 +704,9 @@ decodeSimpleCastR = unDecode >>> castT id trivialEncodeCoT const
 encodeSimpleCastR :: ReExpr
 encodeSimpleCastR = castT unEncode trivialDecodeCoT const
 
+encodeCastIntoR :: ReExpr
+encodeCastIntoR = inEncode castIntoR
+
 {--------------------------------------------------------------------
     Put it together
 --------------------------------------------------------------------}
@@ -732,6 +720,8 @@ encoders =
   , watchR "encodeVarSuper" encodeVarSuper
   , watchR "encodeApp" encodeApp
   , watchR "encodeLamR" encodeLamR
+  , watchR "encodeCaseR" encodeCaseR
+--   , watchR "encodeCastIntoR" encodeCastIntoR
   -- , watchR "recodeScrutineeR" recodeScrutineeR  -- or in simplifiers?
   ]
 
@@ -770,7 +760,8 @@ simplifiers =
   , nowatchR "inlineWorkerR" inlineWorkerR
   -- Casts
   , nowatchR "optimizeCastR" optimizeCastR
---   , castIntoR
+  , castIntoR
+  , nowatchR "caseReduceUnfoldsR" caseReduceUnfoldsR  -- or in encoders?
 
   , nowatchR "castCastR" castCastR
   , nowatchR "castIntoPairR" castIntoPairR
@@ -885,8 +876,7 @@ externals =
     , externC "super-inline-simplify-encode" superInlineSimplifyEncodeR "..."
     -- Move to HERMIT.Extras:
     , externC "optimize-cast" optimizeCastR "..."
---     , externC "case-reduce-unfolds" (caseReduceUnfoldsR False)
---         "multiple unfolds on case scrutinee, followed by case-reduce"
+    , externC "case-reduce-unfolds" caseReduceUnfoldsR ".." 
     , externC "eta-reduce-unit" etaReduceUnitR
         "\\ x :: () -> f (e :: ())  ==>  f"
     , externC "let-subst-one-occ" letSubstOneOccR
