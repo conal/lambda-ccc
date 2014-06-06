@@ -596,19 +596,9 @@ isPrim = flip S.member primNames . uqVarName
 -- TODO: Use fqVarName
 
 encodeUnfold :: ReExpr
-
--- encodeUnfold = unEncode >>>
---                (isVarTrivArgsT >>
---                 unfoldPredR (flip (const (not . isPrim)))) >>>
---                encodeR
-
 encodeUnfold = inEncode $
                  isVarTrivArgsT >>
                  unfoldPredR (flip (const (not . isPrim))) 
-
--- encodeUnfold = inEncode $
---                  isVarTrivArgsT >>
---                  unfoldPredR (flip (const (not . isPrim)))
 
 -- | Encode a variable applied to types and dictionaries by super-inlining the
 -- 'encode' with its type and dictionary argument, and then simplifying.
@@ -616,6 +606,8 @@ encodeUnfold = inEncode $
 encodeVarSuper :: ReExpr
 encodeVarSuper = (unEncode >>> isVarTrivArgsT) >>
                  memoR (simplifyAll . appAllR superInlineSimplifyR id)
+
+-- TODO: More direct implementation
 
 -- | encode (u v)  ==> (encode u `cast` (Encode a -> Encode b)) (encode v)
 -- where u :: a -> b, v :: a.
@@ -630,10 +622,6 @@ encodeApp =
                     (exprType' encU) (mkFunTy encA encB)
            in
              App (Cast encU co) encV)
-
--- encodeLamR :: ReExpr
--- encodeLamR = (unEncode >>> lamT id id mempty) >>
---              appAllR superInlineSimplifyR id
 
 -- | encode (\ x :: a -> e :: b)  ==>
 --   \ x' :: Encode a -> encode (e[x := decode x'])
@@ -707,10 +695,6 @@ encodeSimpleCastR = castT unEncode trivialDecodeCoT const
 encodeCastIntoR :: ReExpr
 encodeCastIntoR = inEncode castIntoR
 
-{--------------------------------------------------------------------
-    Put it together
---------------------------------------------------------------------}
-
 encoders :: [ReExpr]
 encoders =
   [ watchR "encodeDecode" encodeDecode
@@ -724,6 +708,10 @@ encoders =
 --   , watchR "encodeCastIntoR" encodeCastIntoR
   -- , watchR "recodeScrutineeR" recodeScrutineeR  -- or in simplifiers?
   ]
+
+{--------------------------------------------------------------------
+    Put it together
+--------------------------------------------------------------------}
 
 oneEncode :: ReExpr
 -- oneEncode = superInlineSimplifyEncodeR    -- experiment
