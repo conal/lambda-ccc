@@ -58,16 +58,17 @@ import LambdaCCC.Misc ((<~))
 observing :: Ex.Observing
 observing = False
 
--- #define LintDie
+#define LintDie
 
 #ifdef LintDie
 watchR :: String -> Unop ReExpr
 watchR lab r = lintingExprR lab (labeled observing (lab,r)) -- hard error
 #else
--- watchR lab r = labeledR lab r >>> lintExprR  -- Fail softly on core lint error.
-watchR :: Injection a CoreTC =>
-          String -> RewriteH a -> RewriteH a
-watchR lab r = labeled observing (lab,r)  -- don't lint
+watchR :: String -> Unop ReExpr
+watchR lab r = labeled observing (lab,r) >>> lintExprR  -- Fail softly on core lint error.
+-- watchR :: Injection a CoreTC =>
+--           String -> RewriteH a -> RewriteH a
+-- watchR lab r = labeled observing (lab,r)  -- don't lint
 
 #endif
 
@@ -100,7 +101,7 @@ caseNoVarR =
 #ifdef Memo
 
 bragMemo :: Bool
-bragMemo = True
+bragMemo = observing
 
 -- Memoize a transformation. Don't introduce a let binding (for later floating),
 -- which would interfere with additional simplification.
@@ -598,7 +599,16 @@ isPrim = flip S.member primNames . uqVarName
 encodeUnfold :: ReExpr
 encodeUnfold = inEncode $
                  isVarTrivArgsT >>
-                 unfoldPredR (flip (const (not . isPrim))) 
+                 (unfoldPredR (flip (const (not . isPrim))) >>> tryR bashE)
+
+encodeUnfold' :: ReExpr
+encodeUnfold' =
+  (unEncode >>> isVarTrivArgsT) >>
+  memoR (watchR "encodeUnfold" encodeUnfold >>> bashEncodeSimplify)
+
+bashEncodeSimplify :: ReExpr
+bashEncodeSimplify = watchR "bashEncodeSimplify" $
+                     bashUsingE (encoders ++ simplifiers)
 
 -- | Encode a variable applied to types and dictionaries by super-inlining the
 -- 'encode' with its type and dictionary argument, and then simplifying.
@@ -606,8 +616,6 @@ encodeUnfold = inEncode $
 encodeVarSuper :: ReExpr
 encodeVarSuper = (unEncode >>> isVarTrivArgsT) >>
                  memoR (simplifyAll . appAllR superInlineSimplifyR id)
-
--- TODO: More direct implementation
 
 -- | encode (u v)  ==> (encode u `cast` (Encode a -> Encode b)) (encode v)
 -- where u :: a -> b, v :: a.
@@ -628,10 +636,10 @@ encodeApp =
 -- via a few unfolds and simplifications.
 encodeLamR :: ReExpr
 encodeLamR = (unEncode >>> lamT id id mempty) >>  -- check for encode (\ x -> e)
-    simplifyAll
+    tryR simplifyAll
   . onetdE (unfoldNameR (encName "-->"))
   . unfoldR                        -- $fEncodable(->)_$cencode
-  . simplifyE . unfoldR            -- encode
+  . appAllR (bashE . unfoldR) id   -- encode
 
 --    encode f
 -- == $fEncodable(->)_$cencode f
@@ -700,7 +708,8 @@ encoders =
   [ watchR "encodeDecode" encodeDecode
   , watchR "decodeSimpleCastR" decodeSimpleCastR
   , watchR "encodeSimpleCastR" encodeSimpleCastR
-  , watchR "encodeUnfold" encodeUnfold
+  -- , watchR "encodeUnfold" encodeUnfold
+  , watchR "encodeUnfold'" encodeUnfold'
   , watchR "encodeVarSuper" encodeVarSuper
   , watchR "encodeApp" encodeApp
   , watchR "encodeLamR" encodeLamR
@@ -800,7 +809,7 @@ simplifyAll = -- watchR "simplifyAll" $
 
 #else
 
-simplifyAll = -- watchR "simplifyAll" $
+simplifyAll = watchR "simplifyAll" $
               bashExtendedWithE (promoteR <$> simplifiers)
 
 #endif
@@ -814,7 +823,7 @@ simplifyAllRhs = progRhsAnyR simplifyAll
 
 encodeDumpSimplifyR :: ReProg
 encodeDumpSimplifyR =
-  watchR "encodeDumpSimplifyR" $
+  -- watchR "encodeDumpSimplifyR" $
   extractR encodePassCore >>> tryR dumpStashR >>> tryR simplifyAllRhs
 
 {--------------------------------------------------------------------
@@ -832,6 +841,7 @@ externals =
         "Locally simplify for normalization, without inlining"
     , externC "simplify-all" simplifyAll "Bash with normalization simplifiers (no inlining)"
     , externC "simplify-all-rhs" simplifyAllRhs "simplify-all on all top-level RHSs"
+    , externC "bash-encode-simplify" bashEncodeSimplify "..."
     , externC "encode-pass" encodePassCore "a single top-down encoding pass"
     , externC "one-encode" oneEncode "a single encoding step"
     , externC "encode-distrib" encodeApp
@@ -839,6 +849,7 @@ externals =
     , externC "encode-lam" encodeLamR "Encode a lambda"
     , externC "encode-unfold" encodeUnfold
         "Encode by unfolding a variable applied to zero or more types and dictionaries"
+    , externC "encode-unfold'" encodeUnfold' ".." 
     , externC "encode-var-super" encodeVarSuper ".."
     , externC "unencode" unEncode "drop encode application"
     , externC "encode" encodeR "e ==> encode e"
