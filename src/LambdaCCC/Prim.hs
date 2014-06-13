@@ -34,6 +34,7 @@ import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
 -- import Control.Arrow ((&&&))
 import Data.Constraint (Dict(..))
 
+import TypeUnary.Nat (Nat(..),IsNat)
 import TypeUnary.Vec (Z,S,Vec(..))  -- ,IsNat(..)
 
 import Circat.Category hiding (CondCat(..))
@@ -137,6 +138,9 @@ data Prim :: * -> * where
   InrP          :: Prim (b -> a :+ b)
   PairP         :: Prim (a -> b -> a :* b)
   CondBP        :: Prim (Bool :* (Bool :* Bool) -> Bool)  -- cond on Bool
+  -- Naturals
+  ToZeroP       :: Prim (Unit -> Nat Z)
+  SuccP         :: IsNat m => Prim (Nat m -> Nat (S m))
   -- Vectors. See Vec TODO below
   ToVecZP       :: Prim (Unit -> Vec Z a)
   UnVecZP       :: Prim (Vec Z a -> Unit)
@@ -175,6 +179,8 @@ instance Eq' (Prim a) (Prim b) where
   InrP      === InrP      = True
   PairP     === PairP     = True
   CondBP    === CondBP    = True
+  ToZeroP   === ToZeroP   = True
+  SuccP     === SuccP     = True
   ToVecZP   === ToVecZP   = True
   UnVecZP   === UnVecZP   = True
   VecSP     === VecSP     = True
@@ -204,6 +210,8 @@ instance Show (Prim a) where
   showsPrec _ ExrP      = showString "exr"
   showsPrec _ PairP     = showString "(,)"
   showsPrec _ CondBP    = showString "condBool"
+  showsPrec _ ToZeroP   = showString "toZero"
+  showsPrec _ SuccP     = showString "Succ"
   showsPrec _ ToVecZP   = showString "toVecZ"
   showsPrec _ UnVecZP   = showString "unVecZ"
   showsPrec _ VecSP     = showString "(:<)"
@@ -218,7 +226,7 @@ instance Show (Prim a) where
 
 instance Show' Prim where showsPrec' = showsPrec
 
-primArrow :: ( BiCCC k, HasUnitArrow k Lit
+primArrow :: ( BiCCCC k Lit
              , BoolCat k, MuxCat k, VecCat k, PairCat k, TreeCat k, NumCat k Int ) =>
              Prim (a :=> b) -> (a `k` b)
 primArrow NotP      = not
@@ -233,6 +241,8 @@ primArrow InlP      = inl
 primArrow InrP      = inr
 primArrow PairP     = curry id
 primArrow CondBP    = mux
+primArrow ToZeroP   = zeroA
+primArrow SuccP     = succA
 primArrow ToVecZP   = toVecZ
 primArrow UnVecZP   = unVecZ
 primArrow VecSP     = curry toVecS
@@ -246,7 +256,7 @@ primArrow UnBranchP = unB
 primArrow OopsP     = error "primArrow: Oops"
 primArrow (LitP _)  = error ("primArrow: LitP with function type?!")
 
-instance ( BiCCC k, HasUnitArrow k Lit
+instance ( BiCCCC k Lit
          , BoolCat k, MuxCat k, VecCat k, PairCat k, TreeCat k, NumCat k Int
          ) =>
          HasUnitArrow k Prim where
@@ -262,6 +272,8 @@ instance ( BiCCC k, HasUnitArrow k Lit
   unitArrow InrP      = unitFun inr
   unitArrow PairP     = unitFun (curry id)
   unitArrow CondBP    = unitFun mux
+  unitArrow ToZeroP   = unitFun zeroA
+  unitArrow SuccP     = unitFun succA
   unitArrow ToVecZP   = unitFun toVecZ
   unitArrow UnVecZP   = unitFun unVecZ
   unitArrow VecSP     = unitFun (curry toVecS)
@@ -294,6 +306,8 @@ instance Evalable (Prim a) where
   eval InrP          = Right
   eval PairP         = (,)
   eval CondBP        = mux
+  eval ToZeroP       = zeroA
+  eval SuccP         = succA
   eval ToVecZP       = toVecZ
   eval UnVecZP       = unVecZ
   eval VecSP         = (:<)
