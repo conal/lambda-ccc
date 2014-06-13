@@ -25,8 +25,6 @@ module LambdaCCC.Encode (Encodable(..),(-->),recode) where
 import Control.Arrow ((+++)) -- ,(***)
 import Data.Monoid (Any(..),All(..))
 
--- #define TreeSplit
-
 -- transformers
 import Data.Functor.Identity
 
@@ -34,11 +32,7 @@ import TypeUnary.TyNat (Z,S)
 import TypeUnary.Vec (Vec(..),unConsV)
 import Circat.Pair (Pair(..),toP,fromP)
 
-#ifdef TreeSplit
-import Circat.RTreeS
-#else
 import Circat.RTree (Tree(..),toL,unL,toB,unB)
-#endif
 
 import LambdaCCC.Misc (Unit,(:+),(:*))
 
@@ -117,30 +111,8 @@ RepEncode(Vec Z a, (), \ ZVec -> (), \ () -> ZVec)
 RepEncode(Vec (S n) a, a :* Vec n a, unConsV, (\ (a,b) -> a :< b))
 -- RepEncode(Vec (S n) a, a :* Vec n a, unConsV, uncurry (:<))
 -- The non-lazy pattern match gives tighter code than uncurry
-
-#ifdef TreeSplit
-
-type P a = (a,a)
-
-toL :: a -> Tree Z a
-toL a = L a
-
-unL :: Tree Z a -> a
-unL (L a) = a
-
-toB :: P (Tree n a) -> Tree (S n) a
-toB (l,r) = B l r
-
-unB :: Tree (S n) a -> P (Tree n a)
-unB (B l r) = (l,r) 
-
-RepEncode(Tree Z a, a, unL, toL)
-RepEncode(Tree (S n) a, P (Tree n a), unB, toB)
-
-#else
 RepEncode(Tree Z a, a, unL, toL)
 RepEncode(Tree (S n) a, Pair (Tree n a), unB, toB)
-#endif
 
 -- Standard newtypes:
 RepEncode(Any,Bool,getAny,Any)

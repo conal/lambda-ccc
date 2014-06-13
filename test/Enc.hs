@@ -38,14 +38,7 @@ import Circat.Pair (Pair(..))
 
 import TypeUnary.TyNat
 import TypeUnary.Vec
-
--- #define TreeSplit
-
-#ifdef TreeSplit
-import Circat.RTreeS
-#else
 import Circat.RTree
-#endif
 
 import LambdaCCC.Encode (Encodable(..),recode)
 
