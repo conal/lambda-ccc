@@ -30,7 +30,7 @@ import Control.Monad (unless)
 import Data.Functor ((<$),(<$>))
 import Control.Applicative (liftA2)
 import Data.Monoid (mempty)
-import Data.List (intercalate)
+import Data.List (intercalate,isPrefixOf)
 import qualified Data.Set as S
 
 -- GHC
@@ -61,21 +61,19 @@ observing = False
 #define LintDie
 
 #ifdef LintDie
-watchR :: String -> Unop ReExpr
+watchR, nowatchR :: String -> Unop ReExpr
 watchR lab r = lintingExprR lab (labeled observing (lab,r)) -- hard error
+
 #else
-watchR :: String -> Unop ReExpr
-watchR lab r = labeled observing (lab,r) >>> lintExprR  -- Fail softly on core lint error.
--- watchR :: Injection a CoreTC =>
---           String -> RewriteH a -> RewriteH a
--- watchR lab r = labeled observing (lab,r)  -- don't lint
+-- watchR :: String -> Unop ReExpr
+-- watchR lab r = labeled observing (lab,r) >>> lintExprR  -- Fail softly on core lint error.
+watchR, nowatchR :: Injection a CoreTC => String -> RewriteH a -> RewriteH a
+watchR lab r = labeled observing (lab,r)  -- don't lint
 
 #endif
 
-nowatchR :: Injection a CoreTC =>
-            String -> RewriteH a -> RewriteH a
--- nowatchR = watchR
-nowatchR _ = id
+nowatchR = watchR
+-- nowatchR _ = id
 
 skipT :: Monad m => Transform c m a b
 skipT = fail "untried"
@@ -88,6 +86,15 @@ skipT = fail "untried"
 infixl 1 >>
 (>>) :: Monad m => m () -> m b -> m b
 (>>) = (Prelude.>>)
+
+-- Turn filters into conditional identities and vice versa.
+-- Is this functionality already in HERMIT?
+
+passT :: Monad m => Transform c m a () -> Rewrite c m a
+passT t = t >> id
+
+unpassT :: Functor m => Rewrite c m a -> Transform c m a ()
+unpassT r = fmap (const ()) r
 
 -- | case e of { Con -> rhs }  ==>  rhs
 -- Warning: can gain definedness when e == _|_.
@@ -111,6 +118,25 @@ memoR r = do lab <- stashLabel
                <+ do e' <- r
                      saveDefNoFloatT bragMemo lab $* e'
                      return e'
+
+memoFloatR :: Outputable a => Label -> Unop (TransformH a CoreExpr)
+memoFloatR lab' r = do findDefT bragMemo lab
+                        <+ do e' <- r
+                              v <- newIdT lab $* exprType' e'
+                              saveDefT bragMemo lab $* Def v e'
+                              letIntroR lab $* e'
+                              -- return (Var v)  -- Experiment: no let!
+ where
+   lab = memoPrefix ++ lab'
+
+memoPrefix :: String
+memoPrefix = "memo:"
+
+isMemoName :: String -> Bool
+isMemoName = isPrefixOf memoPrefix
+
+memoVarT :: Monad m => Transform c m Var ()
+memoVarT = guardMsgM (arr (isMemoName . uqVarName)) "not memo var"
 
 -- Build a dictionary for a given PredType, memoizing in the stash.
 memoDict :: TransformH PredType CoreExpr
@@ -225,7 +251,7 @@ unFunCo_maybe _                                         = Nothing
 castIntoLamR :: ReExpr
 castIntoLamR =
   do Lam x e `Cast` (unFunCo_maybe -> Just (co,co')) <- id
-     x' <- constT (newIdH (uqVarName x ++ "'") (coercionDom co))
+     x' <- constT (newIdH (uqVarName x ++ "'") (coercionRan co))
      let e' = subst [(x, Var x' `mkCast` mkSymCo co)] e
      return $ Lam x' (e' `mkCast` co')
 
@@ -384,11 +410,11 @@ oneOccT =
      guardMsg (varOccCount v body <= 1) "oneOccT: multiple occurrences"
 
 -- | 'letSubstR' in non-recursive let if there's just one occurrence of the
--- bound variable
+-- bound variable *and* the binding isn't a memoization.
 letSubstOneOccR :: ReExpr
 letSubstOneOccR =
   oneOccT >>
-  letNonRecT id (notM isEncode) id mempty >>
+  letNonRecT (notM memoVarT) (notM isEncode) id mempty >>  -- why notM isEncode?
   letNonRecSubstR
 
 {--------------------------------------------------------------------
@@ -464,6 +490,10 @@ nonStandardTyT = notM standardTyT
 nonStandardE :: FilterE
 nonStandardE = isTypeE <+ (nonStandardTyT . arr exprType')
 
+-- | Expression has only standard sub-terms (including itself).
+allStandardE :: ReExpr
+allStandardE = alltdE (passT (standardTyT . exprTypeT))
+
 -- TODO: Maybe I just want a standard outer shell.
 
 -- TODO: Maybe use coreView instead of tcView? I think it's tcView we want,
@@ -476,6 +506,10 @@ unfoldNonstandardR = nonStandardE >> unfoldR
 
 unfoldNonstandardScrutR :: ReExpr
 unfoldNonstandardScrutR = caseAllR unfoldNonstandardR id id (const id)
+
+-- | Simple, aggressive inliner
+inlineNonPrim :: ReExpr
+inlineNonPrim = inlineMatchingPredR (not . isPrim)
 
 {--------------------------------------------------------------------
     Simple Encode/Encodable wrapping/unwrapping
@@ -604,7 +638,13 @@ encodeUnfold = inEncode $
 encodeUnfold' :: ReExpr
 encodeUnfold' =
   (unEncode >>> isVarTrivArgsT) >>
-  memoR (watchR "encodeUnfold" encodeUnfold >>> bashEncodeSimplify)
+     memoR (watchR "encodeUnfold" encodeUnfold >>> tryR bashEncodeSimplify)
+
+-- encodeUnfold' :: ReExpr
+-- encodeUnfold' =
+--   do str <- unEncode >>> (isVarTrivArgsT >> showPprT)
+--      memoFloatR (tweakLabel ("encode:"++str))
+--        (watchR "encodeUnfold" encodeUnfold >>> bashEncodeSimplify)
 
 bashEncodeSimplify :: ReExpr
 bashEncodeSimplify = watchR "bashEncodeSimplify" $
@@ -697,8 +737,9 @@ decodeSimpleCastR :: ReExpr
 decodeSimpleCastR = unDecode >>> castT id trivialEncodeCoT const
 
 -- | encode e |> (co :: Encode a ~ a)  ==>  e
+-- where e has only standard sub-terms (including itself)
 encodeSimpleCastR :: ReExpr
-encodeSimpleCastR = castT unEncode trivialDecodeCoT const
+encodeSimpleCastR = castT (allStandardE . unEncode) trivialDecodeCoT const
 
 encodeCastIntoR :: ReExpr
 encodeCastIntoR = inEncode castIntoR
@@ -738,12 +779,8 @@ encodePassCore = -- watchR "encodePassRhs" $
 -- simplifyOne = orR simplifiers
 -- -- simplifyOne = foldr (<+) (fail "standardize: nothing to do here") simplifiers
 
-#define UseBash
-
-simplifyAll :: ReExpr
-
-simplifiers :: [ReExpr]
-simplifiers =
+mySimplifiers :: [ReExpr]
+mySimplifiers =
   [ nowatchR "letElimTrivialR" letElimTrivialR
   -- , nowatchR "betaReduceTrivial" betaReduceTrivial
   , nowatchR "letElimR" letElimR   -- removed unused bindings after inlining
@@ -763,7 +800,7 @@ simplifiers =
   , nowatchR "castLamCastR" castLamCastR
   , nowatchR "castFloatAppR'" castFloatAppR'
 
-  , nowatchR "lamNormalizeVarR" (lamNormalizeVarR repr)
+  , nowatchR "lamNormalizeVarR" (lamNormalizeVarR repr) -- competes with castIntoLamR
 
 --   , nowatchR "lamCastVarR" lamCastVarR  -- loops with castLamCastR. specialize.
 --  , nowatchR "lamCastVarCastR" lamCastVarCastR
@@ -775,6 +812,14 @@ simplifiers =
 
   -- , nowatchR "unfoldNonstandardScrutR" unfoldNonstandardScrutR
   ]
+
+#define UseBash
+
+simplifyAll :: ReExpr
+
+simplifiers :: [ReExpr]
+simplifiers =
+  mySimplifiers
 #ifndef UseBash
   ++ bashSimplifiers
 
@@ -824,7 +869,21 @@ simplifyAllRhs = progRhsAnyR simplifyAll
 encodeDumpSimplifyR :: ReProg
 encodeDumpSimplifyR =
   -- watchR "encodeDumpSimplifyR" $
-  extractR encodePassCore >>> tryR dumpStashR >>> tryR simplifyAllRhs
+  extractR encodePassCore >>> tryR ({- watchR "dumpStashR" -} dumpStashR) >>> tryR simplifyAllRhs
+
+inlinePass :: ReExpr
+inlinePass = anybuE (repeatR ({- watchR "inlineNonPrim" -} inlineNonPrim))
+-- inlinePass = anytdE (repeatR ({- watchR "inlineNonPrim" -} inlineNonPrim))
+-- -- NO. We cannot inline bottom-up.
+
+inlineSimplifyPass :: ReExpr
+inlineSimplifyPass = inlinePass >>> tryR simplifyAll
+
+-- inlinesSimplifyR :: ReExpr
+-- inlinesSimplifyR = bashUsingE (simplifiers {- ++ [watchR "inlineNonPrim" inlineNonPrim] -})
+
+-- inlinesSimplifyRhsR :: ReProg
+-- inlinesSimplifyRhsR = progRhsAnyR inlinesSimplifyR
 
 {--------------------------------------------------------------------
     Plugin
@@ -844,7 +903,7 @@ externals =
     , externC "bash-encode-simplify" bashEncodeSimplify "..."
     , externC "encode-pass" encodePassCore "a single top-down encoding pass"
     , externC "one-encode" oneEncode "a single encoding step"
-    , externC "encode-distrib" encodeApp
+    , externC "encode-app" encodeApp
         "encode (u v) ==> (encode u) (encode v)"
     , externC "encode-lam" encodeLamR "Encode a lambda"
     , externC "encode-unfold" encodeUnfold
@@ -871,6 +930,9 @@ externals =
     , externC "lam-cast-var-cast" lamCastVarCastR
        "move casts from bound variables in lambda when cast"
     , externC "super-inline-simplify-encode" superInlineSimplifyEncodeR "..."
+    , externC "inline-pass" inlinePass ".."
+    , externC "inline-simplify-pass" inlineSimplifyPass "..."
+    , externC "inline-simplify-pass-rhs" (progRhsAnyR inlineSimplifyPass) "..."
     -- Move to HERMIT.Extras:
     , externC "optimize-cast" optimizeCastR "..."
     , externC "case-reduce-unfolds" caseReduceUnfoldsR ".." 
