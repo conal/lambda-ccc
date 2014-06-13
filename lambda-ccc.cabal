@@ -33,7 +33,7 @@ Library
                   , hermit >= 0.4.0.0
                   , ty >= 0.1.5
                   , type-unary >= 0.2.16
-                  , circat >= 0.2.7
+                  , circat >= 0.2.9
                   , hermit-extras >= 0.1
 
 --                  , type-encode
@@ -50,7 +50,7 @@ Library
                     LambdaCCC.Examples.Linear
 -- Phasing out:
 
---                     LambdaCCC.Reify
+                    LambdaCCC.Reify
 --                     LambdaCCC.SReify
 --                     LambdaCCC.NormalizeCore
 
