@@ -11,8 +11,24 @@ set-pp-coercion Abstract
 -- set-pp-type     Omit
 -- set-pp-coercion Omit
 
-down  -- to definitions
+-- down
 
-encode-pass
-try dump-stash
-try simplify-all-rhs
+-- try bash
+-- rhs-of e
+-- down
+
+down  -- to definitions
+repeat encode-dump-simplify
+try unshadow
+
+-- -- rhs-of e
+-- down  -- to definitions
+-- down  -- to first def
+-- down  -- to rhs
+
+-- repeat (inline-pass >>> try simplify-all)
+
+-- try encode-pass
+-- try dump-stash
+-- try simplify-all-rhs
+
