@@ -69,6 +69,54 @@ Sketch of a simple prototype:
     I don't know how to do this step, and I don't know how to generate finite code without it.
     See the HERMIT's issue [Eliminate impossible case alternatives?].
 
+## Try it!
+
+In lambda-ccc/test,
+
+```
+bash-3.2$ hermit Mono.hs -v0 -opt=LambdaCCC.Monomorphize DoMono.hss
+[starting HERMIT v0.5.0.0 on Mono.hs]
+% ghc Mono.hs -fforce-recomp -O2 -dcore-lint -fsimple-list-literals -fexpose-all-unfoldings -fplugin=LambdaCCC.Monomorphize -fplugin-opt=LambdaCCC.Monomorphize:-v0 -fplugin-opt=LambdaCCC.Monomorphize:DoMono.hss -fplugin-opt=LambdaCCC.Monomorphize:*: -v0
+sum4 :: Tree (S (S Z)) Int -> Int
+sum4 = sum (Tree (S (S Z))) Int ($fFoldableTree (S (S Z))) $fNumInt
+hermit<1> one-td monomorphize >>> try (any-bu bindUnLetIntroR) >>> try (any-bu let-float') >>> try simplifyAllRhs >>> try unshadow
+<1> memo save: sum_@_(Tree_(S_(S_Z)))_@_Int_($fFoldableTree_@_(S_(S_Z)))_$fNumInt
+g :: Tree (S (S Z)) Int -> Sum Int
+g =
+  foldMap
+    (Tree (S (S Z)))
+    ($fFoldableTree (S (S Z)))
+    Int
+    (Sum Int)
+    ($fMonoidSum Int $fNumInt)
+    (product1 Int |> (~# :: (Int -> Int) ~R (Int -> Sum Int)))
+sum4 :: Tree (S (S Z)) Int -> Int
+sum4 =
+  g |> (~# :: (Tree (S (S Z)) Int -> Sum Int) ~R (Tree
+                                                (S (S Z)) Int -> Int))
+hermit<2> one-td monomorphize >>> try (any-bu bindUnLetIntroR) >>> try (any-bu let-float') >>> try simplifyAllRhs >>> try unshadow
+<1> memo save: foldMap_@_(Tree_(S_(S_Z)))_($fFoldableTree_@_(S_(S_Z)))_@_Int_@_(Sum_Int)_($fMonoidSum_@_Int_$fNumInt)
+x :: (Int -> Sum Int) -> Tree (S (S Z)) Int -> Sum Int
+x = \ f ds ->
+  case ds of wild (Sum Int)
+    L (~# :: S (S Z) ~N Z) a1 -> f a1
+    B n1 (~# :: S (S Z) ~N S n1) uv ->
+      $fFoldablePair_$cfoldMap
+        (Tree n1 Int)
+        (Sum Int)
+        ($fMonoidSum Int $fNumInt)
+        ($fFoldableTree_$cfoldMap n1
+           Int (Sum Int) ($fMonoidSum Int $fNumInt) f)
+        uv
+g :: Tree (S (S Z)) Int -> Sum Int
+g = x (product1 Int |> (~# :: (Int -> Int) ~R (Int -> Sum Int)))
+sum4 :: Tree (S (S Z)) Int -> Int
+sum4 =
+  g |> (~# :: (Tree (S (S Z)) Int -> Sum Int) ~R (Tree
+                                                (S (S Z)) Int -> Int))
+hermit<3> ...
+```
+
 ## Misc issues
 
 *   HERMIT issue [let-float from case alternative]:
@@ -77,3 +125,5 @@ Sketch of a simple prototype:
 *   HERMIT issue [over-eager `letNonRecSubstR`?].
     For now, I'm avoiding `letNonRecSubstR`, which means I can't use `simplifyR` or `bashR`.
     Instead, I'm using `bashUsingE` and a version of the standard `bash` rewriters that omits `letNonRecSubstR`.
+*   I worry that the repeated use of `one-td` in `one-td monomorphize` is going to be inherently inefficient, leading to a lot of wasted re-traversal.
+    I've had a terrible time with progressively slow transformation, and I want to learn how to produce more efficient HERMIT plugins while keeping a modular programming style, especially during experimentation.
