@@ -124,7 +124,7 @@ main :: IO ()
 
 -- main = go "dot0" (dot :: Tree N0 (Int,Int) -> Int)
 
--- main = go "dot2" (dot :: Tree N2 (Int,Int) -> Int)
+main = go "dot2" (dot :: Tree N2 (Int,Int) -> Int)
 
 -- -- Doesn't wedge.
 -- main = go "dotp" ((psum . prod) :: Pair (Int,Int) -> Int)
@@ -153,7 +153,7 @@ main :: IO ()
 -- -- Seemingly infinite rewrite loop with Standard.
 -- main = go "prodA1" (uncurry prodA :: (Tree N1 Int,Tree N1 Int) -> Tree N1 Int)
 
-main = go "prodA0" (uncurry prodA :: (Tree N0 Int,Tree N0 Int) -> Tree N0 Int)
+-- main = go "prodA0" (uncurry prodA :: (Tree N0 Int,Tree N0 Int) -> Tree N0 Int)
 
 -- main = go "idA" (uncurry f)
 --  where

@@ -21,6 +21,7 @@
 module LambdaCCC.CoreEncode where
 
 -- TODO: explicit exports
+
 import Prelude hiding (id,(.),(>>))
 import qualified Prelude
 
@@ -758,6 +759,7 @@ encoders =
 --   , watchR "encodeCastIntoR" encodeCastIntoR
   -- , watchR "recodeScrutineeR" recodeScrutineeR  -- or in simplifiers?
   ]
+
 
 {--------------------------------------------------------------------
     Put it together

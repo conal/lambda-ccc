@@ -6,7 +6,7 @@
 
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -58,6 +58,7 @@ import GHC.Prim (Addr#)
 
 import Data.Proof.EQ
 
+import TypeUnary.Nat (IsNat(..),Nat(..))
 import TypeUnary.Vec (Vec(..),Z,S)
 
 -- import Circat.Classes (VecCat(..))
@@ -119,25 +120,31 @@ data Pat :: * -> * where
   VarPat  :: V a -> Pat a
   (:$)    :: Pat a -> Pat b -> Pat (a :* b)
   (:@)    :: Pat a -> Pat a -> Pat a
+--   ZeroPat :: Pat (Nat Z)
+--   SuccPat :: Pat (Nat m) -> Pat (Nat (S m))
 
 -- NOTE: ":@" is named to suggest "as patterns", but is more general ("and patterns").
 
 -- TODO: Rename UnitPat and VarPat to PUnit and PVar
 
 instance Eq1' Pat where
-  UnitPat  ==== UnitPat    = True
-  VarPat v ==== VarPat v'  = v ==== v'
-  (a :$ b) ==== (a' :$ b') = a ==== a' && b ==== b'
-  (a :@ b) ==== (a' :@ b') = a ==== a' && b ==== b'
-  _        ==== _          = False
+  UnitPat   ==== UnitPat    = True
+  VarPat v  ==== VarPat v'  = v ==== v'
+  (a :$ b)  ==== (a' :$ b') = a ==== a' && b ==== b'
+  (a :@ b)  ==== (a' :@ b') = a ==== a' && b ==== b'
+--   ZeroPat   ==== ZeroPat    = True
+--   SuccPat m ==== SuccPat m' = m ==== m'
+  _         ==== _          = False
 
 instance Eq (Pat a) where (==) = (====)
 
 instance Show (Pat a) where
-  showsPrec _ UnitPat    = showString "()"
-  showsPrec p (VarPat v) = showsPrec p v
-  showsPrec p (a :$ b)   = showsPair p a b
-  showsPrec p (a :@ b)   = showsOp2' "@" (8,AssocRight) p a b
+  showsPrec _ UnitPat     = showString "()"
+  showsPrec p (VarPat v)  = showsPrec p v
+  showsPrec p (a :$ b)    = showsPair p a b
+  showsPrec p (a :@ b)    = showsOp2' "@" (8,AssocRight) p a b
+--   showsPrec _ ZeroPat     = showString "Zero"
+--   showsPrec p (SuccPat m) = showsApp1 "Succ" p m
 
 -- | Does a variable occur in a pattern?
 occursVP :: V a -> Pat b -> Bool
@@ -145,6 +152,8 @@ occursVP _ UnitPat     = False
 occursVP v (VarPat v') = varName v == varName v'
 occursVP v (a :$ b)    = occursVP v a || occursVP v b
 occursVP v (a :@ b)    = occursVP v a || occursVP v b
+-- occursVP _ ZeroPat     = False
+-- occursVP v (SuccPat m) = occursVP v m
 
 -- TODO: Pull v out of the recursion.
 
@@ -163,10 +172,13 @@ substVP :: V a -> Pat a -> Unop (Pat b)
 substVP v p = substIn
  where
    substIn :: Unop (Pat c)
+   substIn UnitPat                          = UnitPat
    substIn (VarPat ((v ===?) -> Just Refl)) = p
    substIn (a :$ b)                         = substIn a :$ substIn b
    substIn (a :@ b)                         = substIn a :@ substIn b
-   substIn q                                = q
+--    substIn ZeroPat                          = ZeroPat
+--    substIn (SuccPat m)                      = SuccPat (substIn m)
+   substIn q@(VarPat _)                     = q
 #endif
 
 infixl 9 :^
@@ -197,10 +209,12 @@ occursVE v@(V name) = occ
 
 -- | Some variable in a pattern occurs freely in an expression
 occursPE :: Pat a -> E p b -> Bool
-occursPE UnitPat    = pure False
-occursPE (VarPat v) = occursVE v
-occursPE (p :$ q)   = liftA2 (||) (occursPE p) (occursPE q)
-occursPE (p :@ q)   = liftA2 (||) (occursPE p) (occursPE q)
+occursPE UnitPat     = pure False
+occursPE (VarPat v)  = occursVE v
+occursPE (p :$ q)    = liftA2 (||) (occursPE p) (occursPE q)
+occursPE (p :@ q)    = liftA2 (||) (occursPE p) (occursPE q)
+-- occursPE ZeroPat     = pure False
+-- occursPE (SuccPat m) = occursPE m
 
 -- I've placed the quantifiers explicitly to reflect what I learned from GHCi
 -- (In GHCi, use ":set -fprint-explicit-foralls" and ":ty (:^)".)
@@ -263,6 +277,13 @@ patToEs UnitPat    = pure $ ConstE unitP
 patToEs (VarPat v) = pure $ Var v
 patToEs (p :$ q)   = liftA2 (#) (patToEs p) (patToEs q)
 patToEs (p :@ q)   = patToEs p ++ patToEs q
+-- patToEs ZeroPat    = error "patToEs: not yet handling ZeroPat"
+-- patToEs (SuccPat _) = error "patToEs: not yet handling SuccPat"
+
+-- patToEs ZeroPat     = pure $ ConstE zeroP
+-- patToEs (SuccPat m) = pure $ ConstE (succP m)
+
+-- Will there really be term-level versions of singletons?
 
 #endif
 
@@ -436,10 +457,12 @@ eval' (Cast e)     = eval' e
 #endif
 
 extendEnv :: Pat b -> b -> (Env -> Env)
-extendEnv UnitPat       ()  = id
-extendEnv (VarPat vb)   b   = (Bind vb b :)
-extendEnv (p :$ q)    (a,b) = extendEnv q b . extendEnv p a
-extendEnv (p :@ q)      b   = extendEnv q b . extendEnv p b
+extendEnv UnitPat       ()      = id
+extendEnv (VarPat vb)   b       = (Bind vb b :)
+extendEnv (p :$ q)    (a,b)     = extendEnv q b . extendEnv p a
+extendEnv (p :@ q)      b       = extendEnv q b . extendEnv p b
+-- extendEnv ZeroPat      Zero     = id
+-- extendEnv (SuccPat q)  (Succ m) = extendEnv q m
 
 -- TODO: Rewrite extendEnv so that it examines the pattern just once,
 -- independently from the value.

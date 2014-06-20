@@ -34,7 +34,7 @@ import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
 -- import Control.Arrow ((&&&))
 import Data.Constraint (Dict(..))
 
-import TypeUnary.Nat (Nat(..),IsNat)
+-- import TypeUnary.Nat (Nat(..),IsNat)
 import TypeUnary.Vec (Z,S,Vec(..))  -- ,IsNat(..)
 
 import Circat.Category hiding (CondCat(..))
@@ -138,9 +138,8 @@ data Prim :: * -> * where
   InrP          :: Prim (b -> a :+ b)
   PairP         :: Prim (a -> b -> a :* b)
   CondBP        :: Prim (Bool :* (Bool :* Bool) -> Bool)  -- cond on Bool
-  -- Naturals
-  ToZeroP       :: Prim (Unit -> Nat Z)
-  SuccP         :: IsNat m => Prim (Nat m -> Nat (S m))
+--   -- Naturals
+--   ToNatP        :: IsNat n => Prim (Unit -> Nat n)
   -- Vectors. See Vec TODO below
   ToVecZP       :: Prim (Unit -> Vec Z a)
   UnVecZP       :: Prim (Vec Z a -> Unit)
@@ -179,9 +178,8 @@ instance Eq' (Prim a) (Prim b) where
   InrP      === InrP      = True
   PairP     === PairP     = True
   CondBP    === CondBP    = True
-  ToZeroP   === ToZeroP   = True
-  SuccP     === SuccP     = True
-  ToVecZP   === ToVecZP   = True
+--   ToNatP    === ToNatP    = True
+--   ToVecZP   === ToVecZP   = True
   UnVecZP   === UnVecZP   = True
   VecSP     === VecSP     = True
   UnVecSP   === UnVecSP   = True
@@ -197,32 +195,31 @@ instance Eq' (Prim a) (Prim b) where
 instance Eq (Prim a) where (==) = (===)
 
 instance Show (Prim a) where
-  showsPrec p (LitP a)  = showsPrec p a
-  showsPrec _ NotP      = showString "not"
-  showsPrec _ AndP      = showString "(&&)"
-  showsPrec _ OrP       = showString "(||)"
-  showsPrec _ XorP      = showString "xor"
-  showsPrec _ AddP      = showString "add"
-  showsPrec _ MulP      = showString "mul"
-  showsPrec _ ExlP      = showString "exl"
-  showsPrec _ InlP      = showString "Left"
-  showsPrec _ InrP      = showString "Right"
-  showsPrec _ ExrP      = showString "exr"
-  showsPrec _ PairP     = showString "(,)"
-  showsPrec _ CondBP    = showString "condBool"
-  showsPrec _ ToZeroP   = showString "toZero"
-  showsPrec _ SuccP     = showString "Succ"
-  showsPrec _ ToVecZP   = showString "toVecZ"
-  showsPrec _ UnVecZP   = showString "unVecZ"
-  showsPrec _ VecSP     = showString "(:<)"
-  showsPrec _ UnVecSP   = showString "unVecS"
-  showsPrec _ UPairP    = showString "toPair"
-  showsPrec _ UnUPairP  = showString "unPair"
-  showsPrec _ ToLeafP   = showString "toL"
-  showsPrec _ ToBranchP = showString "toB"
-  showsPrec _ UnLeafP   = showString "unL"
-  showsPrec _ UnBranchP = showString "unB"
-  showsPrec _ OopsP     = showString "<oops>"
+  showsPrec p (LitP a)   = showsPrec p a
+  showsPrec _ NotP       = showString "not"
+  showsPrec _ AndP       = showString "(&&)"
+  showsPrec _ OrP        = showString "(||)"
+  showsPrec _ XorP       = showString "xor"
+  showsPrec _ AddP       = showString "add"
+  showsPrec _ MulP       = showString "mul"
+  showsPrec _ ExlP       = showString "exl"
+  showsPrec _ InlP       = showString "Left"
+  showsPrec _ InrP       = showString "Right"
+  showsPrec _ ExrP       = showString "exr"
+  showsPrec _ PairP      = showString "(,)"
+  showsPrec _ CondBP     = showString "condBool"
+--   showsPrec _ ToNatP     = showString "natA"
+  showsPrec _ ToVecZP    = showString "toVecZ"
+  showsPrec _ UnVecZP    = showString "unVecZ"
+  showsPrec _ VecSP      = showString "(:<)"
+  showsPrec _ UnVecSP    = showString "unVecS"
+  showsPrec _ UPairP     = showString "toPair"
+  showsPrec _ UnUPairP   = showString "unPair"
+  showsPrec _ ToLeafP    = showString "toL"
+  showsPrec _ ToBranchP  = showString "toB"
+  showsPrec _ UnLeafP    = showString "unL"
+  showsPrec _ UnBranchP  = showString "unB"
+  showsPrec _ OopsP      = showString "<oops>"
 
 instance Show' Prim where showsPrec' = showsPrec
 
@@ -241,8 +238,7 @@ primArrow InlP      = inl
 primArrow InrP      = inr
 primArrow PairP     = curry id
 primArrow CondBP    = mux
-primArrow ToZeroP   = zeroA
-primArrow SuccP     = succA
+-- primArrow ToNatP    = natA
 primArrow ToVecZP   = toVecZ
 primArrow UnVecZP   = unVecZ
 primArrow VecSP     = curry toVecS
@@ -272,8 +268,7 @@ instance ( BiCCCC k Lit
   unitArrow InrP      = unitFun inr
   unitArrow PairP     = unitFun (curry id)
   unitArrow CondBP    = unitFun mux
-  unitArrow ToZeroP   = unitFun zeroA
-  unitArrow SuccP     = unitFun succA
+--   unitArrow ToNatP    = unitFun natA
   unitArrow ToVecZP   = unitFun toVecZ
   unitArrow UnVecZP   = unitFun unVecZ
   unitArrow VecSP     = unitFun (curry toVecS)
@@ -306,8 +301,7 @@ instance Evalable (Prim a) where
   eval InrP          = Right
   eval PairP         = (,)
   eval CondBP        = mux
-  eval ToZeroP       = zeroA
-  eval SuccP         = succA
+--   eval ToNatP        = natA
   eval ToVecZP       = toVecZ
   eval UnVecZP       = unVecZ
   eval VecSP         = (:<)

@@ -143,7 +143,7 @@ toCCC' = unUnitFun . toCCC
 --   (convert (k :$ a) p ||| convert (k :$ b) q) . ldistribS . (Id &&& convert k ab)
 
 -- Convert a variable in context
-convertVar :: forall b a k. ProductCat k =>
+convertVar :: forall b a k. ({- NatCat k,-} ProductCat k) =>
               V b -> Pat a -> (a `k` b)
 convertVar u = fromMaybe (error $ "convert: unbound variable: " ++ show u) .
                conv
@@ -151,9 +151,11 @@ convertVar u = fromMaybe (error $ "convert: unbound variable: " ++ show u) .
    conv :: forall c. Pat c -> Maybe (c `k` b)
    conv (VarPat v) | Just Refl <- v ===? u = Just id
                    | otherwise             = Nothing
-   conv UnitPat  = Nothing
-   conv (p :$ q) = ((. exr) <$> conv q) `mplus` ((. exl) <$> conv p)
-   conv (p :@ q) = conv q `mplus` conv p
+   conv UnitPat     = Nothing
+   conv (p :$ q)    = ((. exr) <$> conv q) `mplus` ((. exl) <$> conv p)
+   conv (p :@ q)    = conv q `mplus` conv p
+--    conv ZeroPat     = Nothing
+--    conv (SuccPat p) = (. predA) <$> conv p
 
 -- Note that we try q before p. This choice cooperates with uncurrying and
 -- shadowing.

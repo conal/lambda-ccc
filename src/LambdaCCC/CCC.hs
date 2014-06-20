@@ -345,6 +345,10 @@ instance Show (a :-> b) where
 primUnc :: Prim (a :=> b :=> c) -> (a :* b :-> c)
 primUnc = uncurry . prim
 
+-- instance NatCat (:->) where
+--   zeroA = prim ToZeroP
+--   succA = prim SuccP
+
 instance VecCat (:->) where
   toVecZ = prim ToVecZP
   unVecZ = prim UnVecZP
@@ -386,7 +390,7 @@ instance NumCat (:->) Int where
     Experiment: convert to other CCC
 --------------------------------------------------------------------}
 
-convertC :: ( BiCCC k, HasUnitArrow k Lit
+convertC :: ( BiCCCC k Lit
             , BoolCat k, MuxCat k, VecCat k, PairCat k, TreeCat k, NumCat k Int
             ) =>
             (a :-> b) -> (a `k` b)
