@@ -65,6 +65,20 @@ Sketch of a simple prototype:
     I don't know how to do this step, and I don't know how to generate finite code without it.
     See the HERMIT's issue [Eliminate impossible case alternatives?].
 
+For removing impossible `case` alternatives, maybe there's another way if we mix in type encoding.
+Given a `case` scrutinee, see if it's in `Encodable`.
+If so, then
+
+>   case scrut of alts
+> == case decode (encode scrut) of alts
+> == let x = encode scrut in case decode x of alts
+
+Then monomorphize the `encode` and `decode` applications and simplify, just as usual.
+For the instances I have in mind, `encode` will generate a `case` expression with just one alternative, and `decode` will generate a `case` whose scrutinee has a known constructor.
+
+I think this trick will work, and it'll be fairly easy to try, given what I've done before.
+A drawback is that it does more than monomorphize.
+
 ## Try it!
 
 In lambda-ccc/test,
