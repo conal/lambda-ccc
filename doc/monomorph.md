@@ -1,7 +1,5 @@
 # Notes on monomorphization
 
- <!-- References -->
-
 [type-encode]: https://github.com/conal/type-encode "Haskell library"
 
 [let-float from case alternative]: https://github.com/ku-fpg/hermit/issues/113 "HERMIT issue"
@@ -9,8 +7,6 @@
 [over-eager `letNonRecSubstR`?]: https://github.com/ku-fpg/hermit/issues/114 "HERMIT issue"
 
 [Eliminate impossible case alternatives?]: https://github.com/ku-fpg/hermit/issues/110 "HERMIT issue"
-
- <!-- -->
 
 ## Motivation
 
@@ -73,7 +69,7 @@ Sketch of a simple prototype:
 
 In lambda-ccc/test,
 
-```
+```haskell
 bash-3.2$ hermit Mono.hs -v0 -opt=LambdaCCC.Monomorphize DoMono.hss
 [starting HERMIT v0.5.0.0 on Mono.hs]
 % ghc Mono.hs -fforce-recomp -O2 -dcore-lint -fsimple-list-literals -fexpose-all-unfoldings -fplugin=LambdaCCC.Monomorphize -fplugin-opt=LambdaCCC.Monomorphize:-v0 -fplugin-opt=LambdaCCC.Monomorphize:DoMono.hss -fplugin-opt=LambdaCCC.Monomorphize:*: -v0
