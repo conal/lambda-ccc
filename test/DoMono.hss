@@ -7,7 +7,24 @@ set-pp-coercion Kind
 -- set-pp-type     Omit
 -- set-pp-coercion Omit
 
+-- set-pp-type     Abstract
+-- set-pp-coercion Abstract
+
 down
+
+-- binding-of test
+-- up  -- to ProgCons
 
 -- repeat (one-td monomorphize >>> try (any-bu bindUnLetIntroR) >>> try (any-bu let-float') >>> try simplifyAllRhs)
 -- try unshadow
+
+-- pass;pass
+-- down;down;down;down
+
+-- down
+-- recode
+-- down;down;down
+-- up;up;up;up;up
+
+-- pass;pass;pass;pass;
+-- pass;pass;pass;pass;
