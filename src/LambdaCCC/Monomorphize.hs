@@ -38,7 +38,7 @@ import qualified Data.Set as S
 import PrelNames (eitherTyConName)
 
 import HERMIT.Core (CoreDef(..))
-import HERMIT.Dictionary hiding (externals) -- re-exports HERMIT.Dictionary.*
+import HERMIT.Dictionary hiding (externals)
 import HERMIT.External (External,ExternalName,external,(.+),CmdTag(Loop))
 import HERMIT.GHC
 import HERMIT.Kure
@@ -49,6 +49,8 @@ import HERMIT.Extras hiding (findTyConT)
 import qualified HERMIT.Extras as Ex
 
 import LambdaCCC.Misc ((<~))
+
+import qualified LambdaCCC.CoreEncode as CE
 
 {--------------------------------------------------------------------
     Observing
@@ -104,6 +106,7 @@ caseNoVarR =
   do Case _ _ _ [(DataAlt _,[],rhs)] <- id
      return rhs
 
+#if 0
 bragMemo :: Bool
 bragMemo = True -- observing
 
@@ -124,16 +127,19 @@ memoFloatR lab r = do findDefT bragMemo lab
                               letIntroR lab' $* e'
  where
    lab' = tweak lab
-   tweak = const "x"
+   tweak = -- fst . break (== '$')
+           ("s:" ++) . fst . break (== '_')
+           -- const "x"
            -- id
+#endif
 
 memoFloatLabelR :: Outputable a => Unop (TransformH a CoreExpr)
 memoFloatLabelR r = do lab <- stashLabel
-                       memoFloatR lab r
+                       CE.memoFloatR lab r
 
 -- Build a dictionary for a given PredType, memoizing in the stash.
 memoDict :: TransformH PredType CoreExpr
-memoDict = memoR buildDictionaryT'
+memoDict = CE.memoR buildDictionaryT'
 
 {--------------------------------------------------------------------
     Monomorphization
@@ -144,14 +150,19 @@ specializeTyDict :: ReExpr
 specializeTyDict = tryR simplifyAll .
                    unfoldPredR (const (liftA2 (&&) (not.null) (all isTyOrDict)))
 
-monomorphize :: ReExpr
-monomorphize = memoFloatLabelR (repeatR specializeTyDict)
-
 isTyOrDict :: CoreExpr -> Bool
 isTyOrDict e = isType e || isDictTy (exprType e)
 
+monomorphize :: ReExpr
+monomorphize = memoFloatLabelR (repeatR specializeTyDict)
+
+{--------------------------------------------------------------------
+    Simplification
+--------------------------------------------------------------------}
+
 mySimplifiers :: [ReExpr]
 mySimplifiers = [ castFloatAppR    -- or castFloatAppR'
+                , CE.letElimTrivialR  -- instead of letNonRecSubstSafeR
                 ]
 
 #define ReplaceBash
@@ -169,7 +180,7 @@ bashSimplifiers :: [ReExpr]
 bashSimplifiers =
   [ nowatchR "betaReduceR" betaReduceR
   , nowatchR "(caseReduceR True)" (caseReduceR True)
-  , nowatchR "(caseReduceIdR True)" (caseReduceIdR True)
+  , nowatchR "(caseReduceUnfoldR True)" (caseReduceUnfoldR True)
   , nowatchR "caseElimSeqR" caseElimSeqR
   , nowatchR "unfoldBasicCombinatorR" unfoldBasicCombinatorR
   , nowatchR "inlineCaseAlternativeR" inlineCaseAlternativeR
@@ -204,7 +215,15 @@ simplifyAll = watchR "simplifyAll" $
 simplifyAllRhs :: ReProg
 simplifyAllRhs = progRhsAnyR simplifyAll
 
--- | x = (let y = e in y)  ==>  x = e
+letFloatR :: ReCore
+letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR)
+
+pass :: ReCore
+pass = tryR unshadowR
+     . tryR (promoteR simplifyAllRhs)
+     . tryR (anybuR letFloatR)
+     . tryR (anybuR (promoteR bindUnLetIntroR))
+     . onetdR (promoteR monomorphize)
 
 {--------------------------------------------------------------------
     Plugin
@@ -225,6 +244,6 @@ externals =
         (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR)
          :: RewriteH Core)
         ["let-float with letFloatCaseAltR"]
-    -- 
-    , externC "cast-float-app'" castFloatAppR' "cast-float-app with transitivity"
+    , external "pass" pass ["..."]
     ]
+    ++ CE.externals

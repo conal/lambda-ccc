@@ -18,8 +18,6 @@
 -- Transform away all non-standard types
 ----------------------------------------------------------------------
 
--- #define MyBuildDict
-
 module LambdaCCC.CoreEncode where
 
 -- TODO: explicit exports
@@ -40,22 +38,14 @@ import qualified Data.Set as S
 import PrelNames (eitherTyConName)
 
 import HERMIT.Core (CoreDef(..))
-import HERMIT.Dictionary hiding (externals
-#ifdef MyBuildDict
-                                          , buildDictionaryT
-#endif
-                                                            )
+import HERMIT.Dictionary hiding (externals)
 import HERMIT.External (External,ExternalName,external,(.+),CmdTag(Loop))
 import HERMIT.GHC
 import HERMIT.Kure
 import HERMIT.Monad (saveDef,newIdH,Label)
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
 
-import HERMIT.Extras hiding (findTyConT
-#ifdef MyBuildDict
-                                       , buildDictionaryT
-#endif
-                                                         )
+import HERMIT.Extras hiding (findTyConT)
 import qualified HERMIT.Extras as Ex
 
 import LambdaCCC.Misc ((<~))
