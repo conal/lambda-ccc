@@ -2,7 +2,7 @@ Name:               lambda-ccc
 Version:            0.3
 Cabal-Version:      >= 1.8
 Synopsis:           Convert lambda expressions to CCC combinators
-Category:           categories
+Category:           language
 Description:        Convert lambda expressions to CCC combinators
 Author:             Conal Elliott
 Maintainer:         conal@conal.net
@@ -45,7 +45,7 @@ Library
                     LambdaCCC.CCC
                     LambdaCCC.ToCCC
                     LambdaCCC.Encode
---                     LambdaCCC.CoreEncode
+                    LambdaCCC.CoreEncode
                     LambdaCCC.Monomorphize
                     LambdaCCC.Run
                     LambdaCCC.Examples.Linear
