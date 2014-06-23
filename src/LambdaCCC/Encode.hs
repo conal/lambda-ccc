@@ -29,6 +29,7 @@ import Data.Monoid (Any(..),All(..))
 import Data.Functor.Identity
 
 import TypeUnary.TyNat (Z,S)
+import TypeUnary.Nat (Nat(..),IsNat(..))
 import TypeUnary.Vec (Vec(..),unConsV)
 import Circat.Pair (Pair(..),toP,fromP)
 
@@ -104,6 +105,19 @@ PrimEncode(Int)
     { EEncTy(n,o) ; encode = encode . (unwrap) ; decode = (wrap) . decode }
 
 -- TODO: Can we get some help from the Newtype class?
+
+RepEncode(Nat Z, (), \ Zero -> (), \ () -> Zero)
+-- RepEncode(Nat (S n), Nat n, predN, Succ)
+
+instance IsNat n => Encodable (Nat (S n)) where
+  EEncTy (Nat (S n),())
+  encode = const ()
+  decode = const nat
+
+-- instance (IsNat n, Encodable (Nat n)) => Encodable (Nat (S n)) where
+--   EEncTy (Nat (S n),Nat n)
+--   encode (Succ m) = encode m
+--   decode x = Succ (decode x)
 
 RepEncode(Pair a, a :* a, fromP, toP)
 
