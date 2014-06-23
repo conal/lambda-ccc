@@ -18,6 +18,8 @@
 -- Transform away all non-standard types
 ----------------------------------------------------------------------
 
+-- #define MyBuildDict
+
 module LambdaCCC.CoreEncode where
 
 -- TODO: explicit exports
@@ -38,17 +40,26 @@ import qualified Data.Set as S
 import PrelNames (eitherTyConName)
 
 import HERMIT.Core (CoreDef(..))
-import HERMIT.Dictionary hiding (externals) -- re-exports HERMIT.Dictionary.*
+import HERMIT.Dictionary hiding (externals
+#ifdef MyBuildDict
+                                          , buildDictionaryT
+#endif
+                                                            )
 import HERMIT.External (External,ExternalName,external,(.+),CmdTag(Loop))
 import HERMIT.GHC
 import HERMIT.Kure
 import HERMIT.Monad (saveDef,newIdH,Label)
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
 
-import HERMIT.Extras hiding (findTyConT)
+import HERMIT.Extras hiding (findTyConT
+#ifdef MyBuildDict
+                                       , buildDictionaryT
+#endif
+                                                         )
 import qualified HERMIT.Extras as Ex
 
 import LambdaCCC.Misc ((<~))
+
 
 {--------------------------------------------------------------------
     Observing
@@ -104,21 +115,23 @@ caseNoVarR =
   do Case _ _ _ [(DataAlt _,[],rhs)] <- id
      return rhs
 
-#define Memo
-
-#ifdef Memo
+-- #define Memo
 
 bragMemo :: Bool
-bragMemo = observing
+bragMemo = True
 
+memoR :: Outputable a => Unop (TransformH a CoreExpr)
+#ifdef Memo
 -- Memoize a transformation. Don't introduce a let binding (for later floating),
 -- which would interfere with additional simplification.
-memoR :: Outputable a => Unop (TransformH a CoreExpr)
 memoR r = do lab <- stashLabel
              findDefT bragMemo lab
                <+ do e' <- r
                      saveDefNoFloatT bragMemo lab $* e'
                      return e'
+#else
+memoR = id
+#endif
 
 memoFloatR :: Outputable a => Label -> Unop (TransformH a CoreExpr)
 memoFloatR lab' r = do findDefT bragMemo lab
@@ -130,17 +143,9 @@ memoFloatR lab' r = do findDefT bragMemo lab
  where
    lab = memoPrefix ++ lab'
 
-memoPrefix :: String
-memoPrefix = "memo:"
-
-isMemoName :: String -> Bool
-isMemoName = isPrefixOf memoPrefix
-
-memoVarT :: Monad m => Transform c m Var ()
-memoVarT = guardMsgM (arr (isMemoName . uqVarName)) "not memo var"
-
 -- Build a dictionary for a given PredType, memoizing in the stash.
 memoDict :: TransformH PredType CoreExpr
+-- memoDict = memoR (tryR bashE . buildDictionaryT)
 memoDict = memoR buildDictionaryT'
 
 -- Or stash it. I don't think I want to, since dictionaries get eliminated.
@@ -155,18 +160,15 @@ memoDict = memoR buildDictionaryT'
 --                              saveDefT bragMemo lab $* Def v dict
 --                              return (Let (NonRec v dict) (Var v))
 
+memoVarT :: Monad m => Transform c m Var ()
+memoVarT = guardMsgM (arr (isMemoName . uqVarName)) "not memo var"
 
-#else
+memoPrefix :: String
+memoPrefix = "memo:"
 
-zoink
+isMemoName :: String -> Bool
+isMemoName = isPrefixOf memoPrefix
 
-memoDict :: TransformH PredType CoreExpr
-memoDict = buildDictionaryT'
-
-memoR :: Unop ReExpr
-memoR = id
-
-#endif
 
 -- | 'betaReduceR' but using 'castFloatAppR'' if needed to reveal a redex.
 betaReduceCastR :: ReExpr
@@ -533,7 +535,6 @@ encodableR = tyConAppE1 "Encodable"
 
 encodeDictT :: TransformH Type CoreExpr
 encodeDictT = memoDict . encodableR
--- encodeDictT = buildDictionaryT' . encodableR
 
 encodeR :: ReExpr
 encodeR = -- nonStandardE >>
@@ -694,8 +695,7 @@ encodeCaseR = unEncode >>> caseAllR id id encodeTyR (const (onAltRhs encodeR))
 
 -- TODO: Reuse encode application with type and dictionary
 
--- | case e of alts  ==>  case recode e of alts
--- Warning, can loop. Must simplify.
+-- | case e of alts  ==>  let x = encode e in case code e of alts
 recodeScrutineeR :: ReExpr
 recodeScrutineeR =
   letAllR (nonRecAllR id rhs) id .
