@@ -50,8 +50,6 @@ import qualified HERMIT.Extras as Ex
 
 import LambdaCCC.Misc ((<~))
 
-import qualified LambdaCCC.CoreEncode as CE
-
 {--------------------------------------------------------------------
     Observing
 --------------------------------------------------------------------}
@@ -106,9 +104,8 @@ caseNoVarR =
   do Case _ _ _ [(DataAlt _,[],rhs)] <- id
      return rhs
 
-#if 0
 bragMemo :: Bool
-bragMemo = True -- observing
+bragMemo = observing
 
 -- Memoize a transformation. Don't introduce a let binding (for later floating),
 -- which would interfere with additional simplification.
@@ -131,15 +128,14 @@ memoFloatR lab r = do findDefT bragMemo lab
            ("s:" ++) . fst . break (== '_')
            -- const "x"
            -- id
-#endif
 
 memoFloatLabelR :: Outputable a => Unop (TransformH a CoreExpr)
 memoFloatLabelR r = do lab <- stashLabel
-                       CE.memoFloatR lab r
+                       memoFloatR lab r
 
--- Build a dictionary for a given PredType, memoizing in the stash.
+-- Build a dictionary for a given PredType.
 memoDict :: TransformH PredType CoreExpr
-memoDict = CE.memoR buildDictionaryT'
+memoDict = memoR buildDictionaryT'
 
 {--------------------------------------------------------------------
     Monomorphization
@@ -162,7 +158,7 @@ monomorphize = memoFloatLabelR (repeatR specializeTyDict)
 
 mySimplifiers :: [ReExpr]
 mySimplifiers = [ castFloatAppR    -- or castFloatAppR'
-                , CE.letElimTrivialR  -- instead of letNonRecSubstSafeR
+                , letElimTrivialR  -- instead of letNonRecSubstSafeR
                 ]
 
 #define ReplaceBash
@@ -218,11 +214,15 @@ simplifyAllRhs = progRhsAnyR simplifyAll
 letFloatR :: ReCore
 letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR)
 
+pruneAltsProg :: ReProg
+pruneAltsProg = progRhsAnyR ({-bracketR "pruneAltsR"-} pruneAltsR)
+
 pass :: ReCore
-pass = tryR unshadowR
-     . tryR (promoteR simplifyAllRhs)
+pass = tryR (promoteR simplifyAllRhs)
      . tryR (anybuR letFloatR)
      . tryR (anybuR (promoteR bindUnLetIntroR))
+     . tryR (promoteR pruneAltsProg)
+     . tryR unshadowR
      . onetdR (promoteR monomorphize)
 
 {--------------------------------------------------------------------
@@ -240,10 +240,12 @@ externals =
     , externC "bindUnLetIntroR" bindUnLetIntroR "..."
     , externC "letFloatCaseAltR" letFloatCaseAltR "..."
     , externC "monomorphize" monomorphize "..."
+    , external "pass" pass ["..."]
+    -- 
     , external "let-float'"
         (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR)
          :: RewriteH Core)
         ["let-float with letFloatCaseAltR"]
-    , external "pass" pass ["..."]
+    , externC "pruneAltsR" pruneAltsR "..."
+    , externC "pruneAltsProg" pruneAltsProg "..."
     ]
-    ++ CE.externals
