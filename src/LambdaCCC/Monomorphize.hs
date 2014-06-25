@@ -116,22 +116,33 @@ memoR r = do lab <- stashLabel
                      saveDefNoFloatT bragMemo lab $* e'
                      return e'
 
+-- Memoize and float if non-trivial
 memoFloatR :: Outputable a => Label -> Unop (TransformH a CoreExpr)
 memoFloatR lab r = do findDefT bragMemo lab
                         <+ do e' <- r
-                              v <- newIdT lab' $* exprType' e'
-                              saveDefT bragMemo lab $* Def v e'
-                              letIntroR lab' $* e'
+                              if exprIsTrivial e' then
+                                do saveDefNoFloatT bragMemo lab $* e'
+                                   return e'
+                               else
+                                do v <- newIdT lab' $* exprType' e'
+                                   saveDefT bragMemo lab $* Def v e'
+                                   letIntroR lab' $* e'
  where
    lab' = tweak lab
    tweak = -- fst . break (== '$')
-           ("s:" ++) . fst . break (== '_')
+           -- ("s:" ++) . fst . break (== '_')
+           fst . break (== '_')
            -- const "x"
            -- id
+
+-- TODO: Refactor
 
 memoFloatLabelR :: Outputable a => Unop (TransformH a CoreExpr)
 memoFloatLabelR r = do lab <- stashLabel
                        memoFloatR lab r
+
+filterToBool :: MonadCatch m => Transform c m a () -> Transform c m a Bool
+filterToBool t = (t >> return True) <+ return False
 
 -- Build a dictionary for a given PredType.
 memoDict :: TransformH PredType CoreExpr
@@ -163,7 +174,8 @@ mySimplifiers = [ castFloatAppR    -- or castFloatAppR'
 
 #define ReplaceBash
 
-simplifyAll :: ReExpr
+simplifyAll  :: ReExpr
+simplifyAll' :: ReExpr
 
 simplifiers :: [ReExpr]
 simplifiers =
@@ -201,10 +213,16 @@ bashSimplifiers =
 simplifyAll = watchR "simplifyAll" $
               bashUsingE (promoteR <$> simplifiers)
 
+simplifyAll' = watchR "simplifyAll" $
+               bashUsingE (promoteR <$> (letSubstOneOccR : simplifiers))
+
 #else
 
 simplifyAll = watchR "simplifyAll" $
               bashExtendedWithE (promoteR <$> simplifiers)
+
+simplifyAll' = watchR "simplifyAll" $
+               bashExtendedWithE (promoteR <$> (letSubstOneOccR : simplifiers))
 
 #endif
 
@@ -217,13 +235,29 @@ letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR
 pruneAltsProg :: ReProg
 pruneAltsProg = progRhsAnyR ({-bracketR "pruneAltsR"-} pruneAltsR)
 
-pass :: ReCore
-pass = tryR (promoteR simplifyAllRhs)
-     . tryR (anybuR letFloatR)
-     . tryR (anybuR (promoteR bindUnLetIntroR))
-     . tryR (promoteR pruneAltsProg)
-     . tryR unshadowR
-     . onetdR (promoteR monomorphize)
+passCore :: ReCore
+passCore = tryR (promoteR simplifyAllRhs)
+         . tryR (anybuR letFloatR)
+         . tryR (anybuR (promoteR bindUnLetIntroR))
+         . tryR (promoteR pruneAltsProg)
+         . tryR unshadowR
+         . onetdR (promoteR monomorphize)
+
+-- NOTE: if unshadowR is moved to later than pruneAltsProg, we can prune too
+-- many alternatives. TODO: investigate.
+
+passE :: ReExpr
+passE = id
+      . tryR simplifyAll'  -- after let floating
+      . tryR (anybuE (letFloatExprR <+ letFloatCaseAltR))
+      . tryR (anybuE (letAllR bindUnLetIntroR id))
+      . tryR pruneAltsR
+      . tryR (extractR unshadowR)
+      . onetdE monomorphize
+
+-- | 'letSubstR' in non-recursive let if only one occurrence.
+letSubstOneOccR :: ReExpr
+letSubstOneOccR = oneOccT >> letNonRecSubstR
 
 {--------------------------------------------------------------------
     Plugin
@@ -235,12 +269,15 @@ plugin = hermitPlugin (phase 0 . interactive externals)
 externals :: [External]
 externals =
     [ externC "simplifyAll" simplifyAll "Bash with normalization simplifiers (no inlining)"
+    , externC "simplifyAll'" simplifyAll' "simplifyAll plus letSubstOneOccR"
     , externC "simplifyAllRhs" simplifyAllRhs "simplify-all on all top-level RHSs"
     , externC "specializeTyDict" specializeTyDict "..."
     , externC "bindUnLetIntroR" bindUnLetIntroR "..."
     , externC "letFloatCaseAltR" letFloatCaseAltR "..."
     , externC "monomorphize" monomorphize "..."
-    , external "pass" pass ["..."]
+    , external "passCore" passCore ["..."]
+    , externC "passE" passE "..."
+    , externC "letSubstOneOccR" letSubstOneOccR "..."
     -- 
     , external "let-float'"
         (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR)
@@ -248,4 +285,5 @@ externals =
         ["let-float with letFloatCaseAltR"]
     , externC "pruneAltsR" pruneAltsR "..."
     , externC "pruneAltsProg" pruneAltsProg "..."
+    , externC "simplify-expr" simplifyExprR "Invoke GHC's simplifyExpr"
     ]
