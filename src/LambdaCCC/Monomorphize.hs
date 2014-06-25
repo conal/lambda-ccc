@@ -170,12 +170,12 @@ monomorphize = memoFloatLabelR (repeatR specializeTyDict)
 mySimplifiers :: [ReExpr]
 mySimplifiers = [ castFloatAppR    -- or castFloatAppR'
                 , letElimTrivialR  -- instead of letNonRecSubstSafeR
+                , letSubstOneOccR
                 ]
 
 #define ReplaceBash
 
 simplifyAll  :: ReExpr
-simplifyAll' :: ReExpr
 
 simplifiers :: [ReExpr]
 simplifiers =
@@ -213,16 +213,10 @@ bashSimplifiers =
 simplifyAll = watchR "simplifyAll" $
               bashUsingE (promoteR <$> simplifiers)
 
-simplifyAll' = watchR "simplifyAll" $
-               bashUsingE (promoteR <$> (letSubstOneOccR : simplifiers))
-
 #else
 
 simplifyAll = watchR "simplifyAll" $
               bashExtendedWithE (promoteR <$> simplifiers)
-
-simplifyAll' = watchR "simplifyAll" $
-               bashExtendedWithE (promoteR <$> (letSubstOneOccR : simplifiers))
 
 #endif
 
@@ -236,7 +230,7 @@ pruneAltsProg :: ReProg
 pruneAltsProg = progRhsAnyR ({-bracketR "pruneAltsR"-} pruneAltsR)
 
 passCore :: ReCore
-passCore = tryR (promoteR simplifyAllRhs)
+passCore = tryR (promoteR simplifyAllRhs)  -- after let-floating
          . tryR (anybuR letFloatR)
          . tryR (anybuR (promoteR bindUnLetIntroR))
          . tryR (promoteR pruneAltsProg)
@@ -248,7 +242,7 @@ passCore = tryR (promoteR simplifyAllRhs)
 
 passE :: ReExpr
 passE = id
-      . tryR simplifyAll'  -- after let floating
+      . tryR simplifyAll  -- after let floating
       . tryR (anybuE (letFloatExprR <+ letFloatCaseAltR))
       . tryR (anybuE (letAllR bindUnLetIntroR id))
       . tryR pruneAltsR
@@ -269,7 +263,6 @@ plugin = hermitPlugin (phase 0 . interactive externals)
 externals :: [External]
 externals =
     [ externC "simplifyAll" simplifyAll "Bash with normalization simplifiers (no inlining)"
-    , externC "simplifyAll'" simplifyAll' "simplifyAll plus letSubstOneOccR"
     , externC "simplifyAllRhs" simplifyAllRhs "simplify-all on all top-level RHSs"
     , externC "specializeTyDict" specializeTyDict "..."
     , externC "bindUnLetIntroR" bindUnLetIntroR "..."

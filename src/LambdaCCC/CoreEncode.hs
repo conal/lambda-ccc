@@ -364,11 +364,6 @@ unCallD1 f = do [_d,e] <- unCall f
 unCallDE1 :: String -> ReExpr
 unCallDE1 = unCallD1 . encName
 
-oneOccT :: FilterE
-oneOccT =
-  do Let (NonRec v _) body <- id
-     guardMsg (varOccCount v body <= 1) "oneOccT: multiple occurrences"
-
 -- | 'letSubstR' in non-recursive let if there's just one occurrence of the
 -- bound variable *and* the binding isn't a memoization.
 letSubstOneOccR :: ReExpr

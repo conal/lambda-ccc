@@ -32,6 +32,7 @@ module Mono where
 
 import Prelude hiding (sum)
 
+import Data.Monoid (Sum)
 import Data.Foldable (Foldable(..),sum)
 
 import TypeUnary.TyNat
@@ -54,14 +55,20 @@ import LambdaCCC.Encode (Encodable(..))
     Examples
 --------------------------------------------------------------------}
 
--- sum4 :: Tree N4 Int -> Int
--- sum4 = sum
-
-test :: Tree Z Int -> Int
+test :: Tree N4 Int -> Int
 test = sum
+
+-- test :: Tree N4 Int -> Int
+-- test = sum
 
 -- test :: Pair Bool -> Bool
 -- test (a :# b) = a || b
+
+-- test :: Pair Int -> Int
+-- test = sum
+
+-- test :: Pair (Sum Int) -> Sum Int
+-- test = fold
 
 -- test :: Bool -> Bool
 -- test = not
