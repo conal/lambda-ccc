@@ -108,7 +108,7 @@ caseNoVarR =
 -- #define Memo
 
 bragMemo :: Bool
-bragMemo = True
+bragMemo = False
 
 memoR :: Outputable a => Unop (TransformH a CoreExpr)
 #ifdef Memo
@@ -327,39 +327,6 @@ caseReduceUnfoldsR = caseT nonStandardE id id (const id) mempty >>
 
 onScrutineeR :: Unop ReExpr
 onScrutineeR r = caseAllR r id id (const id)
-
-{--------------------------------------------------------------------
-    Triviality
---------------------------------------------------------------------}
-
--- | Trivial expression: for now, literals, variables, casts of trivial.
-trivialExpr :: FilterE
-trivialExpr = setFailMsg "Non-trivial" $
-              isTypeE <+ isVarT <+ isCoercionE <+ isDictE <+ isLitT
-           <+ trivialLam
-           <+ castT trivialExpr id mempty
-
-trivialBind :: FilterH CoreBind
-trivialBind = nonRecT successT trivialExpr mempty
-
-trivialLet :: FilterE
-trivialLet = letT trivialBind successT mempty
-
-trivialLam :: FilterE
-trivialLam = lamT id trivialExpr mempty
-
-trivialBetaRedex :: FilterE
-trivialBetaRedex = appT trivialLam successT mempty
-
--- These filters could instead be predicates. Then use acceptR.
-
-letElimTrivialR :: ReExpr
-letElimTrivialR = -- watchR "trivialLet" $
-                  trivialLet >> letSubstR
-
-betaReduceTrivial :: ReExpr
-betaReduceTrivial = -- watchR "betaReduceTrivial" $
-                    trivialBetaRedex >> betaReduceR
 
 {--------------------------------------------------------------------
     Working with LambdaCCC.Encode
@@ -774,7 +741,7 @@ encodePassCore = -- watchR "encodePassRhs" $
 mySimplifiers :: [ReExpr]
 mySimplifiers =
   [ nowatchR "letElimTrivialR" letElimTrivialR
-  -- , nowatchR "betaReduceTrivial" betaReduceTrivial
+  -- , nowatchR "betaReduceTrivialR" betaReduceTrivialR
   , nowatchR "letElimR" letElimR   -- removed unused bindings after inlining
   , nowatchR "letSubstOneOccR" letSubstOneOccR
   -- , nowatchR "caseReduceR" (caseReduceR False)  -- let rather than subst  ??
