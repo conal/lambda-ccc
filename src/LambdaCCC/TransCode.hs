@@ -51,7 +51,15 @@ import HERMIT.Plugin (hermitPlugin,phase,interactive)
 import HERMIT.Extras hiding (findTyConT)
 import qualified HERMIT.Extras as Ex
 
+-- import TypeEncode.Plugin (findCon)
+
 import LambdaCCC.Misc ((<~))
+
+import qualified LambdaCCC.Monomorphize as Mono
+
+{--------------------------------------------------------------------
+    Encoding
+--------------------------------------------------------------------}
 
 class Enc a where enc :: a -> TransformH x a
 
@@ -65,8 +73,9 @@ instance Enc CoreExpr where
   enc (App u v) = App <$> enc u <*> enc v
   enc (Lam x e) = Lam <$> enc x <*> enc e
   enc (Let b e) = Let <$> enc b <*> enc e
-  enc (Case e _w _ty [(_,[v],rhs)]) =
+  enc (Case e _w _ty [(_,dropTvars -> [v],rhs)]) =
     -- TODO: Check whether _w is in rhs
+    -- TODO: Maybe drop this special case.
     return $ Let (NonRec v e) rhs
   enc (Case e w ty [alt]) =
     Case <$> enc e
@@ -80,7 +89,11 @@ instance Enc CoreExpr where
   enc (Coercion _co) = error "enc: Coercion -- ??"
 
 encAlt :: CoreAlt -> TransformH x CoreAlt
-encAlt (_,vs,e) = (DataAlt (tupleCon BoxedTuple (length vs)),vs,) <$> enc e
+encAlt (_,dropTvars -> vs,e) =
+  (DataAlt (tupleCon BoxedTuple (length vs)),vs,) <$> enc e
+
+dropTvars :: Unop [Var]
+dropTvars = filter (not . isTyVar)
 
 instance Enc Id where
   enc v | isId v    = newIdT (uqVarName v) . enc (varType v)
@@ -92,7 +105,9 @@ instance Enc Type where
   enc t = observeR "enc: unhandled type" $* t
 
 isDistribTC :: TyCon -> Bool
-isDistribTC tc = any ($ tc) [isTupleTyCon,isFunTyCon] && tyConArity tc == 2
+isDistribTC tc =
+     any ($ tc) [isTupleTyCon,isFunTyCon] && tyConArity tc == 2
+  || tc == unitTyCon
 
 instance Enc CoreBind where
   enc (NonRec v e) = NonRec <$> enc v <*> enc e
@@ -111,3 +126,4 @@ plugin = hermitPlugin (phase 0 . interactive externals)
    externals =
      [ externC "encodeBind" (encode :: RewriteH CoreBind) "..."
      ]
+     ++ Mono.externals
