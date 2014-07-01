@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE ViewPatterns, PatternGuards #-}
 {-# LANGUAGE FlexibleContexts, ConstraintKinds #-}
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
@@ -22,8 +21,9 @@ module LambdaCCC.Standardize (standardizeR) where
 
 -- import Prelude hiding (id,(.))
 
-import Control.Arrow ((***))
 import Data.Functor ((<$>))
+import Control.Applicative (liftA2)
+import Control.Arrow ((***))
 import Data.Maybe (catMaybes)
 -- import Data.List (partition)
 
@@ -43,25 +43,26 @@ class Standardizable a where standardize :: Unop a
 isStandardType :: Type -> Bool
 isStandardType t = any ($ t) [isBoolTy,isIntTy,isUnitTy]
 
-#define Trace
+tracing :: Bool
+tracing = True
+
+ttrace :: String -> a -> a
+ttrace | tracing   = trace
+       | otherwise = flip const
 
 instance Standardizable Type where
-#ifdef Trace
-  standardize ty | trace ("standardize type " ++ unsafeShowPpr ty) False = undefined
-#endif
-  standardize t | isStandardType t = trace "standard type" $
+  standardize ty | ttrace ("standardize type " ++ unsafeShowPpr ty) False = undefined
+  standardize t | isStandardType t = ttrace "standard type" $
                                      t
   standardize (coreView -> Just ty) = standardize ty
   standardize (a `FunTy` b) = standardize a `FunTy` standardize b
   standardize _ty@(TyConApp _tc@(tyConDataCons_maybe -> Just dcs0) tcTys)
     | [argTys] <- catMaybes mbs
       = foldT unitTy pairTy (toTree (map standardize argTys))
-#ifdef Trace
     | w <- catMaybes mbs
-      , trace (   "standardize: data type "++ uqName (tyConName _tc)
+      , ttrace (  "standardize: data type "++ uqName (tyConName _tc)
                 ++" with " ++ show (length w)
-                ++ " consistent constructors") False = undefined
-#endif
+                ++" consistent constructors") False = undefined
    where
      mbs   = map (dcApp tcTys) dcs0
   standardize (ForAllTy v ty) = ForAllTy v (standardize ty)
@@ -69,10 +70,7 @@ instance Standardizable Type where
                    ty
 
 dcApp :: [Type] -> DataCon -> Maybe [Type]
-dcApp tcTys dc =
-#ifdef Trace
-                 trace (unsafeShowPpr info) $
-#endif
+dcApp tcTys dc = -- ttrace (unsafeShowPpr info) $
                  mbTys
  where
    tcSub = zipOpenTvSubst (dataConUnivTyVars dc) tcTys
@@ -82,38 +80,36 @@ dcApp tcTys dc =
    mbUSub = unionTvSubst tcSub <$>
             tcUnifyTys (const BindMe) (Type.substTyVar tcSub <$> eqVs) eqTs
    mbTys = (\ sub -> Type.substTy sub <$> valArgs) <$> mbUSub
-#ifdef Trace
-   info = ( (tcTys,dc)
-          , ( dataConRepType dc
-            , bodyTy
-            , valArgs
-            , dataConUnivTyVars dc
-            , dataConExTyVars dc
-            , dataConEqSpec dc )
-          , (tcSub,mbUSub,mbTys)
-          )
-#endif
+--    info = ( (tcTys,dc)
+--           , ( dataConRepType dc
+--             , bodyTy
+--             , valArgs
+--             , dataConUnivTyVars dc
+--             , dataConExTyVars dc
+--             , dataConEqSpec dc )
+--           , (tcSub,mbUSub,mbTys)
+--           )
+
+retypeVar :: Unop Type -> Unop Var
+retypeVar f v = setVarType v (standardize (f (varType v)))
 
 instance Standardizable Var where
-#ifdef Trace
-  standardize x | trace ("standardize var " ++ unsafeShowPpr x) False = undefined
-#endif
-  standardize v = setVarType v (standardize (varType v))
+  standardize x | ttrace ("standardize var " ++ unsafeShowPpr x) False = undefined
+  -- standardize v = setVarType v (standardize (varType v))
+  standardize v = retypeVar standardize v
 
 instance Standardizable CoreExpr where
-#ifdef Trace
-  standardize x | trace ("standardize expr " ++ unsafeShowPpr x) False = undefined
-#endif
+  standardize x | ttrace ("standardize expr " ++ unsafeShowPpr x) False = undefined
   standardize (Type t)       = Type (standardize t)
   standardize (Coercion co)  = Coercion (standardize co)
   standardize e@(collectArgs -> ( Var (isDataConWorkId_maybe -> Just con)
                                 , filter (not.isTyCoArg) -> valArgs ))
-    | isStandardType (exprType e) = trace "standard expression type" $
+    | isStandardType (exprType e) = ttrace "standard expression type" $
                                     e
     | let argsNeeded = dataConSourceArity con - length valArgs, argsNeeded > 0 =
         standardize (etaExpand argsNeeded e)
     | otherwise =
-        trace ("standardize constructor application") $
+        ttrace ("standardize constructor application") $
         foldT (mkCoreTup []) (\ u v  -> mkCoreTup [u,v])
               (toTree (map standardize valArgs))
     | otherwise =
@@ -124,12 +120,25 @@ instance Standardizable CoreExpr where
   standardize (Lam x e)      = Lam (standardize x) (standardize e)
   standardize (Let b e)      = Let (standardize b) (standardize e)
   standardize (Case e w ty alts) =
-    Case (standardize e)
-         (standardize w)
-         (standardize ty)
-         (map (standardizeAlt (tyConAppArgs (exprType e))) alts)
-  standardize (Cast e co)    = mkCast (standardize e) (standardize co)
+    case' (standardize e)
+          w'
+          (standardize ty)
+          (map (standardizeAlt w' (tyConAppArgs (exprType e))) alts)
+   where
+     -- We may rewrite an alt to use wild, so update its OccInfo to unknown.
+     w' = setIdOccInfo (standardize w) NoOccInfo
+  standardize (Cast e co)    = mkCast e' co'
+   where
+     e'  = standardize e
+     co' = mkUnivCo (coercionRole co) (exprType e') (standardize ty')
+     Pair _ ty' = coercionKind co
+
   standardize (Tick t e)     = Tick t (standardize e)
+
+case' :: CoreExpr -> Var -> Type -> [CoreAlt] -> CoreExpr
+case' scrut wild _bodyTy [(DEFAULT,[],body)] =
+  Let (NonRec wild scrut) body
+case' scrut wild bodyTy alts = Case scrut wild bodyTy alts
 
 -- standardizeConToExpr :: DataCon -> CoreExpr
 -- standardizeConToExpr dc = go (dataConRepType dc)
@@ -150,23 +159,35 @@ instance Standardizable CoreExpr where
 -- isCoercion _ = False
 
 instance Standardizable CoreBind where
-#ifdef Trace
-  standardize x | trace ("standardize bind " ++ unsafeShowPpr x) False = undefined
-#endif
+  -- standardize x | ttrace ("standardize bind " ++ unsafeShowPpr x) False = undefined
   standardize (NonRec x e) =
     NonRec (standardize x) (standardize e)
   standardize (Rec ves)    =
     Rec (map (standardize *** standardize) ves)
 
-standardizeAlt :: [Type] -> Unop CoreAlt
-standardizeAlt tcTys (DataAlt dc,vs,e) =
-  ( DataAlt (tupleCon BoxedTuple (length argTys))
-  , standardize <$> drop (length tvs) vs
-  , standardize e )
+vTy :: Var -> (Var,Type)
+vTy v = (v, varType v)
+
+standardizeAlt :: Var -> [Type] -> Unop CoreAlt
+standardizeAlt wild tcTys (DataAlt dc,vs,e) =
+  ttrace ("standardizeAlt:\n" ++
+          unsafeShowPpr ((dc,vTy <$> vs,e),(valVars0,valVars)
+                        , alt' )) $
+  alt'
  where
-   (tvs,body) = splitForAllTys (dataConRepType dc)
-   argTys = fst (splitFunTys (Type.substTyWith tvs tcTys body))
-standardizeAlt _ _ = error "standardizeAlt: non-DataAlt"
+   alt' | [x] <- valVars = (DEFAULT, [], standardize (subst [(x,Var wild)] e))
+        | otherwise      =
+            (tupCon (length valVars), standardize <$> valVars, standardize e)
+   valVars0 = filter (not . liftA2 (||) isTypeVar isCoVar) vs
+   valVars  = retypeVar sub <$> valVars0  -- needed?
+   sub      = Type.substTy (Type.zipOpenTvSubst tvs tcTys)
+   tvs      = fst (splitForAllTys (dataConRepType dc))
+standardizeAlt _ _ _ = error "standardizeAlt: non-DataAlt"
+
+tupCon :: Int -> AltCon
+tupCon 1 = DEFAULT
+tupCon n = DataAlt (tupleCon BoxedTuple n)
+
 
 -- TODO: I may need nested patterns, which then requires generating new
 -- variables.
