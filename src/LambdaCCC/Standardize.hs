@@ -52,7 +52,7 @@ ttrace | tracing   = trace
 
 instance Standardizable Type where
   standardize ty | ttrace ("standardize type " ++ unsafeShowPpr ty) False = undefined
-  standardize t | isStandardType t = ttrace "standard type" $
+  standardize t | isStandardType t = -- ttrace "standard type" $
                                      t
   standardize (coreView -> Just ty) = standardize ty
   standardize (a `FunTy` b) = standardize a `FunTy` standardize b
@@ -73,13 +73,14 @@ dcApp :: [Type] -> DataCon -> Maybe [Type]
 dcApp tcTys dc = -- ttrace (unsafeShowPpr info) $
                  mbTys
  where
-   tcSub = zipOpenTvSubst (dataConUnivTyVars dc) tcTys
-   bodyTy = dropForAlls (dataConRepType dc)
-   valArgs = filter (not.isCoVarType) (fst (splitFunTys bodyTy))
+   tcSub       = zipOpenTvSubst (dataConUnivTyVars dc) tcTys
+   bodyTy      = dropForAlls (dataConRepType dc)
+   valArgs     = filter (not.isCoVarType) (fst (splitFunTys bodyTy))
    (eqVs,eqTs) = unzip (dataConEqSpec dc)
-   mbUSub = unionTvSubst tcSub <$>
-            tcUnifyTys (const BindMe) (Type.substTyVar tcSub <$> eqVs) eqTs
-   mbTys = (\ sub -> Type.substTy sub <$> valArgs) <$> mbUSub
+   mbUSub      = unionTvSubst tcSub <$>
+                 tcUnifyTys (const BindMe) (Type.substTyVar tcSub <$> eqVs) eqTs
+   mbTys       = (\ sub -> Type.substTy sub <$> valArgs) <$> mbUSub
+
 --    info = ( (tcTys,dc)
 --           , ( dataConRepType dc
 --             , bodyTy
@@ -90,16 +91,22 @@ dcApp tcTys dc = -- ttrace (unsafeShowPpr info) $
 --           , (tcSub,mbUSub,mbTys)
 --           )
 
-retypeVar :: Unop Type -> Unop Var
-retypeVar f v = setVarType v (standardize (f (varType v)))
+onVarType :: Unop Type -> Unop Var
+onVarType f v = setVarType v (f (varType v))
 
 instance Standardizable Var where
-  standardize x | ttrace ("standardize var " ++ unsafeShowPpr x) False = undefined
+--   standardize x | ttrace ("standardize var " ++ unsafeShowPpr x) False = undefined
   -- standardize v = setVarType v (standardize (varType v))
-  standardize v = retypeVar standardize v
+--   standardize v = ttrace ("standardize type for var " ++ unsafeShowPpr (v,varType v)) $
+--                   onVarType standardize v
+  standardize v = ttrace ("standardize var " ++ unsafeShowPpr (v,ty,ty')) $
+                  setVarType v ty'
+   where
+     ty = varType v
+     ty' = standardize ty
 
 instance Standardizable CoreExpr where
-  standardize x | ttrace ("standardize expr " ++ unsafeShowPpr x) False = undefined
+  -- standardize x | ttrace ("standardize expr " ++ unsafeShowPpr x) False = undefined
   standardize (Type t)       = Type (standardize t)
   standardize (Coercion co)  = Coercion (standardize co)
   standardize e@(collectArgs -> ( Var (isDataConWorkId_maybe -> Just con)
@@ -123,15 +130,16 @@ instance Standardizable CoreExpr where
     case' (standardize e)
           w'
           (standardize ty)
-          (map (standardizeAlt w' (tyConAppArgs (exprType e))) alts)
+          (map (standardizeAlt w (tyConAppArgs (exprType e))) alts)
    where
      -- We may rewrite an alt to use wild, so update its OccInfo to unknown.
      w' = setIdOccInfo (standardize w) NoOccInfo
-  standardize (Cast e co)    = mkCast e' co'
-   where
-     e'  = standardize e
-     co' = mkUnivCo (coercionRole co) (exprType e') (standardize ty')
-     Pair _ ty' = coercionKind co
+  standardize (Cast e _co)   = standardize e  -- Experiment
+  -- standardize (Cast e co)    = mkCast e' co'
+  --  where
+  --    e'  = standardize e
+  --    co' = mkUnivCo (coercionRole co) (exprType e') (standardize ty')
+  --    Pair _ ty' = coercionKind co
 
   standardize (Tick t e)     = Tick t (standardize e)
 
@@ -165,21 +173,21 @@ instance Standardizable CoreBind where
   standardize (Rec ves)    =
     Rec (map (standardize *** standardize) ves)
 
-vTy :: Var -> (Var,Type)
-vTy v = (v, varType v)
+-- vTy :: Var -> (Var,Type)
+-- vTy v = (v, varType v)
 
 standardizeAlt :: Var -> [Type] -> Unop CoreAlt
 standardizeAlt wild tcTys (DataAlt dc,vs,e) =
-  ttrace ("standardizeAlt:\n" ++
-          unsafeShowPpr ((dc,vTy <$> vs,e),(valVars0,valVars)
-                        , alt' )) $
+--   ttrace ("standardizeAlt:\n" ++
+--           unsafeShowPpr ((dc,vTy <$> vs,e),(valVars0,valVars)
+--                         , alt' )) $
   alt'
  where
    alt' | [x] <- valVars = (DEFAULT, [], standardize (subst [(x,Var wild)] e))
         | otherwise      =
             (tupCon (length valVars), standardize <$> valVars, standardize e)
    valVars0 = filter (not . liftA2 (||) isTypeVar isCoVar) vs
-   valVars  = retypeVar sub <$> valVars0  -- needed?
+   valVars  = onVarType sub <$> valVars0  -- needed?
    sub      = Type.substTy (Type.zipOpenTvSubst tvs tcTys)
    tvs      = fst (splitForAllTys (dataConRepType dc))
 standardizeAlt _ _ _ = error "standardizeAlt: non-DataAlt"
