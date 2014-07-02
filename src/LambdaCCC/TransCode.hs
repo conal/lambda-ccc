@@ -92,6 +92,7 @@ encAlt :: CoreAlt -> TransformH x CoreAlt
 encAlt (_,dropTvars -> vs,e) =
   (DataAlt (tupleCon BoxedTuple (length vs)),vs,) <$> enc e
 
+-- Drop type variables including coercions
 dropTvars :: Unop [Var]
 dropTvars = filter (not . isTyVar)
 
