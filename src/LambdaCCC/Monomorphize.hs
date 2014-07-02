@@ -15,7 +15,7 @@
 -- Maintainer  :  conal@tabula.com
 -- Stability   :  experimental
 -- 
--- Transform away all non-standard types
+-- Monomorphization plugin
 ----------------------------------------------------------------------
 
 module LambdaCCC.Monomorphize where
@@ -49,6 +49,7 @@ import HERMIT.Extras hiding (findTyConT)
 import qualified HERMIT.Extras as Ex
 
 import LambdaCCC.Misc ((<~))
+import LambdaCCC.Standardize (standardizeR)
 
 {--------------------------------------------------------------------
     Observing
@@ -105,7 +106,7 @@ caseNoVarR =
      return rhs
 
 bragMemo :: Bool
-bragMemo = observing
+bragMemo = False
 
 -- Memoize a transformation. Don't introduce a let binding (for later floating),
 -- which would interfere with additional simplification.
@@ -167,21 +168,28 @@ monomorphize = memoFloatLabelR (repeatR specializeTyDict)
     Simplification
 --------------------------------------------------------------------}
 
+replaceBash :: Bool
+replaceBash = True
+
+bashWith :: [ReExpr] -> ReExpr
+bashWith
+  | replaceBash = \ rs -> bashUsingE (promoteR <$> (rs ++ bashSimplifiers))
+  | otherwise   = \ rs -> bashExtendedWithE (promoteR <$> rs)
+
+simplifyAll :: ReExpr
+simplifyAll = watchR "simplifyAll" $
+              bashWith mySimplifiers
+
+simplifyAll' :: ReExpr
+simplifyAll' = watchR "simplifyAll'" $
+               bashWith (letSubstOneOccR : mySimplifiers)
+
+
 mySimplifiers :: [ReExpr]
-mySimplifiers = [ castFloatAppR    -- or castFloatAppR'
-                , letElimTrivialR  -- instead of letNonRecSubstSafeR
-                , letSubstOneOccR
+mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
+                , letSubstTrivialR  -- instead of letNonRecSubstSafeR
+             -- , letSubstOneOccR -- delay
                 ]
-
-#define ReplaceBash
-
-simplifyAll  :: ReExpr
-
-simplifiers :: [ReExpr]
-simplifiers =
-  mySimplifiers
-#ifdef ReplaceBash
-  ++ bashSimplifiers
 
 -- From bashComponents.
 bashSimplifiers :: [ReExpr]
@@ -199,7 +207,7 @@ bashSimplifiers =
   , nowatchR "caseFloatAppR" caseFloatAppR
   , nowatchR "caseFloatCaseR" caseFloatCaseR
   , nowatchR "caseFloatLetR" caseFloatLetR
-  -- , nowatchR "caseFloatCastR" caseFloatCastR  -- Watch this one
+  , nowatchR "caseFloatCastR" caseFloatCastR  -- Watch this one
   , nowatchR "letFloatAppR" letFloatAppR
   , nowatchR "letFloatArgR" letFloatArgR
   , nowatchR "letFloatLamR" letFloatLamR
@@ -210,18 +218,14 @@ bashSimplifiers =
   , nowatchR "castElimSymR" castElimSymR
   ]
 
-simplifyAll = watchR "simplifyAll" $
-              bashUsingE (promoteR <$> simplifiers)
-
-#else
-
-simplifyAll = watchR "simplifyAll" $
-              bashExtendedWithE (promoteR <$> simplifiers)
-
-#endif
-
 simplifyAllRhs :: ReProg
 simplifyAllRhs = progRhsAnyR simplifyAll
+
+simplifyAllRhs' :: ReProg
+simplifyAllRhs' = progRhsAnyR simplifyAll'
+
+simplifyAllBind' :: ReBind
+simplifyAllBind' = nonRecAllR id simplifyAll'
 
 letFloatR :: ReCore
 letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR)
@@ -229,11 +233,14 @@ letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR
 pruneAltsProg :: ReProg
 pruneAltsProg = progRhsAnyR ({-bracketR "pruneAltsR"-} pruneAltsR)
 
+retypeProgR :: ReProg
+retypeProgR = progRhsAnyR ({-bracketR "retypeExprR"-} retypeExprR)
+
 passCore :: ReCore
 passCore = tryR (promoteR simplifyAllRhs)  -- after let-floating
          . tryR (anybuR letFloatR)
          . tryR (anybuR (promoteR bindUnLetIntroR))
-         . tryR (promoteR pruneAltsProg)
+         . tryR (promoteR retypeProgR) -- pruneAltsProg
          . tryR unshadowR
          . onetdR (promoteR monomorphize)
 
@@ -245,7 +252,7 @@ passE = id
       . tryR simplifyAll  -- after let floating
       . tryR (anybuE (letFloatExprR <+ letFloatCaseAltR))
       . tryR (anybuE (letAllR bindUnLetIntroR id))
-      . tryR pruneAltsR
+      . tryR (watchR "retypeExprR" retypeExprR) -- pruneAltsR
       . tryR (extractR unshadowR)
       . onetdE monomorphize
 
@@ -263,7 +270,10 @@ plugin = hermitPlugin (phase 0 . interactive externals)
 externals :: [External]
 externals =
     [ externC "simplifyAll" simplifyAll "Bash with normalization simplifiers (no inlining)"
+    , externC "simplifyAll'" simplifyAll' "simplifyAll plus letSubstOneOccR"
     , externC "simplifyAllRhs" simplifyAllRhs "simplify-all on all top-level RHSs"
+    , externC "simplifyAllRhs'" simplifyAllRhs' "simplify-all' on all top-level RHSs"
+    , externC "simplifyAllBind'" simplifyAllBind' "simplify-all' on all binding RHS"
     , externC "specializeTyDict" specializeTyDict "..."
     , externC "bindUnLetIntroR" bindUnLetIntroR "..."
     , externC "letFloatCaseAltR" letFloatCaseAltR "..."
@@ -271,6 +281,9 @@ externals =
     , external "passCore" passCore ["..."]
     , externC "passE" passE "..."
     , externC "letSubstOneOccR" letSubstOneOccR "..."
+    , externC "standardizeExpr" (standardizeR :: ReExpr) "..."
+    , externC "standardizeProg" (standardizeR :: ReProg) "..."
+    , externC "standardizeBind" (standardizeR :: ReBind) "..."
     -- 
     , external "let-float'"
         (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR)
@@ -278,5 +291,10 @@ externals =
         ["let-float with letFloatCaseAltR"]
     , externC "pruneAltsR" pruneAltsR "..."
     , externC "pruneAltsProg" pruneAltsProg "..."
+    , externC "retypeExprR" retypeExprR "..."
+    , externC "retypeProgR" retypeProgR "..."
     , externC "simplify-expr" simplifyExprR "Invoke GHC's simplifyExpr"
+    , externC "cast-float-app'" castFloatAppR' "cast-float-app with transitivity"
+    , externC "castFloatAppUnivR" castFloatAppUnivR "cast-float-app with coercion cheating"
+    , externC "case-wild" caseWildR "case of wild ==> let (doesn't preserve evaluation)"
     ]
