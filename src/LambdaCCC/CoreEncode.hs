@@ -735,7 +735,7 @@ encodePassCore = -- watchR "encodePassRhs" $
 
 mySimplifiers :: [ReExpr]
 mySimplifiers =
-  [ nowatchR "letElimTrivialR" letElimTrivialR
+  [ nowatchR "letSubstTrivialR" letSubstTrivialR
   -- , nowatchR "betaReduceTrivialR" betaReduceTrivialR
   , nowatchR "letElimR" letElimR   -- removed unused bindings after inlining
   , nowatchR "letSubstOneOccR" letSubstOneOccR
