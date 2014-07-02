@@ -37,7 +37,7 @@ import Data.Foldable (Foldable(..),sum)
 
 import TypeUnary.TyNat
 import TypeUnary.Nat (IsNat)
--- import TypeUnary.Vec (Vec(..))
+import TypeUnary.Vec (Vec(..))
 
 import Circat.Pair (Pair(..))
 import Circat.RTree (Tree(..))
@@ -55,11 +55,50 @@ import LambdaCCC.Encode (Encodable(..))
     Examples
 --------------------------------------------------------------------}
 
-test :: Tree N4 Int -> Int
+-- test :: ()
+-- test = ()
+
+-- test :: Pair Bool -> Pair Bool
+-- test = id
+
+-- test :: Pair Bool -> Pair Bool
+-- test (x :# y) = (y :# x)
+
+-- test :: Tree N0 Int -> Tree N0 Int
+-- test = id
+
+-- test :: Vec N6 Int -> Vec N6 Int
+-- test = id
+
+-- test :: Tree N0 Int
+-- test = L 3
+
+-- test :: Tree N1 Int
+-- test = B (L 3 :# L 4)
+
+-- test :: Int -> Tree N0 Int
+-- test = L
+
+-- test :: Pair (Tree N0 Int) -> Tree N1 Int
+-- test = B
+
+-- test :: (Bool,Int,Bool)
+-- test = (True,3,False)
+
+test :: Tree N8 Int -> Int
 test = sum
 
--- test :: Tree N4 Int -> Int
--- test = sum
+-- test :: Tree N6 Bool -> Tree N6 Bool
+-- test = fmap not
+
+-- test = encode (fmap not :: Tree N1 Bool -> Tree N1 Bool)
+
+-- type EncTy a = a -> Encode a
+
+-- test :: EncTy (Tree N0 Bool -> Tree N0 Bool)
+-- test = encode
+
+-- test = encode (sum :: Tree N2 Int -> Int)
 
 -- test :: Pair Bool -> Bool
 -- test (a :# b) = a || b
@@ -79,7 +118,7 @@ test = sum
 -- foo :: Encodable a => a -> Encode a
 -- foo = encode
 
--- test :: Tree Z Int -> Int
+-- test :: Tree N8 Int -> Int
 -- test = sum
 
 -- test = encode (sum :: Tree Z Int -> Int)
