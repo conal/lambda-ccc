@@ -26,7 +26,7 @@ module LambdaCCC.CoerceEncode where
 import Data.Functor ((<$>))
 import Control.Applicative (liftA2)
 import Control.Arrow (second)
--- import Data.List (partition)
+import Data.Maybe (fromMaybe)
 
 import CoreArity (etaExpand)
 
@@ -37,6 +37,7 @@ import HERMIT.Core (CoreProg(..))
 import HERMIT.Extras hiding (findTyConT, labeled)
 
 -- import qualified Type
+import Unify (tcUnifyTys,BindFlag(BindMe))
 
 class Standardizable a where standardize :: Unop a
 
@@ -44,7 +45,7 @@ isStandardType :: Type -> Bool
 isStandardType t = any ($ t) [isUnitTy,isBoolTy,isIntTy]
 
 tracing :: Bool
-tracing = True
+tracing = False
 
 ttrace :: String -> a -> a
 ttrace | tracing   = trace
@@ -77,7 +78,7 @@ instance Standardizable CoreExpr where
      -- We may rewrite an alt to use wild, so update its OccInfo to unknown.
      -- TODO: Only update if used.
      -- TODO: Refactor so as not to repeat the w type change.
-     (alt',ety') = standardizeAlt w' (tyConAppArgs (exprType e)) alt
+     (alt',ety') = standardizeAlt w' alt
      w' = setIdOccInfo w NoOccInfo
   standardize (Case {}) = error "standardize: multi-alternative "
   standardize e@(Cast e' _)  = castTo (exprType e) (standardize e')
@@ -104,8 +105,8 @@ instance Standardizable CoreBind where
 
 -- Standardize an alternative, yielding a new alternative and the new scrutinee
 -- type.
-standardizeAlt :: Var -> [Type] -> CoreAlt -> (CoreAlt,Type)
-standardizeAlt wild tcTys (DataAlt dc,vs,e0) =
+standardizeAlt :: Var -> CoreAlt -> (CoreAlt,Type)
+standardizeAlt wild (DataAlt dc,vs,e0) =
   ttrace ("standardizeAlt:\n" ++
           unsafeShowPpr ((dc,vs,e0),(valVars0,valVars),(sub,e), alt')) $
   alt'
@@ -120,9 +121,19 @@ standardizeAlt wild tcTys (DataAlt dc,vs,e0) =
             , mkBoxedTupleTy (varType <$> valVars) ) 
    valVars0 = filter (not . liftA2 (||) isTypeVar isCoVar) vs
    valVars  = onVarType (substTy sub) <$> valVars0  -- needed?
-   sub      = extendTvSubstList emptySubst (zip tvs tcTys)
-   tvs      = fst (splitForAllTys (dataConRepType dc))
-standardizeAlt _ _ _ = error "standardizeAlt: non-DataAlt"
+   
+   sub      = tvSubstToSubst $
+              tcUnifyTys' (coVarKind <$> filter isCoVar vs)
+standardizeAlt _ _ = error "standardizeAlt: non-DataAlt"
+
+tcUnifyTys' :: [(Type,Type)] -> TvSubst
+tcUnifyTys' (unzip -> (ls,rs)) =
+  fromMaybe (error "tcUnifyTys': Nothing") $
+  tcUnifyTys (const BindMe)  ls rs
+
+tvSubstToSubst :: TvSubst -> Subst
+tvSubstToSubst (TvSubst _ tsub) =
+  Subst emptyInScopeSet emptyVarEnv tsub emptyVarEnv
 
 -- TODO: Handle length valVars > 2 correctly. I think I'll have to generate new
 -- wildcard variables for the new 'case' expressions. Learn standard GHC
