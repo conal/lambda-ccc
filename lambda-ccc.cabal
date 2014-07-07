@@ -47,8 +47,9 @@ Library
                     LambdaCCC.Encode
                     LambdaCCC.CoreEncode
                     LambdaCCC.Monomorphize
-                    LambdaCCC.Standardize
 --                     LambdaCCC.TransCode
+--                     LambdaCCC.Standardize
+                    LambdaCCC.CoerceEncode
                     LambdaCCC.Run
                     LambdaCCC.Examples.Linear
 -- Phasing out:
