@@ -50,7 +50,7 @@ import HERMIT.Extras hiding (findTyConT)
 import qualified HERMIT.Extras as Ex
 
 import LambdaCCC.Misc ((<~))
-import LambdaCCC.Standardize
+import LambdaCCC.CoerceEncode
 
 {--------------------------------------------------------------------
     Observing
@@ -169,12 +169,12 @@ isPrimitive v = fqName (varName v) `S.member` primitives
 
 primitives :: S.Set String
 primitives = S.fromList
-  [ "GHC.Num.$fNumInt_$c+"
-  , "GHC.Num.&&"
-  , "GHC.Num.||"
-  , "GHC.Num.not"
-  , "GHC.Real.$fIntegralInt_$crem"
+  [ "GHC.Classes.&&"
+  , "GHC.Classes.||"
+  , "GHC.Classes.not"
+  , "GHC.Num.$fNumInt_$c+"
   , "GHC.Num.$fNumInt_$cfromInteger"
+  , "GHC.Real.$fIntegralInt_$crem"
   , "GHC.Classes.eqInt"
   ]
 
@@ -211,6 +211,7 @@ simplifyAll' = watchR "simplifyAll'" $
 
 mySimplifiers :: [ReExpr]
 mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
+                , castCastR
                 , letSubstTrivialR  -- instead of letNonRecSubstSafeR
              -- , letSubstOneOccR -- delay
                 ]
@@ -286,7 +287,7 @@ letSubstOneOccR = oneOccT >> letNonRecSubstR
 
 standardizeR' :: (Standardizable a, SyntaxEq a, Injection a CoreTC) => RewriteH a
 standardizeR' = watchR "standardizeR" $
-                changedArrR standardize
+                standardizeR
 
 {--------------------------------------------------------------------
     Plugin
