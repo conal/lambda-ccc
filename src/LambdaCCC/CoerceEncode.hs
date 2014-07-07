@@ -36,7 +36,7 @@ import HERMIT.Core (CoreProg(..))
 
 import HERMIT.Extras hiding (findTyConT, labeled)
 
-import qualified Type
+-- import qualified Type
 
 class Standardizable a where standardize :: Unop a
 
@@ -71,17 +71,20 @@ instance Standardizable CoreExpr where
   standardize (App u v)      = App (standardize u) (standardize v)
   standardize (Lam x e)      = Lam x (standardize e)
   standardize (Let b e)      = Let (standardize b) (standardize e)
-  standardize (Case e w ty alts) =
-    case' (standardize e)
-          w'
-          ty
-          (map (standardizeAlt w' (tyConAppArgs (exprType e))) alts)
+  standardize (Case e w ty [alt]) =
+    case' (castTo ety' (standardize e)) (onVarType (const ety') w') ty [alt']
    where
      -- We may rewrite an alt to use wild, so update its OccInfo to unknown.
      -- TODO: Only update if used.
+     -- TODO: Refactor so as not to repeat the w type change.
+     (alt',ety') = standardizeAlt w' (tyConAppArgs (exprType e)) alt
      w' = setIdOccInfo w NoOccInfo
+  standardize (Case {}) = error "standardize: multi-alternative "
   standardize e@(Cast e' _)  = castTo (exprType e) (standardize e')
   standardize (Tick t e)     = Tick t (standardize e)
+
+onVarType :: Unop Type -> Unop Var
+onVarType f v = setVarType v (f (varType v))
 
 castTo :: Type -> CoreExpr -> CoreExpr
 castTo ty (Cast e _) = castTo ty e
@@ -99,25 +102,27 @@ instance Standardizable CoreBind where
   standardize (NonRec x e) = NonRec x (standardize e)
   standardize (Rec ves)    = Rec (map (second standardize) ves)
 
-standardizeAlt :: Var -> [Type] -> Unop CoreAlt
-standardizeAlt wild tcTys (DataAlt dc,vs,e) =
+-- Standardize an alternative, yielding a new alternative and the new scrutinee
+-- type.
+standardizeAlt :: Var -> [Type] -> CoreAlt -> (CoreAlt,Type)
+standardizeAlt wild tcTys (DataAlt dc,vs,e0) =
   ttrace ("standardizeAlt:\n" ++
-          unsafeShowPpr ((dc,vs,e),(valVars0,valVars)
-                       , alt' )) $
+          unsafeShowPpr ((dc,vs,e0),(valVars0,valVars),(sub,e), alt')) $
   alt'
  where
+   e = substExpr (text "standardizeAlt") sub e0
    alt' | [x] <- valVars =
-           (DEFAULT, [], standardize (subst [(x,castTo (varType x) (Var wild))] e))
+           let xty   = varType x
+               wild' = onVarType (const xty) wild in
+             ((DEFAULT, [], standardize (subst [(x,Var wild')] e)), xty)
         | otherwise      =
-            (tupCon (length valVars), valVars, standardize e)
+            ( (tupCon (length valVars), valVars, standardize e)
+            , mkBoxedTupleTy (varType <$> valVars) ) 
    valVars0 = filter (not . liftA2 (||) isTypeVar isCoVar) vs
-   valVars  = onVarType sub <$> valVars0  -- needed?
-   sub      = Type.substTy (Type.zipOpenTvSubst tvs tcTys)
+   valVars  = onVarType (substTy sub) <$> valVars0  -- needed?
+   sub      = extendTvSubstList emptySubst (zip tvs tcTys)
    tvs      = fst (splitForAllTys (dataConRepType dc))
 standardizeAlt _ _ _ = error "standardizeAlt: non-DataAlt"
-
-onVarType :: Unop Type -> Unop Var
-onVarType f v = setVarType v (f (varType v))
 
 -- TODO: Handle length valVars > 2 correctly. I think I'll have to generate new
 -- wildcard variables for the new 'case' expressions. Learn standard GHC
