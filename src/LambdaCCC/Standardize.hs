@@ -17,7 +17,7 @@
 -- Transform away all non-standard types
 ----------------------------------------------------------------------
 
-module LambdaCCC.Standardize (standardizeR) where
+module LambdaCCC.Standardize (Standardizable(..), standardizeR) where
 
 -- import Prelude hiding (id,(.))
 
@@ -41,72 +41,75 @@ import qualified Type
 class Standardizable a where standardize :: Unop a
 
 isStandardType :: Type -> Bool
-isStandardType t = any ($ t) [isBoolTy,isIntTy,isUnitTy]
+isStandardType t = any ($ t) [isUnitTy,isBoolTy,isIntTy]
 
 tracing :: Bool
-tracing = True
+tracing = False
 
 ttrace :: String -> a -> a
 ttrace | tracing   = trace
        | otherwise = flip const
 
 instance Standardizable Type where
-  standardize ty | ttrace ("standardize type " ++ unsafeShowPpr ty) False = undefined
+  standardize ty | ttrace ("standardize type " ++ unsafeShowPpr' ty) False = undefined
   standardize t | isStandardType t = -- ttrace "standard type" $
                                      t
   standardize (coreView -> Just ty) = standardize ty
   standardize (a `FunTy` b) = standardize a `FunTy` standardize b
-  standardize _ty@(TyConApp _tc@(tyConDataCons_maybe -> Just dcs0) tcTys)
-    | [argTys] <- catMaybes mbs
-      = foldT unitTy pairTy (toTree (map standardize argTys))
-    | w <- catMaybes mbs
-      , ttrace (  "standardize: data type "++ uqName (tyConName _tc)
-                ++" with " ++ show (length w)
-                ++" consistent constructors") False = undefined
+  standardize _ty@(TyConApp _tc@(tyConDataCons_maybe -> Just dcs) tcTys)
+    | [argTys'] <- catMaybes mbs
+    = -- foldT unitTy pairTy (toTree (map standardize argTys))
+      foldT unitTy pairTy (toTree argTys')
+--     | w <- catMaybes mbs
+--     , ttrace (  "standardize: data type "++ uqName (tyConName _tc)
+--               ++" with " ++ show (length w)
+--               ++" consistent constructors") False = undefined
    where
-     mbs   = map (dcApp tcTys) dcs0
+     mbs   = map (dcApp (map standardize tcTys)) dcs
+             -- map (dcApp tcTys) dcs
   standardize (ForAllTy v ty) = ForAllTy v (standardize ty)
-  standardize ty = -- error "standardize on types: unhandled type"
+  standardize ty = -- ttrace ("standardize unhandled type: "++ unsafeShowPpr' ty) $
                    ty
 
+-- Encode datacon with its data type's *already encoded* type arguments.
 dcApp :: [Type] -> DataCon -> Maybe [Type]
-dcApp tcTys dc = -- ttrace (unsafeShowPpr info) $
-                 mbTys
+dcApp tcTys dc = 
+--                  ttrace ("dcApp in:\n" ++ unsafeShowPpr beforeInfo) $
+--                  ttrace ("dcApp out:\n" ++ unsafeShowPpr afterInfo) $
+                 mbArgs'
  where
-   tcSub       = zipOpenTvSubst (dataConUnivTyVars dc) tcTys
-   bodyTy      = dropForAlls (dataConRepType dc)
-   valArgs     = filter (not.isCoVarType) (fst (splitFunTys bodyTy))
-   (eqVs,eqTs) = unzip (dataConEqSpec dc)
-   mbUSub      = unionTvSubst tcSub <$>
-                 tcUnifyTys (const BindMe) (Type.substTyVar tcSub <$> eqVs) eqTs
-   mbTys       = (\ sub -> Type.substTy sub <$> valArgs) <$> mbUSub
+   repTy    = dataConRepType dc
+   eqSpec   = dataConEqSpec dc
+   uVars    = dataConUnivTyVars dc
+   tcSub    = zipOpenTvSubst uVars tcTys
+   mbEqSub  = tcUnifyTys (const BindMe) (substTyVar tcSub <$> eqVs) eqTs
+               where (eqVs,eqTs) = unzip eqSpec
+   bodyArgs = filter (not.isCoVarType) $
+              fst (splitFunTys (dropForAlls repTy))
+   mbArgs'  = (\ eqSub -> map (Type.substTy tcSub . standardize . Type.substTy eqSub) bodyArgs)
+              <$> mbEqSub
 
---    info = ( (tcTys,dc)
---           , ( dataConRepType dc
---             , bodyTy
---             , valArgs
---             , dataConUnivTyVars dc
---             , dataConExTyVars dc
---             , dataConEqSpec dc )
---           , (tcSub,mbUSub,mbTys)
---           )
+--    -- Before and after recursive standardize
+--    beforeInfo = (dc,repTy,eqSpec,tcSub,mbEqSub,bodyArgs)
+--    afterInfo = (beforeInfo,mbArgs')
 
 onVarType :: Unop Type -> Unop Var
 onVarType f v = setVarType v (f (varType v))
 
 instance Standardizable Var where
---   standardize x | ttrace ("standardize var " ++ unsafeShowPpr x) False = undefined
+--   standardize x | ttrace ("standardize var " ++ unsafeShowPpr' x) False = undefined
   -- standardize v = setVarType v (standardize (varType v))
---   standardize v = ttrace ("standardize type for var " ++ unsafeShowPpr (v,varType v)) $
+--   standardize v = ttrace ("standardize type for var " ++ unsafeShowPpr' (v,varType v)) $
 --                   onVarType standardize v
-  standardize v = ttrace ("standardize var " ++ unsafeShowPpr (v,ty,ty')) $
+  standardize v = -- ttrace ("standardize var " ++ unsafeShowPpr' (v,ty,ty')) $
+                  ttrace ("standardize var " ++ unsafeShowPpr' (v,ty)) $
                   setVarType v ty'
    where
      ty = varType v
      ty' = standardize ty
 
 instance Standardizable CoreExpr where
-  -- standardize x | ttrace ("standardize expr " ++ unsafeShowPpr x) False = undefined
+  -- standardize x | ttrace ("standardize expr " ++ unsafeShowPpr' x) False = undefined
   standardize (Type t)       = Type (standardize t)
   standardize (Coercion co)  = Coercion (standardize co)
   standardize e@(collectArgs -> ( Var (isDataConWorkId_maybe -> Just con)
@@ -167,7 +170,7 @@ case' scrut wild bodyTy alts = Case scrut wild bodyTy alts
 -- isCoercion _ = False
 
 instance Standardizable CoreBind where
-  -- standardize x | ttrace ("standardize bind " ++ unsafeShowPpr x) False = undefined
+  -- standardize x | ttrace ("standardize bind " ++ unsafeShowPpr' x) False = undefined
   standardize (NonRec x e) =
     NonRec (standardize x) (standardize e)
   standardize (Rec ves)    =
@@ -179,7 +182,7 @@ instance Standardizable CoreBind where
 standardizeAlt :: Var -> [Type] -> Unop CoreAlt
 standardizeAlt wild tcTys (DataAlt dc,vs,e) =
 --   ttrace ("standardizeAlt:\n" ++
---           unsafeShowPpr ((dc,vTy <$> vs,e),(valVars0,valVars)
+--           unsafeShowPpr' ((dc,vTy <$> vs,e),(valVars0,valVars)
 --                         , alt' )) $
   alt'
  where
@@ -218,3 +221,10 @@ instance Standardizable CoreProg where
 standardizeR :: (MonadCatch m, Standardizable a, SyntaxEq a) =>
                 Rewrite c m a
 standardizeR = changedArrR standardize
+
+unsafeShowPpr' :: Outputable a => a -> String
+unsafeShowPpr' = filter (/= '\n') . dropMultiSpace . unsafeShowPpr
+ where
+   dropMultiSpace (' ':s@(' ':_)) = dropMultiSpace s
+   dropMultiSpace (c:s)           = c : dropMultiSpace s
+   dropMultiSpace []              = []
