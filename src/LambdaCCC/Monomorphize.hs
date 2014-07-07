@@ -38,6 +38,7 @@ import qualified Data.Set as S
 import PrelNames (eitherTyConName)
 
 import HERMIT.Core (CoreDef(..))
+import HERMIT.Context (HermitC)
 import HERMIT.Dictionary hiding (externals)
 import HERMIT.External (External,ExternalName,external,(.+),CmdTag(Loop))
 import HERMIT.GHC
@@ -49,7 +50,7 @@ import HERMIT.Extras hiding (findTyConT)
 import qualified HERMIT.Extras as Ex
 
 import LambdaCCC.Misc ((<~))
-import LambdaCCC.Standardize (standardizeR)
+import LambdaCCC.Standardize
 
 {--------------------------------------------------------------------
     Observing
@@ -60,7 +61,7 @@ import LambdaCCC.Standardize (standardizeR)
 observing :: Ex.Observing
 observing = False
 
-#define LintDie
+-- #define LintDie
 
 #ifdef LintDie
 watchR, nowatchR :: String -> Unop ReExpr
@@ -155,8 +156,31 @@ memoDict = memoR buildDictionaryT'
 
 -- Unfold a name applied to some type and/or dictionary arguments
 specializeTyDict :: ReExpr
-specializeTyDict = tryR simplifyAll .
-                   unfoldPredR (const (liftA2 (&&) (not.null) (all isTyOrDict)))
+specializeTyDict = tryR simplifyAll . unfoldPredR okay
+ where
+   okay = -- const $ liftA2 (&&) (not.null) (all isTyOrDict)
+          -- (\ v args -> isGlobalId v && not (isPrimitive v) && all isTyOrDict args)
+          (\ v args -> not (isPrimitive v) && all isTyOrDict args
+                    && (isGlobalId v || not (null args)))
+          -- const $ all isTyOrDict
+
+isPrimitive :: Var -> Bool
+isPrimitive v = fqName (varName v) `S.member` primitives
+
+primitives :: S.Set String
+primitives = S.fromList
+  [ "GHC.Num.$fNumInt_$c+"
+  , "GHC.Num.&&"
+  , "GHC.Num.||"
+  , "GHC.Num.not"
+  , "GHC.Real.$fIntegralInt_$crem"
+  , "GHC.Num.$fNumInt_$cfromInteger"
+  , "GHC.Classes.eqInt"
+  ]
+
+-- TODO: make primitives a map to expressions, to use during reification. Or
+-- maybe a transformation that succeeds only for primitives, since we'll have to
+-- look up IDs. We'll see.
 
 isTyOrDict :: CoreExpr -> Bool
 isTyOrDict e = isType e || isDictTy (exprType e)
@@ -260,6 +284,10 @@ passE = id
 letSubstOneOccR :: ReExpr
 letSubstOneOccR = oneOccT >> letNonRecSubstR
 
+standardizeR' :: (Standardizable a, SyntaxEq a, Injection a CoreTC) => RewriteH a
+standardizeR' = watchR "standardizeR" $
+                changedArrR standardize
+
 {--------------------------------------------------------------------
     Plugin
 --------------------------------------------------------------------}
@@ -281,9 +309,9 @@ externals =
     , external "passCore" passCore ["..."]
     , externC "passE" passE "..."
     , externC "letSubstOneOccR" letSubstOneOccR "..."
-    , externC "standardizeExpr" (standardizeR :: ReExpr) "..."
-    , externC "standardizeProg" (standardizeR :: ReProg) "..."
-    , externC "standardizeBind" (standardizeR :: ReBind) "..."
+    , externC "standardizeExpr" (standardizeR' :: ReExpr) "..."
+    , externC "standardizeProg" (standardizeR' :: ReProg) "..."
+    , externC "standardizeBind" (standardizeR' :: ReBind) "..."
     -- 
     , external "let-float'"
         (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR)
