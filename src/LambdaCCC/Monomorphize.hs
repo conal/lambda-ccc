@@ -212,6 +212,7 @@ simplifyAll' = watchR "simplifyAll'" $
 mySimplifiers :: [ReExpr]
 mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
                 , castCastR
+                , castTransitiveUnivR
                 , letSubstTrivialR  -- instead of letNonRecSubstSafeR
              -- , letSubstOneOccR -- delay
                 ]
@@ -326,4 +327,6 @@ externals =
     , externC "cast-float-app'" castFloatAppR' "cast-float-app with transitivity"
     , externC "castFloatAppUnivR" castFloatAppUnivR "cast-float-app with coercion cheating"
     , externC "case-wild" caseWildR "case of wild ==> let (doesn't preserve evaluation)"
+    , externC "cast-cast" castCastR "..."
+    , externC "cast-transitive-univ" castTransitiveUnivR "..."
     ]
