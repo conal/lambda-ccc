@@ -88,8 +88,18 @@ onVarType :: Unop Type -> Unop Var
 onVarType f v = setVarType v (f (varType v))
 
 castTo :: Type -> CoreExpr -> CoreExpr
-castTo ty (Cast e _) = castTo ty e
 castTo ty e = mkCast e (mkUnivCo Representational (exprType e) ty)
+
+-- Now optimized by castTransitiveUnivR, as mkCast' wasn't getting there.
+
+-- castTo ty e = mkCast' e (mkUnivCo Representational (exprType e) ty)
+-- castTo ty (Cast e _) = castTo ty e
+-- castTo ty e = mkCast e (mkUnivCo Representational (exprType e) ty)
+
+-- mkCast' :: CoreExpr -> Coercion -> CoreExpr
+-- mkCast' (Cast e (UnivCo r t _)) (UnivCo r' _ t') | r == r' =
+--   mkCast' e (UnivCo r t t')
+-- mkCast' e co = mkCast e co
 
 -- TODO: Look into constructing axioms instead of using mkUnivCo
 
@@ -108,10 +118,11 @@ instance Standardizable CoreBind where
 standardizeAlt :: Var -> CoreAlt -> (CoreAlt,Type)
 standardizeAlt wild (DataAlt dc,vs,e0) =
   ttrace ("standardizeAlt:\n" ++
-          unsafeShowPpr ((dc,vs,e0),(valVars0,valVars),(sub,e), alt')) $
+          unsafeShowPpr ((dc,vs,e0),(valVars0,valVars),({-sub,-}e), alt')) $
   alt'
  where
-   e = substExpr (text "standardizeAlt") sub e0
+   -- TODO: why don't I need this substitution?
+   e = {- substExpr (text "standardizeAlt") sub -} e0
    alt' | [x] <- valVars =
            let xty   = varType x
                wild' = onVarType (const xty) wild in
@@ -121,7 +132,6 @@ standardizeAlt wild (DataAlt dc,vs,e0) =
             , mkBoxedTupleTy (varType <$> valVars) ) 
    valVars0 = filter (not . liftA2 (||) isTypeVar isCoVar) vs
    valVars  = onVarType (substTy sub) <$> valVars0  -- needed?
-   
    sub      = tvSubstToSubst $
               tcUnifyTys' (coVarKind <$> filter isCoVar vs)
 standardizeAlt _ _ = error "standardizeAlt: non-DataAlt"
