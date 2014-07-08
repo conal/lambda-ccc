@@ -32,15 +32,17 @@ module LambdaCCC.Lambda
   , vars, vars2
   , xor, condBool   -- from Prim
   , intL
+#ifdef VecsAndTrees
   , vecCaseZ, vecCaseS   -- To remove
   -- , Structured(..), idStruct, idVec
   , idVecZ, idVecS, idPair, idTreeZ, idTreeS
   -- Temporary less polymorphic variants.
   -- Remove when I can dig up Prim as a type in Core
-  , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP, castEP, castEP'
-  , evalEP, reifyEP, kPrimEP, oops
   -- Hopefully temporary
   , vecSEP, treeZEP, treeSEP
+#endif
+  , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP, castEP, castEP'
+  , evalEP, reifyEP, kPrimEP, oops
   ) where
 
 import Data.Functor ((<$>))
@@ -63,8 +65,10 @@ import TypeUnary.Vec (Vec(..),Z,S)
 
 -- import Circat.Classes (VecCat(..))
 
+#ifdef VecsAndTrees
 import Circat.Pair  (Pair(..)) -- ,PairCat(..)
 import Circat.RTree (Tree(..),TreeCat(..))
+#endif
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
 import LambdaCCC.ShowUtils
@@ -527,6 +531,7 @@ intL = kLit
 "reify/false"   reifyEP False    = kLit  False
 "reify/true"    reifyEP True     = kLit  True
 
+#ifdef VecsAndTrees
 -- "reify/ZVec"    reifyEP ZVec     = reifyEP (toVecZ ())
 -- "reify/(:<)"    reifyEP (:<)     = reifyEP toVecS
 
@@ -540,6 +545,7 @@ intL = kLit
 "reify/unPair"   reifyEP unPair'  = kPrim UnUPairP
 "reify/unLeaf"   reifyEP unTreeZ' = kPrim UnLeafP
 "reify/unBranch" reifyEP unTreeS' = kPrim UnBranchP
+#endif
 
 -- TODO: Why reify/unPair' and not reify/unVecZ & reify/unVecS ?
 -- TODO: trees
@@ -550,13 +556,14 @@ intL = kLit
 -- HACK/experiment.
 -- Doesn't fire when the 2 is let-abstracted.
 -- TODO: Fix worthLet in Reify.
-"reify/square"  reifyEP (^2) = reifyEP square
+-- "reify/square"  reifyEP (^2) = reifyEP square
 
   #-}
 
-square :: Num a => Unop a
-square a = a * a
+-- square :: Num a => Unop a
+-- square a = a * a
 
+#ifdef VecsAndTrees
 vecZEP :: EP (Vec Z a)
 vecZEP = kPrim ToVecZP @^ kLit ()
 
@@ -569,7 +576,7 @@ treeZEP = kPrim ToLeafP
 
 treeSEP :: forall n a. EP (Pair (Tree n a) -> Tree (S n) a)
 treeSEP = kPrim ToBranchP
-
+#endif
 
 
 -- For literals, I'd like to say
@@ -632,6 +639,8 @@ condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))
   #-}
 
 #endif
+
+#ifdef VecsAndTrees
 
 -- Use this rule only we do all the reification we can, in order to finish generating an EP.
 
@@ -755,6 +764,7 @@ unTreeS' = unB
 "reify/unVecS" reifyEP unVecS' = kPrim UnVecSP
 
  #-}
+#endif
 
 {--------------------------------------------------------------------
     Constructors that take Addr#, for ReifyLambda
@@ -860,6 +870,7 @@ instance Eq1' Prim where
   ExrP      ==== ExrP      = True
   PairP     ==== PairP     = True
   CondBP    ==== CondBP    = True
+#ifdef VecsAndTrees
   ToVecZP   ==== ToVecZP   = True
   UnVecZP   ==== UnVecZP   = True
   VecSP     ==== VecSP     = True
@@ -870,6 +881,7 @@ instance Eq1' Prim where
   ToBranchP ==== ToBranchP = True
   UnLeafP   ==== UnLeafP   = True
   UnBranchP ==== UnBranchP = True
+#endif
   OopsP     ==== OopsP     = True
   _         ==== _         = False
 

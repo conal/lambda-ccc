@@ -23,6 +23,8 @@
 -- Primitives
 ----------------------------------------------------------------------
 
+-- #define VecsAndTrees
+
 module LambdaCCC.Prim
   ( Lit(..), HasLit(..), litSS
   , Prim(..),litP,xor, condBool -- ,cond -- ,ifThenElse
@@ -34,14 +36,22 @@ import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
 -- import Control.Arrow ((&&&))
 import Data.Constraint (Dict(..))
 
+#ifdef VecsAndTrees
 -- import TypeUnary.Nat (Nat(..),IsNat)
 import TypeUnary.Vec (Z,S,Vec(..))  -- ,IsNat(..)
+#endif
 
-import Circat.Category hiding (CondCat(..))
-import Circat.Classes (BoolCat(not,and,or),MuxCat(..),NumCat(..),VecCat(..))
-import qualified Circat.Classes as C
+import Circat.Category
+#ifdef VecsAndTrees
+                        hiding (CondCat(..))
+#endif
+import Circat.Classes (BoolCat(not,and,or),MuxCat(..),NumCat(..))
+#ifdef VecsAndTrees
+import Circat.Classes (VecCat(..))
 import Circat.Pair (Pair(..),PairCat(..))
 import Circat.RTree (Tree(..),TreeCat(..))
+#endif
+import qualified Circat.Classes as C
 
 -- :( . TODO: Disentangle!
 import Circat.Circuit ((:>),IsSourceP,constC)
@@ -138,6 +148,7 @@ data Prim :: * -> * where
   InrP          :: Prim (b -> a :+ b)
   PairP         :: Prim (a -> b -> a :* b)
   CondBP        :: Prim (Bool :* (Bool :* Bool) -> Bool)  -- cond on Bool
+#ifdef VecsAndTrees
 --   -- Naturals
 --   ToNatP        :: IsNat n => Prim (Unit -> Nat n)
   -- Vectors. See Vec TODO below
@@ -154,6 +165,7 @@ data Prim :: * -> * where
   ToBranchP     :: Prim (Pair (Tree n a) -> Tree (S n) a)
   UnBranchP     :: Prim (Tree (S n) a -> Pair (Tree n a))
   -- More here
+#endif
   OopsP         :: Prim a
 
 -- TODO: Figure out how not to need type-specific constructors like the Vec ones above.
@@ -176,6 +188,7 @@ instance Eq' (Prim a) (Prim b) where
   ExrP      === ExrP      = True
   InlP      === InlP      = True
   InrP      === InrP      = True
+#ifdef VecsAndTrees
   PairP     === PairP     = True
   CondBP    === CondBP    = True
 --   ToNatP    === ToNatP    = True
@@ -189,6 +202,7 @@ instance Eq' (Prim a) (Prim b) where
   ToBranchP === ToBranchP = True
   UnLeafP   === UnLeafP   = True
   UnBranchP === UnBranchP = True
+#endif
   OopsP     === OopsP     = True
   _         === _         = False
 
@@ -208,6 +222,7 @@ instance Show (Prim a) where
   showsPrec _ ExrP       = showString "exr"
   showsPrec _ PairP      = showString "(,)"
   showsPrec _ CondBP     = showString "condBool"
+#ifdef VecsAndTrees
 --   showsPrec _ ToNatP     = showString "natA"
   showsPrec _ ToVecZP    = showString "toVecZ"
   showsPrec _ UnVecZP    = showString "unVecZ"
@@ -219,12 +234,17 @@ instance Show (Prim a) where
   showsPrec _ ToBranchP  = showString "toB"
   showsPrec _ UnLeafP    = showString "unL"
   showsPrec _ UnBranchP  = showString "unB"
+#endif
   showsPrec _ OopsP      = showString "<oops>"
 
 instance Show' Prim where showsPrec' = showsPrec
 
 primArrow :: ( BiCCCC k Lit
-             , BoolCat k, MuxCat k, VecCat k, PairCat k, TreeCat k, NumCat k Int ) =>
+             , BoolCat k, MuxCat k, NumCat k Int
+#ifdef VecsAndTrees
+             , VecCat k, PairCat k, TreeCat k
+#endif
+             ) =>
              Prim (a :=> b) -> (a `k` b)
 primArrow NotP      = not
 primArrow AndP      = curry and
@@ -238,6 +258,7 @@ primArrow InlP      = inl
 primArrow InrP      = inr
 primArrow PairP     = curry id
 primArrow CondBP    = mux
+#ifdef VecsAndTrees
 -- primArrow ToNatP    = natA
 primArrow ToVecZP   = toVecZ
 primArrow UnVecZP   = unVecZ
@@ -249,11 +270,15 @@ primArrow ToLeafP   = toL
 primArrow ToBranchP = toB
 primArrow UnLeafP   = unL
 primArrow UnBranchP = unB
+#endif
 primArrow OopsP     = error "primArrow: Oops"
 primArrow (LitP _)  = error ("primArrow: LitP with function type?!")
 
 instance ( BiCCCC k Lit
-         , BoolCat k, MuxCat k, VecCat k, PairCat k, TreeCat k, NumCat k Int
+         , BoolCat k, MuxCat k, NumCat k Int
+#ifdef VecsAndTrees
+         , VecCat k, PairCat k, TreeCat k
+#endif
          ) =>
          HasUnitArrow k Prim where
   unitArrow NotP      = unitFun not
@@ -268,6 +293,7 @@ instance ( BiCCCC k Lit
   unitArrow InrP      = unitFun inr
   unitArrow PairP     = unitFun (curry id)
   unitArrow CondBP    = unitFun mux
+#ifdef VecsAndTrees
 --   unitArrow ToNatP    = unitFun natA
   unitArrow ToVecZP   = unitFun toVecZ
   unitArrow UnVecZP   = unitFun unVecZ
@@ -279,6 +305,7 @@ instance ( BiCCCC k Lit
   unitArrow ToBranchP = unitFun toB
   unitArrow UnLeafP   = unitFun unL
   unitArrow UnBranchP = unitFun unB
+#endif
   unitArrow OopsP     = error "unitArrow on Prim: OopsP"
   unitArrow (LitP l)  = unitArrow l
 
@@ -301,6 +328,7 @@ instance Evalable (Prim a) where
   eval InrP          = Right
   eval PairP         = (,)
   eval CondBP        = mux
+#ifdef VecsAndTrees
 --   eval ToNatP        = natA
   eval ToVecZP       = toVecZ
   eval UnVecZP       = unVecZ
@@ -312,6 +340,7 @@ instance Evalable (Prim a) where
   eval ToBranchP     = toB
   eval UnLeafP       = unL
   eval UnBranchP     = unB
+#endif
   eval OopsP         = error "eval on Prim: Oops!"
 
 -- TODO: replace fst with exl, etc.

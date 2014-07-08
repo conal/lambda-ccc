@@ -1,8 +1,8 @@
 set-pp-renderer ascii
 set-pp-width 80
 
-set-pp-type Omit
--- set-pp-type     Show
+-- set-pp-type Omit
+set-pp-type     Show
 -- set-pp-coercion Omit
 set-pp-coercion Kind
 -- set-pp-coercion Abstract
@@ -16,8 +16,6 @@ set-pp-coercion Kind
 rhs-of test
 try (repeat passE)
 try simplifyAll'
-up
-
--- try standardizeBind
--- try simplifyAllBind'
--- try unshadow
+try standardizeExpr
+try simplifyAll'
+try unshadow

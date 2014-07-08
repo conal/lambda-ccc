@@ -20,6 +20,8 @@
 -- Statically typed lambda expressions
 ----------------------------------------------------------------------
 
+-- #define VecsAndTrees
+
 module LambdaCCC.Encode (Encodable(..),(-->),recode) where
 
 import Control.Arrow ((+++)) -- ,(***)
@@ -28,12 +30,13 @@ import Data.Monoid (Any(..),All(..))
 -- transformers
 import Data.Functor.Identity
 
+#ifdef VecsAndTrees
 import TypeUnary.TyNat (Z,S)
 import TypeUnary.Nat (Nat(..),IsNat(..))
 import TypeUnary.Vec (Vec(..),unConsV)
 import Circat.Pair (Pair(..),toP,fromP)
-
 import Circat.RTree (Tree(..),toL,unL,toB,unB)
+#endif
 
 import LambdaCCC.Misc (Unit,(:+),(:*))
 
@@ -106,6 +109,8 @@ PrimEncode(Int)
 
 -- TODO: Can we get some help from the Newtype class?
 
+#ifdef VecsAndTrees
+
 RepEncode(Nat Z, (), \ Zero -> (), \ () -> Zero)
 -- RepEncode(Nat (S n), Nat n, predN, Succ)
 
@@ -127,6 +132,8 @@ RepEncode(Vec (S n) a, a :* Vec n a, unConsV, (\ (a,b) -> a :< b))
 -- The non-lazy pattern match gives tighter code than uncurry
 RepEncode(Tree Z a, a, unL, toL)
 RepEncode(Tree (S n) a, Pair (Tree n a), unB, toB)
+
+#endif
 
 -- Standard newtypes:
 RepEncode(Any,Bool,getAny,Any)

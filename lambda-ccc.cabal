@@ -44,14 +44,14 @@ Library
                     LambdaCCC.Lambda
                     LambdaCCC.CCC
                     LambdaCCC.ToCCC
-                    LambdaCCC.Encode
-                    LambdaCCC.CoreEncode
+--                     LambdaCCC.Encode
+--                     LambdaCCC.CoreEncode
                     LambdaCCC.Monomorphize
 --                     LambdaCCC.TransCode
 --                     LambdaCCC.Standardize
                     LambdaCCC.CoerceEncode
                     LambdaCCC.Run
-                    LambdaCCC.Examples.Linear
+--                     LambdaCCC.Examples.Linear
 -- Phasing out:
 
                     LambdaCCC.Reify

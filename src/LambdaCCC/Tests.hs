@@ -28,10 +28,6 @@ import LambdaCCC.ToCCC
 import Circat.Category
 import Circat.Classes
 
-import TypeUnary.TyNat
-import Circat.Pair
-import Circat.RTree
-
 {--------------------------------------------------------------------
     Convenient notation for expression building
 --------------------------------------------------------------------}

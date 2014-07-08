@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE GADTs, TypeOperators #-}
 {-# LANGUAGE ExplicitForAll, ConstraintKinds, FlexibleContexts #-}  -- For :< experiment
 
 {-# OPTIONS_GHC -Wall #-}
@@ -42,7 +43,7 @@ import TypeUnary.Vec (Vec(..))
 import Circat.Pair (Pair(..))
 import Circat.RTree (Tree(..))
 
-#define BuildDictBug
+-- #define BuildDictBug
 
 #ifdef BuildDictBug
 -- Bug workaround. Hopefully remove soon See
@@ -50,6 +51,8 @@ import Circat.RTree (Tree(..))
 -- comment.
 import LambdaCCC.Encode (Encodable(..))
 #endif
+
+import LambdaCCC.Misc (Unop)
 
 {--------------------------------------------------------------------
     Examples
@@ -85,11 +88,19 @@ import LambdaCCC.Encode (Encodable(..))
 -- test :: (Bool,Int,Bool)
 -- test = (True,3,False)
 
-test :: Tree N8 Int -> Int
-test = sum
+-- test :: Tree N8 Int -> Int
+-- test = sum
 
--- test :: Tree N6 Bool -> Tree N6 Bool
--- test = fmap not
+-- test :: Int -> Bool
+-- test = even
+
+-- test :: Tree N3 Int -> Tree N3 Bool
+-- test = fmap even
+
+-- test = undefined
+
+test :: Unop (Tree N1 Bool)
+test = fmap not
 
 -- test = encode (fmap not :: Tree N1 Bool -> Tree N1 Bool)
 
@@ -114,17 +125,3 @@ test = sum
 
 -- test :: Bool
 -- test = False
-
--- foo :: Encodable a => a -> Encode a
--- foo = encode
-
--- test :: Tree N8 Int -> Int
--- test = sum
-
--- test = encode (sum :: Tree Z Int -> Int)
-
--- test = encode (L 3 :: Tree Z Int)
-
--- -- test :: Tree Z Int -> Int
--- test :: Tree Z Int -> Encode (Tree Z Int)
--- test = encode
