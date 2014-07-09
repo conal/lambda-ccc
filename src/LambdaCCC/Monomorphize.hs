@@ -43,7 +43,8 @@ import HERMIT.Dictionary hiding (externals)
 import HERMIT.External (External,ExternalName,external,(.+),CmdTag(Loop))
 import HERMIT.GHC
 import HERMIT.Kure
-import HERMIT.Monad (saveDef,newIdH,Label)
+import HERMIT.Monad (saveDef,Label)
+import HERMIT.Name (newIdH)
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
 
 import HERMIT.Extras hiding (findTyConT)
@@ -244,6 +245,8 @@ bashSimplifiers =
   , nowatchR "castElimSymR" castElimSymR
   ]
 
+-- TODO: Trim redundant let floating. See passCore and passE.
+
 simplifyAllRhs :: ReProg
 simplifyAllRhs = progRhsAnyR simplifyAll
 
@@ -253,8 +256,11 @@ simplifyAllRhs' = progRhsAnyR simplifyAll'
 simplifyAllBind' :: ReBind
 simplifyAllBind' = nonRecAllR id simplifyAll'
 
+letFloatCaseAltR' :: ReExpr
+letFloatCaseAltR' = letFloatCaseAltR Nothing
+
 letFloatR :: ReCore
-letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR)
+letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR')
 
 pruneAltsProg :: ReProg
 pruneAltsProg = progRhsAnyR ({-bracketR "pruneAltsR"-} pruneAltsR)
@@ -276,7 +282,7 @@ passCore = tryR (promoteR simplifyAllRhs)  -- after let-floating
 passE :: ReExpr
 passE = id
       . tryR simplifyAll  -- after let floating
-      . tryR (anybuE (letFloatExprR <+ letFloatCaseAltR))
+      . tryR (anybuE (letFloatExprR <+ letFloatCaseAltR'))
       . tryR (anybuE (letAllR bindUnLetIntroR id))
       . tryR (watchR "retypeExprR" retypeExprR) -- pruneAltsR
       . tryR (extractR unshadowR)
@@ -306,7 +312,7 @@ externals =
     , externC "simplifyAllBind'" simplifyAllBind' "simplify-all' on all binding RHS"
     , externC "specializeTyDict" specializeTyDict "..."
     , externC "bindUnLetIntroR" bindUnLetIntroR "..."
-    , externC "letFloatCaseAltR" letFloatCaseAltR "..."
+    , externC "letFloatCaseAltR'" letFloatCaseAltR' "..."
     , externC "monomorphize" monomorphize "..."
     , external "passCore" passCore ["..."]
     , externC "passE" passE "..."
@@ -316,7 +322,7 @@ externals =
     , externC "standardizeBind" (standardizeR' :: ReBind) "..."
     -- 
     , external "let-float'"
-        (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR)
+        (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR')
          :: RewriteH Core)
         ["let-float with letFloatCaseAltR"]
     , externC "pruneAltsR" pruneAltsR "..."
