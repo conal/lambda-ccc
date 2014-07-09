@@ -35,7 +35,7 @@ import Control.Arrow (Arrow(..),(>>>))
 import Data.List (isPrefixOf,find)
 import Data.Maybe (fromMaybe)
 
-import HERMIT.Monad (newIdH)
+import HERMIT.Name (newIdH)
 import HERMIT.Core (localFreeIdsExpr,CoreProg(..),bindsToProg,progToBinds)
 import HERMIT.External (External,external)
 import HERMIT.GHC hiding (mkStringExpr)

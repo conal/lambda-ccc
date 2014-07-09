@@ -36,8 +36,8 @@ import HERMIT.Core (CoreProg(..))
 
 import HERMIT.Extras hiding (findTyConT, labeled)
 
--- import qualified Type
-import Unify (tcUnifyTys,BindFlag(BindMe))
+-- -- import qualified Type
+-- import Unify (tcUnifyTys,BindFlag(BindMe))
 
 class Standardizable a where standardize :: Unop a
 
@@ -122,7 +122,8 @@ standardizeAlt wild (DataAlt dc,vs,e0) =
   alt'
  where
    -- TODO: why don't I need this substitution?
-   e = {- substExpr (text "standardizeAlt") sub -} e0
+   e = -- substExpr (text "standardizeAlt") sub
+          e0
    alt' | [x] <- valVars =
            let xty   = varType x
                wild' = onVarType (const xty) wild in
