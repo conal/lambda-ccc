@@ -6,7 +6,9 @@ See instructions in test/Tests.hs.
 
 Dependencies:
 
-*   GHC 7.8.2 or better.
+*   GHC 7.8.2 or better
+*   [kure](https://github.com/ku-fpg/kure) (from GitHub, not Hackage)
+*   [hermit](https://github.com/ku-fpg/hermit/) (from GitHub, not Hackage)
 *   [hermit-extras](http://github.com/conal/hermit-extras)
 *   [type-encode](http://github.com/conal/type-encode)
 *   [circat](https://github.com/conal/circat), for circuit specification, display, and conversion to netlists.
