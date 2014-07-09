@@ -88,8 +88,8 @@ import LambdaCCC.Misc (Unop)
 -- test :: (Bool,Int,Bool)
 -- test = (True,3,False)
 
--- test :: Tree N8 Int -> Int
--- test = sum
+test :: Tree N8 Int -> Int
+test = sum
 
 -- test :: Int -> Bool
 -- test = even
@@ -99,8 +99,8 @@ import LambdaCCC.Misc (Unop)
 
 -- test = undefined
 
-test :: Unop (Tree N1 Bool)
-test = fmap not
+-- test :: Unop (Tree N4 Bool)
+-- test = fmap not
 
 -- test = encode (fmap not :: Tree N1 Bool -> Tree N1 Bool)
 
