@@ -44,14 +44,12 @@ import Circat.RTree
 import qualified LambdaCCC.Lambda
 import LambdaCCC.Lambda (EP,reifyEP)
 
--- import LambdaCCC.Prim (Prim(TreeSP))
 import LambdaCCC.Misc (Unop,Binop)
 
 import Circat.Pair (Pair(..))
 import Circat.RTree (TreeCat(..))
-import Circat.Circuit (IsSourceP2)
+import Circat.Circuit (GenBuses)
 
-import LambdaCCC.Encode (Encodable(..))
 import LambdaCCC.Run (run)
 
 {--------------------------------------------------------------------
@@ -98,17 +96,13 @@ squares' = fmap (^ (2 :: Int))
     Run it
 --------------------------------------------------------------------}
 
-go' :: IsSourceP2 a b => String -> (a -> b) -> IO ()
-go' name f = run name (reifyEP f)
-
-go :: (Encodable a, Encodable b, IsSourceP2 (Encode a) (Encode b)) =>
-      String -> (a -> b) -> IO ()
-go name f = go' name (encode f)
-
--- With an outer encode
+go :: GenBuses a => String -> (a -> b) -> IO ()
+go name f = run name (reifyEP f)
 
 -- Only works when compiled with HERMIT
 main :: IO ()
+
+main = go "sumT2" (sum :: Tree N12 Int -> Int)
 
 -- main = go "tsum4" (tsum :: Tree N4 Int -> Int)
 
@@ -124,7 +118,7 @@ main :: IO ()
 
 -- main = go "dot0" (dot :: Tree N0 (Int,Int) -> Int)
 
-main = go "dot2" (dot :: Tree N2 (Int,Int) -> Int)
+-- main = go "dot2" (dot :: Tree N2 (Int,Int) -> Int)
 
 -- -- Doesn't wedge.
 -- main = go "dotp" ((psum . prod) :: Pair (Int,Int) -> Int)
