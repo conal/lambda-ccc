@@ -54,7 +54,8 @@ Library
 --                     LambdaCCC.Examples.Linear
 -- Phasing out:
 
-                    LambdaCCC.Reify
+--                     LambdaCCC.Reify
+                    LambdaCCC.ReifySimple
 --                     LambdaCCC.SReify
 --                     LambdaCCC.NormalizeCore
 
