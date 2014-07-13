@@ -52,6 +52,7 @@ import qualified HERMIT.Extras as Ex
 
 import LambdaCCC.Misc ((<~))
 import LambdaCCC.CoerceEncode
+import LambdaCCC.ReifySimple -- temporarily
 
 {--------------------------------------------------------------------
     Observing
@@ -297,6 +298,35 @@ standardizeR' = watchR "standardizeR" $
                 standardizeR
 
 {--------------------------------------------------------------------
+    Combine steps
+--------------------------------------------------------------------}
+
+-- TODO: Move elsewhere
+
+reifyPrep :: ReExpr
+reifyPrep = inReify (
+                tryR unshadowE
+              . tryR simplifyAll'
+              . tryR standardizeR'
+              . tryR simplifyAll'
+              . tryR (repeatR passE)
+              . tryR inlineR  -- in case of floating
+              )
+        -- . tryR (unfoldNameR "LambdaCCC.Run.go")
+
+doReify :: ReExpr
+doReify = tryR unshadowE
+        . tryR bashE
+        . repeatR (anytdE (repeatR reifyMisc))
+
+compileGo :: ReExpr
+compileGo = doReify . reifyPrep
+
+unshadowE :: ReExpr
+unshadowE = extractR unshadowR
+
+
+{--------------------------------------------------------------------
     Plugin
 --------------------------------------------------------------------}
 
@@ -320,6 +350,12 @@ externals =
     , externC "standardizeExpr" (standardizeR' :: ReExpr) "..."
     , externC "standardizeProg" (standardizeR' :: ReProg) "..."
     , externC "standardizeBind" (standardizeR' :: ReBind) "..."
+    -- Put it together
+    , externC "reify-prep" reifyPrep "..."
+    , externC "do-reify" doReify "..."
+    , externC "compile-go" compileGo "..."
+    -- From Reify.
+    -- , externC "reify-misc" reifyMisc "Simplify 'reify e'"
     -- 
     , external "let-float'"
         (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR')
