@@ -54,7 +54,8 @@ import Circat.RTree (Tree(..),TreeCat(..))
 import qualified Circat.Classes as C
 
 -- :( . TODO: Disentangle!
-import Circat.Circuit ((:>),IsSourceP,constC)
+-- HasUnitArrow links the category and primitive type
+import Circat.Circuit (GenBuses,(:>),constC)
 
 -- import TypeEncode.Encode (EncodeCat(..))
 
@@ -87,9 +88,11 @@ instance Eq (Lit a) where (==) = (===)
 -- | Convenient 'Lit' construction
 class HasLit a where toLit :: a -> Lit a
 
-instance HasLit Unit      where toLit = UnitL
-instance HasLit Bool      where toLit = BoolL
-instance HasLit Int       where toLit = IntL
+instance HasLit Unit where toLit = UnitL
+instance HasLit Bool where toLit = BoolL
+instance HasLit Int  where toLit = IntL
+
+-- TODO: Do I still need this stuff?
 
 -- Proofs
 
@@ -108,15 +111,15 @@ litHasShow (IntL  _) = Dict
 instance Show (Lit a) where
   showsPrec p l@LSh = showsPrec p (eval l)
 
-litIsSourceP :: Lit a -> Dict (IsSourceP a)
-litIsSourceP (UnitL _) = Dict
-litIsSourceP (BoolL _) = Dict
-litIsSourceP (IntL  _) = Dict
+litGenBuses :: Lit a -> Dict (GenBuses a)
+litGenBuses (UnitL _) = Dict
+litGenBuses (BoolL _) = Dict
+litGenBuses (IntL  _) = Dict
 
-#define LSo (litIsSourceP -> Dict)
+#define LSo (litGenBuses -> Dict)
 
-litSS :: Lit a -> (Dict (Show a, IsSourceP a))
-litSS l | (Dict,Dict) <- (litHasShow l,litIsSourceP l) = Dict
+litSS :: Lit a -> (Dict (Show a, GenBuses a))
+litSS l | (Dict,Dict) <- (litHasShow l,litGenBuses l) = Dict
 
 #define LS (litSS -> Dict)
 
