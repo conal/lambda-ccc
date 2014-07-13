@@ -21,6 +21,8 @@
 -- Statically typed lambda expressions
 ----------------------------------------------------------------------
 
+-- #define VecsAndTrees
+
 module LambdaCCC.Lambda
   ( Name
   , V(..), Pat(..), E(..)
