@@ -24,6 +24,7 @@
 
 module LambdaCCC.Reify
   ( plugin
+  , reifyMisc, inReify
   , caseSizedR, unCallE1
   ) where
 
