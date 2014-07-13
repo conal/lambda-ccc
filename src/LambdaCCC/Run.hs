@@ -26,17 +26,17 @@ import LambdaCCC.Lambda (EP,reifyEP)
 import LambdaCCC.CCC ((:->),convertC)
 import LambdaCCC.ToCCC (toCCC')
 
-import Circat.Circuit (IsSourceP2,(:>),outGWith,IsSourceP2)
+import Circat.Circuit (GenBuses,(:>),outGWith)
 import Circat.Netlist (outV)
 
-go :: IsSourceP2 a b => String -> (a -> b) -> IO ()
+go :: GenBuses a => String -> (a -> b) -> IO ()
 go name f = run name (reifyEP f)
 {-# INLINE go #-}
 
 -- #define ViaTerm
 
 -- Run an example: reify, CCC, circuit.
-run :: IsSourceP2 a b => String -> EP (a -> b) -> IO ()
+run :: GenBuses a => String -> EP (a -> b) -> IO ()
 #ifdef ViaTerm
 run str  expr = do print expr
                    print term
@@ -55,7 +55,7 @@ idCT = id
 #endif
 
 -- Diagram and Verilog
-outGV :: IsSourceP2 a b => String -> (a :> b) -> IO ()
+outGV :: GenBuses a => String -> (a :> b) -> IO ()
 outGV s c = do outGWith ("pdf","")      s c
 --                outGWith ("png","-Gdpi=200") s c
                -- outV                     s c
