@@ -81,14 +81,16 @@ instance Standardizable CoreExpr where
      (alt',ety') = standardizeAlt w' alt
      w' = setIdOccInfo w NoOccInfo
   standardize (Case {}) = error "standardize: multi-alternative "
-  standardize e@(Cast e' _)  = castTo (exprType e) (standardize e')
+  standardize (Cast e co)  = mkCast (standardize e) co
+  -- Alternatively,
+  -- standardize e@(Cast e' _)  = castTo (exprType e) (standardize e')
   standardize (Tick t e)     = Tick t (standardize e)
 
 onVarType :: Unop Type -> Unop Var
 onVarType f v = setVarType v (f (varType v))
 
 castTo :: Type -> CoreExpr -> CoreExpr
-castTo ty e = mkCast e (mkUnivCo Representational (exprType e) ty)
+castTo ty e = mkCast e (mkUnsafeCo (exprType e) ty)
 
 -- Now optimized by castTransitiveUnivR, as mkCast' wasn't getting there.
 
