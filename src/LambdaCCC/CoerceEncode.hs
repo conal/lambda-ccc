@@ -139,6 +139,9 @@ standardizeAlt wild (DataAlt dc,vs,e0) =
               tcUnifyTys' (coVarKind <$> filter isCoVar vs)
 standardizeAlt _ _ = error "standardizeAlt: non-DataAlt"
 
+-- TODO: Nested case expressions when length valVars > 2. I'll have to make new
+-- wildcard variables, which is inconvenient here.
+
 tcUnifyTys' :: [(Type,Type)] -> TvSubst
 tcUnifyTys' (unzip -> (ls,rs)) =
   fromMaybe (error "tcUnifyTys': Nothing") $
