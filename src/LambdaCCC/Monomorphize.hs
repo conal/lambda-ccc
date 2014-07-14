@@ -32,7 +32,6 @@ import Data.Functor ((<$),(<$>))
 import Control.Applicative (liftA2)
 import Data.Monoid (mempty)
 import Data.List (intercalate,isPrefixOf)
-import qualified Data.Set as S
 
 -- GHC
 import PrelNames (eitherTyConName)
@@ -52,7 +51,7 @@ import qualified HERMIT.Extras as Ex
 
 import LambdaCCC.Misc ((<~))
 import LambdaCCC.CoerceEncode
-import LambdaCCC.ReifySimple -- temporarily
+import LambdaCCC.ReifySimple
 
 {--------------------------------------------------------------------
     Observing
@@ -165,24 +164,6 @@ specializeTyDict = tryR simplifyAll . unfoldPredR okay
           (\ v args -> not (isPrimitive v) && all isTyOrDict args
                     && (isGlobalId v || not (null args)))
           -- const $ all isTyOrDict
-
-isPrimitive :: Var -> Bool
-isPrimitive v = fqName (varName v) `S.member` primitives
-
-primitives :: S.Set String
-primitives = S.fromList
-  [ "GHC.Classes.&&"
-  , "GHC.Classes.||"
-  , "GHC.Classes.not"
-  , "GHC.Num.$fNumInt_$c+"
-  , "GHC.Num.$fNumInt_$cfromInteger"
-  , "GHC.Real.$fIntegralInt_$crem"
-  , "GHC.Classes.eqInt"
-  ]
-
--- TODO: make primitives a map to expressions, to use during reification. Or
--- maybe a transformation that succeeds only for primitives, since we'll have to
--- look up IDs. We'll see.
 
 isTyOrDict :: CoreExpr -> Bool
 isTyOrDict e = isType e || isDictTy (exprType e)
@@ -355,7 +336,8 @@ externals =
     , externC "do-reify" doReify "..."
     , externC "compile-go" compileGo "..."
     -- From Reify.
-    -- , externC "reify-misc" reifyMisc "Simplify 'reify e'"
+    , externC "reify-misc" reifyMisc "Simplify 'reify e'"
+    , externC "reify-cast" reifyCast "..."
     -- 
     , external "let-float'"
         (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR')

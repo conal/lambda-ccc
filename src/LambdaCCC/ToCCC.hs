@@ -64,7 +64,7 @@ convert (Either f g) p = curry ((convert' f ||| convert' g) . distl)
  where
    convert' :: E prim (c :=> d) -> ((a :* c) `k` d)
    convert' h = uncurry (convert h p)
-convert (Cast a)     p = convert a p
+convert (CoerceE a)  p = coerceC . convert a p
 
 -- coerce' :: Coercible b c => f b -> f c
 -- coerce' = coerce
@@ -112,7 +112,7 @@ convert (Var v)      = varL v
 convert (s :^ t)     = convert s @@ convert t
 convert (Lam p e)    = lamL p (convert e)
 convert (Either f g) = convert f |||| convert g
-convert (Cast e)     = coerce (convert e)
+convert (CoerceE e)  = coerce (convert e)
 
 -- | Rewrite a lambda expression via CCC combinators
 toCCC :: BiCCCC k p => E p a -> (Unit `k` a)

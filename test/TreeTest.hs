@@ -18,7 +18,7 @@
 -- 
 -- Tests with length-typed treetors. To run:
 -- 
---   hermit TreeTest.hs -v0 -opt=LambdaCCC.Reify DoTree.hss resume && ./TreeTest
+--   hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize Go.hss resume && ./TreeTest
 --   
 -- Remove the 'resume' to see intermediate Core.
 ----------------------------------------------------------------------
@@ -51,6 +51,9 @@ import Circat.RTree (TreeCat(..))
 import Circat.Circuit (GenBuses)
 
 import LambdaCCC.Run (run)
+
+-- Experiment for Typeable resolution in reification
+import qualified Data.Typeable
 
 {--------------------------------------------------------------------
     Examples
@@ -102,7 +105,10 @@ go name f = run name (reifyEP f)
 -- Only works when compiled with HERMIT
 main :: IO ()
 
-main = go "sumT2" (sum :: Tree N12 Int -> Int)
+-- main = go "plusInt" ((+) :: Int -> Int -> Int)
+-- main = go "or" ((||) :: Bool -> Bool -> Bool)
+
+main = go "sumT0" (sum :: Tree N0 Int -> Int)
 
 -- main = go "tsum4" (tsum :: Tree N4 Int -> Int)
 

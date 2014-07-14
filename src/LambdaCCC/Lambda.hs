@@ -43,13 +43,15 @@ module LambdaCCC.Lambda
   -- Hopefully temporary
   , vecSEP, treeZEP, treeSEP
 #endif
-  , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP, castEP, castEP'
+  , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP, coerceEP
   , evalEP, reifyEP, kPrimEP, oops
   ) where
 
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..),liftA2)
 import Control.Arrow ((&&&))
+import Data.Typeable (Typeable)
+import Data.Coerce (Coercible,coerce)
 import Data.Maybe (fromMaybe,catMaybes,listToMaybe)
 -- import Data.Coerce (Coercible,coerce)
 import Text.Printf (printf)
@@ -190,12 +192,13 @@ substVP v p = substIn
 infixl 9 :^
 -- | Lambda expressions
 data E :: (* -> *) -> (* -> *) where
-  Var    :: forall p a    . V a -> E p a
-  ConstE :: forall p a    . p a -> E p a
-  (:^)   :: forall p b a  . E p (a :=> b) -> E p a -> E p b
-  Lam    :: forall p a b  . Pat a -> E p b -> E p (a :=> b)
-  Either :: forall p a b c. E p (a -> c) -> E p (b -> c) -> E p (a :+ b -> c)
-  Cast   :: forall p a b  . a ~ b => E p a -> E p b
+  Var     :: forall p a    . V a -> E p a
+  ConstE  :: forall p a    . p a -> E p a
+  (:^)    :: forall p b a  . E p (a :=> b) -> E p a -> E p b
+  Lam     :: forall p a b  . Pat a -> E p b -> E p (a :=> b)
+  Either  :: forall p a b c. E p (a -> c) -> E p (b -> c) -> E p (a :+ b -> c)
+  CoerceE :: forall p a b  . (Typeable a, Typeable b, Coercible a b) =>
+                             E p a -> E p b
 
 -- The explicit universals come from ghci's ":ty" command with ":set
 -- -fprint-explicit-foralls", so that I can get the order right when
@@ -211,7 +214,7 @@ occursVE v@(V name) = occ
    occ (f :^ e)        = occ f || occ e
    occ (Lam p e)       = not (occursVP v p) && occ e
    occ (Either f g)    = occ f || occ g
-   occ (Cast e)        = occ e
+   occ (CoerceE e)     = occ e
 
 -- | Some variable in a pattern occurs freely in an expression
 occursPE :: Pat a -> E p b -> Bool
@@ -227,12 +230,12 @@ occursPE (p :@ q)    = liftA2 (||) (occursPE p) (occursPE q)
 -- When I said "forall a b" in (:^), GHC swapped them back. Oh well.
 
 instance Eq1' p => Eq1' (E p) where
-  Var v    ==== Var v'     = v ==== v'
-  ConstE x ==== ConstE x'  = x ==== x'
-  (f :^ a) ==== (f' :^ a') = a ==== a' && f ==== f'
-  Lam p e  ==== Lam p' e'  = p ==== p' && e ==== e'
-  Cast e   ==== Cast e'    = e ==== e'
-  _        ==== _          = False
+  Var v     ==== Var v'     = v ==== v'
+  ConstE x  ==== ConstE x'  = x ==== x'
+  (f :^ a)  ==== (f' :^ a') = a ==== a' && f ==== f'
+  Lam p e   ==== Lam p' e'  = p ==== p' && e ==== e'
+  CoerceE e ==== CoerceE e' = e ==== e'
+  _         ==== _          = False
 
 -- instance Eq1' p => Eq' (E p a) (E p b) where
 --   (===) = (====)
@@ -346,8 +349,8 @@ caseEither :: forall p a b c . (PrimBasics p, Eq1' p) =>
               Pat a -> E p c -> Pat b -> E p c -> E p (a :+ b) -> E p c
 caseEither p u q v ab = (lam p u `eitherE` lam q v) @^ ab
 
-castE :: forall p a b . a ~ b => E p a -> E p b
-castE = Cast
+coerceE :: forall p a b . (Typeable a, Typeable b, Coercible a b) => E p a -> E p b
+coerceE = CoerceE
 
 instance (HasOpInfo prim, Show' prim, PrimBasics prim, Eq1' prim)
   => Show (E prim a) where
@@ -373,7 +376,7 @@ instance (HasOpInfo prim, Show' prim, PrimBasics prim, Eq1' prim)
     showParen (p > 0) $
     showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
   showsPrec p (Either f g) = showsOp2' "|||" (2,AssocRight) p f g
-  showsPrec p (Cast e)     = showsApp1 "cast" p e
+  showsPrec p (CoerceE e)  = showsApp1 "coerce" p e
 
 
 -- TODO: Multi-line pretty printer with indentation
@@ -388,6 +391,7 @@ instance HasOpInfo Prim where
   opInfo AndP = Just $ OpInfo "&&"    (3,AssocRight)
   opInfo OrP  = Just $ OpInfo "||"    (2,AssocRight)
   opInfo XorP = Just $ OpInfo "`xor`" (2,AssocRight)
+  -- TODO: more
   opInfo _   = Nothing
 
 -- | Single variable binding
@@ -437,7 +441,7 @@ eval' (ConstE p)   _   = evalP p
 eval' (u :^ v)     env = (eval' u env) (eval' v env)
 eval' (Lam p e)    env = \ x -> eval' e (extendEnv p x env)
 eval' (Either f g) env = eval' f env `either` eval' g env
-eval' (Cast e)     env = eval' e env
+eval' (CoerceE e)  env = coerce (eval' e env)
 
 #else
 
@@ -449,7 +453,7 @@ eval' (ConstE p)   = const (evalP p)
 eval' (u :^ v)     = eval' u <*> eval' v
 eval' (Lam p e)    = (fmap.fmap) (eval' e) (flip (extendEnv p))
 eval' (Either f g) = liftA2 either (eval' f) (eval' g)
-eval' (Cast e)     = eval' e
+eval' (CoerceE e)  = coerce (eval' e)
 
 -- Derivation of Lam case:
 -- 
@@ -829,11 +833,8 @@ eitherEP = eitherE
 
 -- The order a c b matches 'either'
 
-castEP :: forall a b . a ~ b => EP a -> EP b
-castEP = castE
-
-castEP' :: forall a b . {- a ~ b => -} EP a -> EP b
-castEP' = unsafeCoerce  -- TEMPORARY
+coerceEP :: forall a b . (Typeable a, Typeable b, Coercible a b) => EP a -> EP b
+coerceEP = coerceE
 
 evalEP :: EP a -> a
 evalEP = evalE

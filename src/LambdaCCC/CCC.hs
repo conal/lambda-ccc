@@ -37,6 +37,8 @@ module LambdaCCC.CCC
 import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
 -- import qualified Control.Arrow as A
 -- import Control.Applicative (liftA3)
+import Data.Typeable (Typeable)
+import Data.Coerce
 
 #ifdef Simplify
 -- import Data.IsTy
@@ -85,6 +87,8 @@ data (:->) :: * -> * -> * where
   Apply   :: (a :=> b) :* a :-> b
   Curry   :: (a :* b :-> c) -> (a :-> (b :=> c))
   Uncurry :: (a :-> (b :=> c)) -> (a :* b :-> c)
+  -- Type-safe coercion
+  Coerce  :: (Typeable a, Typeable b, Coercible a b) => a :-> b
   -- Primitives
   Prim    :: Prim (a :=> b) -> (a :-> b)
   Lit     :: Lit b -> (a :-> b)
@@ -146,6 +150,7 @@ instance Evalable (a :-> b) where
   eval Apply       = uncurry ($)
   eval (Curry   h) = curry   (eval h)
   eval (Uncurry f) = uncurry (eval f)
+  eval Coerce      = coerce
   eval (Prim p)    = eval p
   eval (Lit l)     = const (eval l)
 #else
@@ -276,6 +281,9 @@ instance ClosedCat (:->) where
 -- I commented out this rule. I don't think it'll ever fire, considering
 -- composeApply.
 
+instance CoerceCat (:->) where
+  coerceC = Coerce
+
 {--------------------------------------------------------------------
     Factoring (decomposition)
 --------------------------------------------------------------------}
@@ -338,6 +346,7 @@ instance Show (a :-> b) where
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "uncurry" p h
+  showsPrec _ Coerce      = showString "coerce"
   showsPrec p (Prim x)    = showsPrec p x
   showsPrec p (Lit l)     = showsApp1 "const" p l
 
@@ -417,6 +426,7 @@ convertC DistL        = distl
 convertC Apply        = apply
 convertC (Curry   h)  = curry   (convertC h)
 convertC (Uncurry f)  = uncurry (convertC f)
+convertC Coerce       = coerceC
 convertC (Prim p)     = primArrow p
 convertC (Lit l)      = unitArrow l . it
 

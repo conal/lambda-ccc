@@ -20,13 +20,12 @@
 -- Reify a Core expression into GADT
 ----------------------------------------------------------------------
 
-#define OnlyLifted
-
-module LambdaCCC.ReifySimple ( reifyMisc, inReify ) where
+module LambdaCCC.ReifySimple (reifyMisc, reifyCast, inReify, isPrimitive) where
 
 import Data.Functor ((<$>))
 import Control.Monad ((<=<))
 import Control.Arrow ((>>>))
+import qualified Data.Map as M
 
 import HERMIT.Core (localFreeIdsExpr)
 import HERMIT.GHC hiding (mkStringExpr)
@@ -134,16 +133,6 @@ reifyApp = do App u v <- unReify
               v' <- reifyOf v
               appsE "appP" [b,a] [u', v'] -- note b,a
 
--- Apply a rule to a left application prefix
-reifyRulesPrefix :: ReExpr
-reifyRulesPrefix = reifyRules <+ (reifyApp >>> appArgs reifyRulesPrefix idR)
-
--- Like appAllR, but on a reified app.
--- 'app ta tb f x --> 'app ta tb (rf f) (rx s)'
-appArgs :: Binop ReExpr
-appArgs rf rx = appAllR (appAllR idR rf) rx
-
-
 -- reifyApps =
 --   unReify >>> callSplitT >>> arr (\ (f,ts,es) -> ((f,ts),es)) >>> reifyCall
 
@@ -202,13 +191,11 @@ worthLet _ = return True
 inReify :: Unop ReExpr
 inReify = reifyR <~ unReify
 
+#if 0
 reifyRuleNames :: [String]
 reifyRuleNames = map ("reify/" ++)
   [ "not","(&&)","(||)","xor","(+)","(*)","exl","exr","pair","inl","inr"
   , "if","()","false","true"
-  , "toVecZ","unVecZ","toVecS","unVecS"
-  , "ZVec","(:<)","(:#)","L","B","unPair","unLeaf","unBranch"
-  , "square"
   ]
 
 -- ,"if-bool","if-pair"
@@ -222,49 +209,40 @@ reifyRuleNames = map ("reify/" ++)
 reifyRules :: ReExpr
 reifyRules = rulesR reifyRuleNames >>> cleanupUnfoldR
 
+-- Apply a rule to a left application prefix
+reifyRulesPrefix :: ReExpr
+reifyRulesPrefix = reifyRules <+ (reifyApp >>> appArgs reifyRulesPrefix idR)
+
+-- Like appAllR, but on a reified app.
+-- 'app ta tb f x --> 'app ta tb (rf f) (rx s)'
+appArgs :: Binop ReExpr
+appArgs rf rx = appAllR (appAllR idR rf) rx
+
+#endif
+
 -- reify (I# n) --> intL (I# n)
 reifyIntLit :: ReExpr
 reifyIntLit = unReify >>> do _ <- callNameT "I#"
                              e <- idR
                              appsE "intL" [] [e]
 
--- Sadly, don't use bashR. It gives false positives (succeeding without change),
--- *and* it leads to lint errors and even to non-terminating exprType (or
--- close).
-
 reifyCast :: ReExpr
+reifyCast =
+  unReify >>>
+  do Cast e co <- idR
+     let Pair a b = coercionKind co
+     re   <- reifyOf e
+     aTyp <- buildTypeableT' $* a
+     bTyp <- buildTypeableT' $* b
+     appsE "coerceEP" [a,b] [aTyp,bTyp,mkEqBox (toRep co),re]
 
--- reifyCast = unReify >>>
---             do e'@(Cast e co) <- idR
---                re <- reifyOf e
---                appsE "castEP" [exprType e,exprType e'] [Coercion co,re]
+-- TODO: Probe whether we ever get nominal casts here.
+-- If so, reify differently, probably as a Core cast with mkNthCo.
 
--- reifyCast = unReify >>>
---             do e'@(Cast e co) <- idR
---                case setNominalRole_maybe co of
---                  Nothing  -> fail "Couldn't setNominalRole"
---                  Just coN ->
---                    do re <- reifyOf e
---                       appsE "castEP" [exprType e,exprType e'] [mkEqBox coN,re]
-
--- Cheat via UnivCo:
-reifyCast = unReify >>>
-            do e'@(Cast e _) <- idR
-               let ty  = exprType e
-                   ty' = exprType e'
-               re <- reifyOf e
-               appsE "castEP" [ty,ty'] [mkEqBox (mkUnivCo Nominal ty ty'),re]
-
--- reifyCast = (unReify &&& arr exprType) >>>
---             do (Cast e _, ty) <- idR
---                re <- reifyOf e
---                apps' "Unsafe.Coerce.unsafeCoerce" [exprType re,ty] [re]
-
--- -- Equivalent but a bit prettier:
--- reifyCast = unReify >>>
---             do e'@(Cast e _) <- idR
---                re <- reifyOf e
---                appsE "castEP'" [exprType e,exprType e'] [re]
+-- Convert a coercion to representational if not already
+toRep :: Unop Coercion
+toRep co | coercionRole co == Representational = co
+         | otherwise = mkSubCo co
 
 -- reify of case on 0-tuple or 2-tuple
 reifyTupCase :: ReExpr
@@ -300,29 +278,67 @@ reifyTupCase =
       varPatT v = appsE varPatS [varType v] [varLitE v]
    reifyAlt _ _ = fail "reifyAlt: Only handles pair patterns so far."
 
-reifyEither :: ReExpr
-reifyEither = unReify >>>
-              do (_either, tys, funs@[_,_]) <- callNameSplitT "either"
-                 funs' <- mapM reifyOf funs
-                 appsE "eitherEP" tys funs'
-
--- Since 'either f g' has a function type, there could be more parameters.
--- I only want two. The others will get removed by reifyApp.
-
--- Important: reifyEither must come before reifyApp in reifyMisc, so that we can
--- see 'either' applied.
+reifyPrim :: ReExpr
+reifyPrim = unReify >>>
+            do Var v@(varName -> fqName -> flip M.lookup primMap -> Just nm) <- idR
+               appsE1 "kPrimEP" [varType v] =<< Var <$> findIdP nm
 
 miscL :: [(String,ReExpr)]
-miscL = [ ("reifyRulesPrefix" , reifyRulesPrefix) -- subsumes reifyRules, I think
-        , ("reifyEval"        , reifyEval)      -- ''
-        , ("reifyEither"      , reifyEither)    -- ''
+miscL = [ ("reifyEval"        , reifyEval)
+--         , ("reifyRulesPrefix" , reifyRulesPrefix)
         , ("reifyApp"         , reifyApp)
         , ("reifyLam"         , reifyLam)
         , ("reifyMonoLet"     , reifyMonoLet)
         , ("reifyTupCase"     , reifyTupCase)
         , ("reifyCast"        , reifyCast)
         , ("reifyIntLit"      , reifyIntLit)
+        , ("reifyPrim"        , reifyPrim)
         ]
 
 reifyMisc :: ReExpr
 reifyMisc = triesL miscL
+
+{--------------------------------------------------------------------
+    Primitives
+--------------------------------------------------------------------}
+
+findIdP :: String -> TransformH a Id
+findIdP = findIdT . primName
+
+primName :: Unop String
+primName = ("LambdaCCC.Prim." ++)
+
+primMap :: M.Map String String
+primMap = M.fromList
+  [ ("GHC.Classes.&&","AndP")
+  , ("GHC.Classes.||","OrP")
+  , ("GHC.Classes.not","NotP")
+  , ("GHC.Num.$fNumInt_$c+","AddP")
+  , ("GHC.Num.$fNumInt_$c*","MulP")
+  ]
+
+{-
+not      --> kPrim NotP
+(&&)     --> kPrim AndP
+(||)     --> kPrim OrP
+xor      --> kPrim XorP
+(+)      --> kPrim AddP
+(*)      --> kPrim MulP
+fst      --> kPrim ExlP
+snd      --> kPrim ExrP
+(,)      --> kPrim PairP
+Left     --> kPrim InlP
+Right    --> kPrim InrP
+condBool --> kPrim CondBP
+
+()       --> kLit  ()
+False    --> kLit  False
+True     --> kLit  True
+-}
+
+-- TODO: make primitives a map to expressions, to use during reification. Or
+-- maybe a transformation that succeeds only for primitives, since we'll have to
+-- look up IDs. We'll see.
+
+isPrimitive :: Var -> Bool
+isPrimitive v = fqName (varName v) `M.member` primMap
