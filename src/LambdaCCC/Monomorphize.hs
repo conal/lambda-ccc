@@ -295,6 +295,16 @@ reifyPrep = inReify (
               )
         -- . tryR (unfoldNameR "LambdaCCC.Run.go")
 
+-- TODO: The initial inlineR is probably inadequate. Instead, fix the inlining
+-- criterion in specializeTyDict.
+
+-- TEMP
+preStandardize :: ReExpr
+preStandardize = inReify $
+                   tryR simplifyAll'
+                 . tryR (repeatR passE)
+                 . tryR inlineR  -- in case of floating
+
 doReify :: ReExpr
 doReify = tryR unshadowE
         . tryR bashE
@@ -335,6 +345,8 @@ externals =
     , externC "reify-prep" reifyPrep "..."
     , externC "do-reify" doReify "..."
     , externC "compile-go" compileGo "..."
+    -- TEMP:
+    , externC "pre-standardize" preStandardize "..."
     -- From Reify.
     , externC "reify-misc" reifyMisc "Simplify 'reify e'"
     , externC "reify-cast" reifyCast "..."
