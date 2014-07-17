@@ -147,9 +147,9 @@ memoFloatLabelR r = do lab <- stashLabel
 filterToBool :: MonadCatch m => Transform c m a () -> Transform c m a Bool
 filterToBool t = (t >> return True) <+ return False
 
--- Build a dictionary for a given PredType.
-memoDict :: TransformH PredType CoreExpr
-memoDict = memoR buildDictionaryT'
+-- -- Build a dictionary for a given PredType.
+-- memoDict :: TransformH PredType CoreExpr
+-- memoDict = memoR buildDictionaryT'
 
 {--------------------------------------------------------------------
     Monomorphization
@@ -279,6 +279,35 @@ standardizeR' = watchR "standardizeR" $
                 standardizeR
 
 {--------------------------------------------------------------------
+    Yet another go at standardizing types
+--------------------------------------------------------------------}
+
+isStandardTy :: Type -> Bool
+isStandardTy t = any ($ t) [isUnitTy,isBoolTy,isIntTy,isPairTy]
+
+repName :: Unop String
+repName = ("LambdaCCC.Rep."++)
+
+-- | e ==> abst (repr e)
+abstReprR :: ReExpr
+abstReprR =
+  repeatR (tryR simplifyAll . unfoldR) .
+  do e <- id
+     let ty = exprType e
+     hasRepTc <- findTyConT (repName "HasRep")
+     dict <- buildDictionaryT' $* TyConApp hasRepTc [ty]
+     reprE <- apps' (repName "repr") [ty] [dict,e]
+     apps' (repName "abst") [ty] [dict,reprE]
+
+standardizeCase :: ReExpr
+standardizeCase = caseReduceR True
+               <+ caseFloatCaseR
+               <+ onScrutineeR abstReprR
+
+onScrutineeR :: Unop ReExpr
+onScrutineeR r = caseAllR r id id (const id)
+
+{--------------------------------------------------------------------
     Combine steps
 --------------------------------------------------------------------}
 
@@ -347,6 +376,9 @@ externals =
     , externC "compile-go" compileGo "..."
     -- TEMP:
     , externC "pre-standardize" preStandardize "..."
+    , externC "abstReprR" abstReprR "..."
+    , externC "standardizeCase" standardizeCase "..."
+--     , externC "caseReduceUnfoldsR" caseReduceUnfoldsR "..."
     -- From Reify.
     , externC "reify-misc" reifyMisc "Simplify 'reify e'"
     , externC "reify-cast" reifyCast "..."
