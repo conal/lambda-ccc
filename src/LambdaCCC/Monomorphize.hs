@@ -28,7 +28,7 @@ import qualified Prelude
 import Control.Category (id,(.),(>>>))
 import Control.Arrow (arr,second)
 import Control.Monad ((<=<),unless)
-import Data.Functor ((<$),(<$>))
+import Data.Functor ((<$),(<$>),void)
 import Control.Applicative (liftA2)
 import Data.Monoid (mempty)
 import Data.List (intercalate,isPrefixOf)
@@ -42,7 +42,7 @@ import HERMIT.Dictionary hiding (externals)
 import HERMIT.External (External,ExternalName,external,(.+),CmdTag(Loop))
 import HERMIT.GHC
 import HERMIT.Kure
-import HERMIT.Monad (saveDef,Label)
+import HERMIT.Monad (saveDef,RememberedName(..))
 import HERMIT.Name (newIdH)
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
 
@@ -120,7 +120,7 @@ memoR r = do lab <- stashLabel
                      return e'
 
 -- Memoize and float if non-trivial
-memoFloatR :: Outputable a => Label -> Unop (TransformH a CoreExpr)
+memoFloatR :: Outputable a => String -> Unop (TransformH a CoreExpr)
 memoFloatR lab r = do findDefT bragMemo lab
                         <+ do e' <- r
                               if exprIsTrivial e' then
@@ -291,7 +291,6 @@ repName = ("LambdaCCC.Rep."++)
 -- | e ==> abst (repr e)
 abstReprR :: ReExpr
 abstReprR =
-  repeatR (tryR simplifyAll . unfoldR) .
   do e <- id
      let ty = exprType e
      hasRepTc <- findTyConT (repName "HasRep")
@@ -300,12 +299,24 @@ abstReprR =
      apps' (repName "abst") [ty] [dict,reprE]
 
 standardizeCase :: ReExpr
-standardizeCase = caseReduceR True
-               <+ caseFloatCaseR
-               <+ onScrutineeR abstReprR
+standardizeCase =
+     caseReduceR True
+  <+ caseFloatCaseR
+  <+ onScrutineeR (repeatR (tryR simplifyAll . unfoldR) . abstReprR)
 
 onScrutineeR :: Unop ReExpr
 onScrutineeR r = caseAllR r id id (const id)
+
+standardizeCon :: ReExpr
+standardizeCon = go
+ where
+   go = ( appAllR id (repeatR (tryR simplifyAll . unfoldR))
+        . (void callDataConT >> abstReprR))
+     <+ (lamAllR id go . etaExpandR "eta")
+
+-- standardizeCon =
+--     appAllR id (repeatR (tryR simplifyAll . unfoldR))
+--   . (void callDataConT >> abstReprR)
 
 {--------------------------------------------------------------------
     Combine steps
@@ -378,7 +389,7 @@ externals =
     , externC "pre-standardize" preStandardize "..."
     , externC "abstReprR" abstReprR "..."
     , externC "standardizeCase" standardizeCase "..."
---     , externC "caseReduceUnfoldsR" caseReduceUnfoldsR "..."
+    , externC "standardizeCon" standardizeCon "..."
     -- From Reify.
     , externC "reify-misc" reifyMisc "Simplify 'reify e'"
     , externC "reify-cast" reifyCast "..."
