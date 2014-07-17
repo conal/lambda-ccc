@@ -298,25 +298,23 @@ abstReprR =
      reprE <- apps' (repName "repr") [ty] [dict,e]
      apps' (repName "abst") [ty] [dict,reprE]
 
+unfoldingsR :: ReExpr
+unfoldingsR = repeatR (tryR simplifyAll . unfoldR)
+
 standardizeCase :: ReExpr
 standardizeCase =
      caseReduceR True
   <+ caseFloatCaseR
-  <+ onScrutineeR (repeatR (tryR simplifyAll . unfoldR) . abstReprR)
+  <+ onScrutineeR (unfoldingsR . abstReprR)
 
 onScrutineeR :: Unop ReExpr
 onScrutineeR r = caseAllR r id id (const id)
 
 standardizeCon :: ReExpr
-standardizeCon = go
- where
-   go = ( appAllR id (repeatR (tryR simplifyAll . unfoldR))
-        . (void callDataConT >> abstReprR))
-     <+ (lamAllR id go . etaExpandR "eta")
-
--- standardizeCon =
---     appAllR id (repeatR (tryR simplifyAll . unfoldR))
---   . (void callDataConT >> abstReprR)
+standardizeCon =
+  -- Handle both saturated and unsaturated constructors
+     (appAllR id unfoldingsR . (void callDataConT >> abstReprR))
+  <+ (lamAllR id standardizeCon . etaExpandR "eta")
 
 {--------------------------------------------------------------------
     Combine steps
