@@ -14,7 +14,12 @@ bash
 -- any-td compile-go
 
 application-of reifyEP
+
+-- pre-standardize
+-- set-pp ghc
+
 reify-prep
+
 -- do-reify
 
-reify-cast  -- TEMP
+-- reify-cast  -- TEMP

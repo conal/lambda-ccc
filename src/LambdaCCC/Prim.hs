@@ -151,6 +151,8 @@ data Prim :: * -> * where
   InrP          :: Prim (b -> a :+ b)
   PairP         :: Prim (a -> b -> a :* b)
   CondBP        :: Prim (Bool :* (Bool :* Bool) -> Bool)  -- cond on Bool
+  AbsP          :: Prim (Rep a -> a)
+  RepP          :: Prim (a -> Rep a)
 #ifdef VecsAndTrees
 --   -- Naturals
 --   ToNatP        :: IsNat n => Prim (Unit -> Nat n)
@@ -206,6 +208,8 @@ instance Eq' (Prim a) (Prim b) where
   UnLeafP   === UnLeafP   = True
   UnBranchP === UnBranchP = True
 #endif
+  AbsP      === AbsP      = True
+  RepP      === RepP      = True
   OopsP     === OopsP     = True
   _         === _         = False
 
@@ -238,12 +242,14 @@ instance Show (Prim a) where
   showsPrec _ UnLeafP    = showString "unL"
   showsPrec _ UnBranchP  = showString "unB"
 #endif
+  showsPrec _ AbsP       = showString "abst"
+  showsPrec _ RepP       = showString "repr"
   showsPrec _ OopsP      = showString "<oops>"
 
 instance Show' Prim where showsPrec' = showsPrec
 
 primArrow :: ( BiCCCC k Lit
-             , BoolCat k, MuxCat k, NumCat k Int
+             , BoolCat k, MuxCat k, NumCat k Int, RepCat k
 #ifdef VecsAndTrees
              , VecCat k, PairCat k, TreeCat k
 #endif
@@ -274,6 +280,8 @@ primArrow ToBranchP = toB
 primArrow UnLeafP   = unL
 primArrow UnBranchP = unB
 #endif
+primArrow AbsP      = absC
+primArrow RepP      = repC
 primArrow OopsP     = error "primArrow: Oops"
 primArrow (LitP _)  = error ("primArrow: LitP with function type?!")
 
@@ -309,6 +317,8 @@ instance ( BiCCCC k Lit
   unitArrow UnLeafP   = unitFun unL
   unitArrow UnBranchP = unitFun unB
 #endif
+  unitArrow AbsP      = unitFun absC
+  unitArrow RepP      = unitFun repC
   unitArrow OopsP     = error "unitArrow on Prim: OopsP"
   unitArrow (LitP l)  = unitArrow l
 
@@ -344,6 +354,8 @@ instance Evalable (Prim a) where
   eval UnLeafP       = unL
   eval UnBranchP     = unB
 #endif
+  eval AbsP          = abst
+  eval RepP          = repr
   eval OopsP         = error "eval on Prim: Oops!"
 
 -- TODO: replace fst with exl, etc.

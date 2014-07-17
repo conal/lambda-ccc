@@ -117,7 +117,7 @@ evalOf :: CoreExpr -> TransformU CoreExpr
 evalOf e = appsE evalS [dropEP (exprType e)] [e]
 
 dropEP :: Unop Type
-dropEP (TyConApp (uqName . tyConName -> name) [t]) =
+dropEP (TyConApp (unqualifiedName . tyConName -> name) [t]) =
   if name == epS then t
   else error ("dropEP: not an EP: " ++ show name)
 dropEP _ = error "dropEP: not a TyConApp"
@@ -279,9 +279,10 @@ reifyTupCase =
    reifyAlt _ _ = fail "reifyAlt: Only handles pair patterns so far."
 
 reifyPrim :: ReExpr
-reifyPrim = unReify >>>
-            do Var v@(varName -> fqName -> flip M.lookup primMap -> Just nm) <- idR
-               appsE1 "kPrimEP" [varType v] =<< Var <$> findIdP nm
+reifyPrim =
+  unReify >>>
+  do Var v@(varName -> qualifiedName -> flip M.lookup primMap -> Just nm) <- idR
+     appsE1 "kPrimEP" [varType v] =<< Var <$> findIdP nm
 
 miscL :: [(String,ReExpr)]
 miscL = [ ("reifyEval"        , reifyEval)
@@ -341,4 +342,4 @@ True     --> kLit  True
 -- look up IDs. We'll see.
 
 isPrimitive :: Var -> Bool
-isPrimitive v = fqName (varName v) `M.member` primMap
+isPrimitive v = qualifiedName (varName v) `M.member` primMap

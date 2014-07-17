@@ -108,7 +108,7 @@ main :: IO ()
 -- main = go "plusInt" ((+) :: Int -> Int -> Int)
 -- main = go "or" ((||) :: Bool -> Bool -> Bool)
 
-main = go "sumT0" (sum :: Tree N0 Int -> Int)
+main = go "sumT2" (sum :: Tree N2 Int -> Int)
 
 -- main = go "tsum4" (tsum :: Tree N4 Int -> Int)
 

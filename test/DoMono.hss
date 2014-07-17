@@ -13,9 +13,14 @@ set-pp-coercion Kind
 -- try standardizeProg
 -- try simplifyAllRhs'
 
-rhs-of test
+rhs-of 'test
 try (repeat passE)
 try simplifyAll'
-try standardizeExpr
+
+-- try standardizeExpr
+
+try (any-td (repeat standardizeCase))
+try (any-td (repeat standardizeCon))
+
 try simplifyAll'
 try unshadow

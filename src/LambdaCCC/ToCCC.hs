@@ -65,11 +65,6 @@ convert (Either f g) p = curry ((convert' f ||| convert' g) . distl)
    convert' :: E prim (c :=> d) -> ((a :* c) `k` d)
    convert' h = uncurry (convert h p)
 -- convert (CoerceE a)  p = coerceC . convert a p
-convert (AbsE e)    p = abst . convert e p
-convert (RepE e)    p = repr . convert e p
-
--- coerce' :: Coercible b c => f b -> f c
--- coerce' = coerce
 
 #else
 

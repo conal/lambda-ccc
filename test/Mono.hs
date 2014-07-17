@@ -43,20 +43,18 @@ import TypeUnary.Vec (Vec(..))
 import Circat.Pair (Pair(..))
 import Circat.RTree (Tree(..))
 
--- #define BuildDictBug
-
-#ifdef BuildDictBug
--- Bug workaround. Hopefully remove soon See
--- <https://github.com/ku-fpg/hermit/issues/88#issuecomment-46869719> and later
--- comment.
-import LambdaCCC.Encode (Encodable(..))
-#endif
+import LambdaCCC.Rep (HasRep(..))
 
 import LambdaCCC.Misc (Unop)
 
 {--------------------------------------------------------------------
     Examples
 --------------------------------------------------------------------}
+
+-- Sadly, I need some use of HasRep in this module in order for the dictionaries
+-- to be found.
+foo :: Tree Z Int
+foo = abst 3
 
 -- test :: ()
 -- test = ()
@@ -79,8 +77,8 @@ import LambdaCCC.Misc (Unop)
 -- test :: Tree N1 Int
 -- test = B (L 3 :# L 4)
 
--- test :: Int -> Tree N0 Int
--- test = L
+test :: Int -> Tree N0 Int
+test = L
 
 -- test :: Pair (Tree N0 Int) -> Tree N1 Int
 -- test = B
@@ -88,8 +86,8 @@ import LambdaCCC.Misc (Unop)
 -- test :: (Bool,Int,Bool)
 -- test = (True,3,False)
 
-test :: Tree N8 Int -> Int
-test = sum
+-- test :: Tree N2 Int -> Int
+-- test = sum
 
 -- test :: Int -> Bool
 -- test = even

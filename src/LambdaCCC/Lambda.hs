@@ -43,7 +43,9 @@ module LambdaCCC.Lambda
   -- Hopefully temporary
   , vecSEP, treeZEP, treeSEP
 #endif
-  , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP, coerceEP
+  , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP
+  , repEP, absEP
+  -- , coerceEP
   , evalEP, reifyEP, kPrimEP, oops
   ) where
 
@@ -66,6 +68,8 @@ import Data.Proof.EQ
 
 import TypeUnary.Nat (IsNat(..),Nat(..))
 import TypeUnary.Vec (Vec(..),Z,S)
+
+import Circat.Category (Rep,RepCat(..))
 
 -- import Circat.Classes (VecCat(..))
 
@@ -197,8 +201,8 @@ data E :: (* -> *) -> (* -> *) where
   (:^)    :: forall p b a  . E p (a :=> b) -> E p a -> E p b
   Lam     :: forall p a b  . Pat a -> E p b -> E p (a :=> b)
   Either  :: forall p a b c. E p (a -> c) -> E p (b -> c) -> E p (a :+ b -> c)
-  CoerceE :: forall p a b  . (Typeable a, Typeable b, Coercible a b) =>
-                             E p a -> E p b
+--   CoerceE :: forall p a b  . (Typeable a, Typeable b, Coercible a b) =>
+--                              E p a -> E p b
 
 -- The explicit universals come from ghci's ":ty" command with ":set
 -- -fprint-explicit-foralls", so that I can get the order right when
@@ -214,7 +218,7 @@ occursVE v@(V name) = occ
    occ (f :^ e)        = occ f || occ e
    occ (Lam p e)       = not (occursVP v p) && occ e
    occ (Either f g)    = occ f || occ g
-   occ (CoerceE e)     = occ e
+--    occ (CoerceE e)     = occ e
 
 -- | Some variable in a pattern occurs freely in an expression
 occursPE :: Pat a -> E p b -> Bool
@@ -233,8 +237,8 @@ instance Eq1' p => Eq1' (E p) where
   Var v     ==== Var v'     = v ==== v'
   ConstE x  ==== ConstE x'  = x ==== x'
   (f :^ a)  ==== (f' :^ a') = a ==== a' && f ==== f'
-  Lam p e   ==== Lam p' e'  = p ==== p' && e ==== e'
-  CoerceE e ==== CoerceE e' = e ==== e'
+  Lam p e   ==== Lam p' e'  = p ==== p' && e ==== e' 
+--   CoerceE e ==== CoerceE e' = e ==== e'
   _         ==== _          = False
 
 -- instance Eq1' p => Eq' (E p a) (E p b) where
@@ -349,8 +353,8 @@ caseEither :: forall p a b c . (PrimBasics p, Eq1' p) =>
               Pat a -> E p c -> Pat b -> E p c -> E p (a :+ b) -> E p c
 caseEither p u q v ab = (lam p u `eitherE` lam q v) @^ ab
 
-coerceE :: forall p a b . (Typeable a, Typeable b, Coercible a b) => E p a -> E p b
-coerceE = CoerceE
+-- coerceE :: forall p a b . (Typeable a, Typeable b, Coercible a b) => E p a -> E p b
+-- coerceE = CoerceE
 
 instance (HasOpInfo prim, Show' prim, PrimBasics prim, Eq1' prim)
   => Show (E prim a) where
@@ -376,8 +380,7 @@ instance (HasOpInfo prim, Show' prim, PrimBasics prim, Eq1' prim)
     showParen (p > 0) $
     showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
   showsPrec p (Either f g) = showsOp2' "|||" (2,AssocRight) p f g
-  showsPrec p (CoerceE e)  = showsApp1 "coerce" p e
-
+--   showsPrec p (CoerceE e)  = showsApp1 "coerce" p e
 
 -- TODO: Multi-line pretty printer with indentation
 
@@ -441,7 +444,7 @@ eval' (ConstE p)   _   = evalP p
 eval' (u :^ v)     env = (eval' u env) (eval' v env)
 eval' (Lam p e)    env = \ x -> eval' e (extendEnv p x env)
 eval' (Either f g) env = eval' f env `either` eval' g env
-eval' (CoerceE e)  env = coerce (eval' e env)
+-- eval' (CoerceE e)  env = coerce (eval' e env)
 
 #else
 
@@ -453,7 +456,9 @@ eval' (ConstE p)   = const (evalP p)
 eval' (u :^ v)     = eval' u <*> eval' v
 eval' (Lam p e)    = (fmap.fmap) (eval' e) (flip (extendEnv p))
 eval' (Either f g) = liftA2 either (eval' f) (eval' g)
-eval' (CoerceE e)  = coerce (eval' e)
+eval' RepE         = const repr
+eval' AbsE         = const abst
+-- eval' (CoerceE e)  = coerce (eval' e)
 
 -- Derivation of Lam case:
 -- 
@@ -833,8 +838,14 @@ eitherEP = eitherE
 
 -- The order a c b matches 'either'
 
-coerceEP :: forall a b . (Typeable a, Typeable b, Coercible a b) => EP a -> EP b
-coerceEP = coerceE
+-- coerceEP :: forall a b . (Typeable a, Typeable b, Coercible a b) => EP a -> EP b
+-- coerceEP = coerceE
+
+absEP :: forall a. EP (Rep a) -> EP a
+absEP = (kPrim AbsP @^)
+
+repEP :: forall a. EP a -> EP (Rep a)
+repEP = (kPrim RepP @^)
 
 evalEP :: EP a -> a
 evalEP = evalE
