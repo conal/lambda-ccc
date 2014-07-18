@@ -43,18 +43,11 @@ import TypeUnary.Vec (Vec(..))
 import Circat.Pair (Pair(..))
 import Circat.RTree (Tree(..))
 
-import LambdaCCC.Rep (HasRep(..))
-
 import LambdaCCC.Misc (Unop)
 
 {--------------------------------------------------------------------
     Examples
 --------------------------------------------------------------------}
-
--- Sadly, I need some use of HasRep in this module in order for the dictionaries
--- to be found.
-foo :: Tree Z Int
-foo = abst 3
 
 -- test :: ()
 -- test = ()
@@ -77,8 +70,8 @@ foo = abst 3
 -- test :: Tree N1 Int
 -- test = B (L 3 :# L 4)
 
-test :: Int -> Tree N0 Int
-test = L
+-- test :: Int -> Tree N0 Int
+-- test = L
 
 -- test :: Pair (Tree N0 Int) -> Tree N1 Int
 -- test = B
@@ -97,8 +90,8 @@ test = L
 
 -- test = undefined
 
--- test :: Unop (Tree N4 Bool)
--- test = fmap not
+test :: Unop (Tree N4 Bool)
+test = fmap not
 
 -- test = encode (fmap not :: Tree N1 Bool -> Tree N1 Bool)
 
