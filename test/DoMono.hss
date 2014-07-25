@@ -1,26 +1,19 @@
 set-pp-renderer ascii
 set-pp-width 80
 
--- set-pp-type Omit
 set-pp-type     Show
--- set-pp-coercion Omit
 set-pp-coercion Kind
--- set-pp-coercion Abstract
 
--- down
--- try (repeat passCore)
--- try simplifyAllRhs'
--- try standardizeProg
--- try simplifyAllRhs'
+-- set-pp-type Omit
+-- set-pp-coercion Omit
+-- set-pp-coercion Abstract
 
 rhs-of 'test
 try (repeat passE)
 try simplifyAll'
-
--- try standardizeExpr
-
-try (any-td (repeat standardizeCase))
-try (any-td (repeat standardizeCon))
-
+-- I tried moving standardizeCase and standardizeCon into mySimplifiers (used by
+-- simplifyAll'), and it appears to loop. To do: investigate. Meanwhile, do it here.
+try (any-td (repeat (standardizeCase <+ standardizeCon)))
 try simplifyAll'
 try unshadow
+
