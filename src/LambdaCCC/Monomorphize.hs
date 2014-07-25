@@ -198,6 +198,9 @@ mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
                 , castTransitiveUnivR
                 , letSubstTrivialR  -- instead of letNonRecSubstSafeR
              -- , letSubstOneOccR -- delay
+             -- Experiment:
+--                 , standardizeCase
+--                 , standardizeCon
                 ]
 
 -- From bashComponents.
@@ -326,6 +329,7 @@ reifyPrep :: ReExpr
 reifyPrep = inReify (
                 tryR unshadowE
               . tryR simplifyAll'
+              . tryR (anytdE (repeatR (standardizeCase <+ standardizeCon)))
               . tryR standardizeR'
               . tryR simplifyAll'
               . tryR (repeatR passE)
@@ -336,13 +340,6 @@ reifyPrep = inReify (
 -- TODO: The initial inlineR is probably inadequate. Instead, fix the inlining
 -- criterion in specializeTyDict.
 
--- TEMP
-preStandardize :: ReExpr
-preStandardize = inReify $
-                   tryR simplifyAll'
-                 . tryR (repeatR passE)
-                 . tryR inlineR  -- in case of floating
-
 doReify :: ReExpr
 doReify = tryR unshadowE
         . tryR bashE
@@ -351,9 +348,10 @@ doReify = tryR unshadowE
 compileGo :: ReExpr
 compileGo = doReify . reifyPrep
 
+
+-- Move to HERMIT.Extras
 unshadowE :: ReExpr
 unshadowE = extractR unshadowR
-
 
 {--------------------------------------------------------------------
     Plugin
@@ -384,7 +382,6 @@ externals =
     , externC "do-reify" doReify "..."
     , externC "compile-go" compileGo "..."
     -- TEMP:
-    , externC "pre-standardize" preStandardize "..."
     , externC "abstReprR" abstReprR "..."
     , externC "standardizeCase" standardizeCase "..."
     , externC "standardizeCon" standardizeCon "..."
