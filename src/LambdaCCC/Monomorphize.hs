@@ -238,8 +238,8 @@ letFloatCaseAltR' = letFloatCaseAltR Nothing
 letFloatR :: ReCore
 letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR')
 
-pruneAltsProg :: ReProg
-pruneAltsProg = progRhsAnyR ({-bracketR "pruneAltsR"-} pruneAltsR)
+-- pruneAltsProg :: ReProg
+-- pruneAltsProg = progRhsAnyR ({-bracketR "pruneAltsR"-} pruneAltsR)
 
 retypeProgR :: ReProg
 retypeProgR = progRhsAnyR ({-bracketR "retypeExprR"-} retypeExprR)
@@ -396,8 +396,8 @@ externals =
         (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR')
          :: RewriteH Core)
         ["let-float with letFloatCaseAltR"]
-    , externC "pruneAltsR" pruneAltsR "..."
-    , externC "pruneAltsProg" pruneAltsProg "..."
+--     , externC "pruneAltsR" pruneAltsR "..."
+--     , externC "pruneAltsProg" pruneAltsProg "..."
     , externC "retypeExprR" retypeExprR "..."
     , externC "retypeProgR" retypeProgR "..."
     , externC "simplify-expr" simplifyExprR "Invoke GHC's simplifyExpr"
