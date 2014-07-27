@@ -44,7 +44,7 @@ module LambdaCCC.Lambda
   , vecSEP, treeZEP, treeSEP
 #endif
   , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP
-  , repEP, absEP
+  , reprEP, abstEP
   -- , coerceEP
   , evalEP, reifyEP, kPrimEP, oops
   ) where
@@ -69,7 +69,7 @@ import Data.Proof.EQ
 import TypeUnary.Nat (IsNat(..),Nat(..))
 import TypeUnary.Vec (Vec(..),Z,S)
 
-import Circat.Category (Rep,RepCat(..))
+import Circat.Category (Rep,HasRep(..),RepCat(..))
 
 -- import Circat.Classes (VecCat(..))
 
@@ -456,8 +456,6 @@ eval' (ConstE p)   = const (evalP p)
 eval' (u :^ v)     = eval' u <*> eval' v
 eval' (Lam p e)    = (fmap.fmap) (eval' e) (flip (extendEnv p))
 eval' (Either f g) = liftA2 either (eval' f) (eval' g)
-eval' RepE         = const repr
-eval' AbsE         = const abst
 -- eval' (CoerceE e)  = coerce (eval' e)
 
 -- Derivation of Lam case:
@@ -841,11 +839,14 @@ eitherEP = eitherE
 -- coerceEP :: forall a b . (Typeable a, Typeable b, Coercible a b) => EP a -> EP b
 -- coerceEP = coerceE
 
-absEP :: forall a. EP (Rep a) -> EP a
-absEP = (kPrim AbsP @^)
+abstEP :: forall a. HasRep a => forall a'. a' ~ Rep a => EP (a' -> a)
+abstEP = kPrim AbstP
 
-repEP :: forall a. EP a -> EP (Rep a)
-repEP = (kPrim RepP @^)
+reprEP :: forall a. HasRep a => forall a'. a' ~ Rep a => EP (a -> a')
+reprEP = kPrim ReprP
+
+-- The odd signatures of abstEP and reprEP are to match those of the abst and
+-- repr methods.
 
 evalEP :: EP a -> a
 evalEP = evalE

@@ -198,9 +198,10 @@ mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
                 , castTransitiveUnivR
                 , letSubstTrivialR  -- instead of letNonRecSubstSafeR
              -- , letSubstOneOccR -- delay
-             -- Experiment:
+                -- Experiment
 --                 , standardizeCase
 --                 , standardizeCon
+                -- Previous two lead to nontermination. Investigate.
                 ]
 
 -- From bashComponents.
@@ -269,9 +270,12 @@ passE = id
       . tryR simplifyAll  -- after let floating
       . tryR (anybuE (letFloatExprR <+ letFloatCaseAltR'))
       . tryR (anybuE (letAllR bindUnLetIntroR id))
-      . tryR (watchR "retypeExprR" retypeExprR) -- pruneAltsR
+      . tryR (watchR "retypeExprR" retypeExprR)
       . tryR (extractR unshadowR)
       . onetdE monomorphize
+
+-- TODO: Find a much more efficient strategy. I think repeated onetdE is very
+-- expensive. I went this way to help memoization. Revisit!
 
 -- | 'letSubstR' in non-recursive let if only one occurrence.
 letSubstOneOccR :: ReExpr
@@ -288,27 +292,35 @@ standardizeR' = watchR "standardizeR" $
 isStandardTy :: Type -> Bool
 isStandardTy t = any ($ t) [isUnitTy,isBoolTy,isIntTy,isPairTy]
 
-repName :: Unop String
-repName = ("LambdaCCC.Rep."++)
-
--- | e ==> abst (repr e)
+-- | e ==> abst (repr e).  In Core, abst is
+-- abst ty $hasRepTy ty' (Eq# * ty' (Rep ty) (sym (co :: Rep ty ~ ty'))),
+-- where e :: ty, and co normalizes Rep ty to ty'.
 abstReprR :: ReExpr
 abstReprR =
   do e <- id
      let ty = exprType e
      hasRepTc <- findTyConT (repName "HasRep")
      dict <- buildDictionaryT' $* TyConApp hasRepTc [ty]
-     reprE <- apps' (repName "repr") [ty] [dict,e]
-     apps' (repName "abst") [ty] [dict,reprE]
+     repTc <- findTyConT (repName "Rep")
+     (co,ty') <- normaliseTypeT Nominal $* TyConApp repTc [ty]
+     let eqBox = mkEqBox (mkSymCo co)
+         meth str ex = apps' (repName str) [ty] [dict,Type ty',eqBox,ex]
+     (meth "abst" <=< meth "repr") e
 
-unfoldingsR :: ReExpr
-unfoldingsR = repeatR (tryR simplifyAll . unfoldR)
+-- Do one unfolding, and then a second one only if the function name starts with
+-- "$", as in the case of a method lifted to the top level.
+unfoldMethodR :: ReExpr
+unfoldMethodR =
+    tryR (tryR simplifyAll . unfoldPredR (\ v _ -> isPrefixOf "$" (uqVarName v)))
+  . (tryR simplifyAll . unfoldR)
+
+-- unfoldMethodR = repeatR (tryR simplifyAll . unfoldR)
 
 standardizeCase :: ReExpr
 standardizeCase =
      caseReduceR True
   <+ caseFloatCaseR
-  <+ onScrutineeR (unfoldingsR . abstReprR)
+  <+ onScrutineeR (unfoldMethodR . abstReprR)
 
 onScrutineeR :: Unop ReExpr
 onScrutineeR r = caseAllR r id id (const id)
@@ -316,7 +328,7 @@ onScrutineeR r = caseAllR r id id (const id)
 standardizeCon :: ReExpr
 standardizeCon =
   -- Handle both saturated and unsaturated constructors
-     (appAllR id unfoldingsR . (void callDataConT >> abstReprR))
+     (appAllR id unfoldMethodR . (void callDataConT >> abstReprR))
   <+ (lamAllR id standardizeCon . etaExpandR "eta")
 
 {--------------------------------------------------------------------
@@ -327,15 +339,17 @@ standardizeCon =
 
 reifyPrep :: ReExpr
 reifyPrep = inReify (
-                tryR unshadowE
+                id
+              . tryR unshadowE
               . tryR simplifyAll'
               . tryR (anytdE (repeatR (standardizeCase <+ standardizeCon)))
-              . tryR standardizeR'
               . tryR simplifyAll'
               . tryR (repeatR passE)
-              . tryR inlineR  -- in case of floating
               )
         -- . tryR (unfoldNameR "LambdaCCC.Run.go")
+
+-- I tried moving standardizeCase and standardizeCon into mySimplifiers (used by
+-- simplifyAll'), and it appears to loop. To do: investigate. Meanwhile, do it here.
 
 -- TODO: The initial inlineR is probably inadequate. Instead, fix the inlining
 -- criterion in specializeTyDict.
@@ -387,7 +401,7 @@ externals =
     , externC "standardizeCon" standardizeCon "..."
     -- From Reify.
     , externC "reify-misc" reifyMisc "Simplify 'reify e'"
-    , externC "reify-cast" reifyCast "..."
+    , externC "reifyRepMeth" reifyRepMeth "..."
     -- 
     , external "let-float'"
         (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR')

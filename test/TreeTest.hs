@@ -18,7 +18,7 @@
 -- 
 -- Tests with length-typed treetors. To run:
 -- 
---   hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize Go.hss resume && ./TreeTest
+--   hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize DoTree.hss resume && ./TreeTest
 --   
 -- Remove the 'resume' to see intermediate Core.
 ----------------------------------------------------------------------
@@ -38,7 +38,7 @@ import Data.Functor.Identity
 
 import TypeUnary.TyNat
 import TypeUnary.Nat (IsNat)
-
+import TypeUnary.Vec
 import Circat.RTree
 -- Strange -- why needed? EP won't resolve otherwise. Bug?
 import qualified LambdaCCC.Lambda
@@ -108,7 +108,9 @@ main :: IO ()
 -- main = go "plusInt" ((+) :: Int -> Int -> Int)
 -- main = go "or" ((||) :: Bool -> Bool -> Bool)
 
-main = go "sumT2" (sum :: Tree N2 Int -> Int)
+-- main = go "sumT0" (sum :: Tree N0 Int -> Int)
+
+main = go "test" (fmap not :: Tree N3 Bool -> Tree N3 Bool)
 
 -- main = go "tsum4" (tsum :: Tree N4 Int -> Int)
 

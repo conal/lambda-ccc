@@ -20,7 +20,7 @@
 -- Reify a Core expression into GADT
 ----------------------------------------------------------------------
 
-module LambdaCCC.ReifySimple (reifyMisc, reifyCast, inReify, isPrimitive) where
+module LambdaCCC.ReifySimple (reifyMisc, reifyRepMeth, inReify, isPrimitive, repName) where
 
 import Data.Functor ((<$>))
 import Control.Monad ((<=<))
@@ -60,6 +60,9 @@ triesL = Ex.triesL observing
 {--------------------------------------------------------------------
     Reification
 --------------------------------------------------------------------}
+
+repName :: Unop String
+repName = ("Circat.Rep."++)
 
 lamName :: Unop String
 lamName = ("LambdaCCC.Lambda." ++)
@@ -226,6 +229,7 @@ reifyIntLit = unReify >>> do _ <- callNameT "I#"
                              e <- idR
                              appsE "intL" [] [e]
 
+#if 0
 reifyCast :: ReExpr
 reifyCast =
   unReify >>>
@@ -243,6 +247,19 @@ reifyCast =
 toRep :: Unop Coercion
 toRep co | coercionRole co == Representational = co
          | otherwise = mkSubCo co
+
+#endif
+
+-- Reify an application of 'repr' or 'abst' to its type, dict, and coercion
+-- args (four in total), leaving the final expression argument for reifyApp.
+reifyRepMeth :: ReExpr
+reifyRepMeth =
+  unReify >>>
+  do (Var v,args@(length -> 4)) <- callT
+     guardMsg (fqVarName v `elem` methNames) "not a HasRep method"
+     (\ f -> mkApps (Var f) args) <$> findIdT (lamName (uqVarName v ++ "EP"))
+ where
+   methNames = repName <$> ["repr","abst"]
 
 -- reify of case on 0-tuple or 2-tuple
 reifyTupCase :: ReExpr
@@ -287,11 +304,12 @@ reifyPrim =
 miscL :: [(String,ReExpr)]
 miscL = [ ("reifyEval"        , reifyEval)
 --         , ("reifyRulesPrefix" , reifyRulesPrefix)
+        , ("reifyRepMeth"     , reifyRepMeth) -- before reifyApp
         , ("reifyApp"         , reifyApp)
         , ("reifyLam"         , reifyLam)
         , ("reifyMonoLet"     , reifyMonoLet)
         , ("reifyTupCase"     , reifyTupCase)
-        , ("reifyCast"        , reifyCast)
+--         , ("reifyCast"        , reifyCast)
         , ("reifyIntLit"      , reifyIntLit)
         , ("reifyPrim"        , reifyPrim)
         ]

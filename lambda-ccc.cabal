@@ -49,7 +49,6 @@ Library
                     LambdaCCC.Monomorphize
 --                     LambdaCCC.TransCode
 --                     LambdaCCC.Standardize
-                    LambdaCCC.Rep
                     LambdaCCC.CoerceEncode
                     LambdaCCC.Run
 --                     LambdaCCC.Examples.Linear

@@ -16,4 +16,4 @@ try simplifyAll'
 try (any-td (repeat (standardizeCase <+ standardizeCon)))
 try simplifyAll'
 try unshadow
-
+up

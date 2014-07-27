@@ -286,8 +286,8 @@ instance ClosedCat (:->) where
 --   coerceC = Coerce
 
 instance RepCat (:->) where
-  repC = prim RepP
-  absC = prim AbsP
+  reprC = prim ReprP
+  abstC = prim AbstP
 
 {--------------------------------------------------------------------
     Factoring (decomposition)

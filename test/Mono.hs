@@ -90,7 +90,7 @@ import LambdaCCC.Misc (Unop)
 
 -- test = undefined
 
-test :: Unop (Tree N4 Bool)
+test :: Unop (Tree N2 Bool)
 test = fmap not
 
 -- test = encode (fmap not :: Tree N1 Bool -> Tree N1 Bool)
