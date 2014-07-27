@@ -4,8 +4,8 @@
 {-# LANGUAGE Rank2Types #-}
 {-# OPTIONS_GHC -Wall #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-binds #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -25,31 +25,21 @@ module LambdaCCC.Monomorphize where
 import Prelude hiding (id,(.),(>>))
 import qualified Prelude
 
-import Control.Category (id,(.),(>>>))
-import Control.Arrow (arr,second)
-import Control.Monad ((<=<),unless)
-import Data.Functor ((<$),(<$>),void)
-import Control.Applicative (liftA2)
-import Data.Monoid (mempty)
-import Data.List (intercalate,isPrefixOf)
-
--- GHC
-import PrelNames (eitherTyConName)
+import Control.Category (id,(.))
+import Control.Monad ((<=<))
+import Data.Functor ((<$>),void)
+import Data.List (isPrefixOf)
 
 import HERMIT.Core (CoreDef(..))
-import HERMIT.Context (HermitC)
 import HERMIT.Dictionary hiding (externals)
-import HERMIT.External (External,ExternalName,external,(.+),CmdTag(Loop))
+import HERMIT.External (External,external)
 import HERMIT.GHC
 import HERMIT.Kure
-import HERMIT.Monad (saveDef,RememberedName(..))
-import HERMIT.Name (newIdH)
 import HERMIT.Plugin (hermitPlugin,phase,interactive)
 
 import HERMIT.Extras hiding (findTyConT)
 import qualified HERMIT.Extras as Ex
 
-import LambdaCCC.Misc ((<~))
 import LambdaCCC.CoerceEncode
 import LambdaCCC.ReifySimple
 
