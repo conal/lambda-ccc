@@ -292,9 +292,8 @@ abstReprR =
      hasRepTc <- findTyConT (repName "HasRep")
      dict <- buildDictionaryT' $* TyConApp hasRepTc [ty]
      repTc <- findTyConT (repName "Rep")
-     (co,ty') <- normaliseTypeT Nominal $* TyConApp repTc [ty]
-     let eqBox = mkEqBox (mkSymCo co)
-         meth str ex = apps' (repName str) [ty] [dict,Type ty',eqBox,ex]
+     (mkEqBox -> eq,ty') <- normaliseTypeT Nominal $* TyConApp repTc [ty]
+     let meth str ex = apps' (repName str) [ty] [dict,Type ty',eq,ex]
      (meth "abst" <=< meth "repr") e
 
 -- Do one unfolding, and then a second one only if the function name starts with

@@ -151,8 +151,8 @@ data Prim :: * -> * where
   InrP          :: Prim (b -> a :+ b)
   PairP         :: Prim (a -> b -> a :* b)
   CondBP        :: Prim (Bool :* (Bool :* Bool) -> Bool)  -- cond on Bool
-  AbstP         :: (HasRep a, a' ~ Rep a) => Prim (a' -> a)
-  ReprP         :: (HasRep a, a' ~ Rep a) => Prim (a -> a')
+  AbstP         :: (HasRep a, Rep a ~ a') => Prim (a' -> a)
+  ReprP         :: (HasRep a, Rep a ~ a') => Prim (a -> a')
 #ifdef VecsAndTrees
 --   -- Naturals
 --   ToNatP        :: IsNat n => Prim (Unit -> Nat n)

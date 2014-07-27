@@ -839,10 +839,10 @@ eitherEP = eitherE
 -- coerceEP :: forall a b . (Typeable a, Typeable b, Coercible a b) => EP a -> EP b
 -- coerceEP = coerceE
 
-abstEP :: forall a. HasRep a => forall a'. a' ~ Rep a => EP (a' -> a)
+abstEP :: forall a. HasRep a => forall a'. Rep a ~ a' => EP (a' -> a)
 abstEP = kPrim AbstP
 
-reprEP :: forall a. HasRep a => forall a'. a' ~ Rep a => EP (a -> a')
+reprEP :: forall a. HasRep a => forall a'. Rep a ~ a' => EP (a -> a')
 reprEP = kPrim ReprP
 
 -- The odd signatures of abstEP and reprEP are to match those of the abst and

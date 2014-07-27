@@ -46,6 +46,7 @@ import LambdaCCC.Lambda (EP,reifyEP)
 
 import LambdaCCC.Misc (Unop,Binop)
 
+import Circat.Misc (Unop)
 import Circat.Pair (Pair(..))
 import Circat.RTree (TreeCat(..))
 import Circat.Circuit (GenBuses)
@@ -108,9 +109,9 @@ main :: IO ()
 -- main = go "plusInt" ((+) :: Int -> Int -> Int)
 -- main = go "or" ((||) :: Bool -> Bool -> Bool)
 
--- main = go "sumT0" (sum :: Tree N0 Int -> Int)
+-- main = go "test" (sum :: Tree N0 Int -> Int)
 
-main = go "test" (fmap not :: Tree N3 Bool -> Tree N3 Bool)
+main = go "test" (fmap not :: Unop (Tree N4 Bool))
 
 -- main = go "tsum4" (tsum :: Tree N4 Int -> Int)
 
