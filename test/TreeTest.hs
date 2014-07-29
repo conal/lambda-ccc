@@ -32,6 +32,7 @@ import Prelude hiding (foldr,sum)
 import Control.Applicative (Applicative(..),liftA2)
 
 import Data.Foldable (Foldable(..),sum)
+import Data.Traversable (sequenceA)
 
 -- transformers
 import Data.Functor.Identity
@@ -96,6 +97,9 @@ squares = fmap (\ x -> x * x)
 squares' :: (Functor f, Num a) => f a -> f a
 squares' = fmap (^ (2 :: Int))
 
+dot' :: (Applicative f, Foldable f, Num a) => f a -> f a -> a
+dot' as bs = sum (prodA as bs)
+
 {--------------------------------------------------------------------
     Run it
 --------------------------------------------------------------------}
@@ -109,13 +113,13 @@ main :: IO ()
 -- main = go "plusInt" ((+) :: Int -> Int -> Int)
 -- main = go "or" ((||) :: Bool -> Bool -> Bool)
 
-main = go "test" (sum :: Tree N1 Int -> Int)
+-- main = go "test" (sum :: Tree N1 Int -> Int)
 
 -- main = go "test" (fmap not :: Unop (Tree N5 Bool))
 
 -- main = do go "squares3" (squares :: Tree N3 Int -> Tree N3 Int)
---           go "sum4"     (tsum   :: Tree N4 Int -> Int)
---           go "dot4"     (dot    :: Tree N4 (Int,Int) -> Int)
+--           go "sum4"     (sum     :: Tree N4 Int -> Int)
+--           go "dot4"     (dot     :: Tree N4 (Int,Int) -> Int)
 
 -- Problematic examples:
 
@@ -123,7 +127,11 @@ main = go "test" (sum :: Tree N1 Int -> Int)
 -- -- optimization is in place.
 -- main = go "dot1" (dot :: Tree N1 (Int,Int) -> Int)
 
--- main = go "dot0" (dot :: Tree N0 (Int,Int) -> Int)
+-- main = go "test" (dot :: Tree N4 (Int,Int) -> Int)
+
+main = go "test" (sequenceA :: Tree N4 (Pair Int) -> Pair (Tree N4 Int))
+
+-- main = go "test" (uncurry (dot' :: Tree N0 Int -> Tree N0 Int -> Int))
 
 -- main = go "dot2" (dot :: Tree N2 (Int,Int) -> Int)
 
