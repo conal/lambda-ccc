@@ -109,11 +109,9 @@ main :: IO ()
 -- main = go "plusInt" ((+) :: Int -> Int -> Int)
 -- main = go "or" ((||) :: Bool -> Bool -> Bool)
 
--- main = go "test" (sum :: Tree N0 Int -> Int)
+main = go "test" (sum :: Tree N1 Int -> Int)
 
-main = go "test" (fmap not :: Unop (Tree N4 Bool))
-
--- main = go "tsum4" (tsum :: Tree N4 Int -> Int)
+-- main = go "test" (fmap not :: Unop (Tree N5 Bool))
 
 -- main = do go "squares3" (squares :: Tree N3 Int -> Tree N3 Int)
 --           go "sum4"     (tsum   :: Tree N4 Int -> Int)

@@ -26,8 +26,8 @@ import Prelude hiding (id,(.),(>>))
 import qualified Prelude
 
 import Control.Category (id,(.))
-import Control.Monad ((<=<))
 import Data.Functor ((<$>),void)
+import Control.Applicative ((<*>))
 import Data.List (isPrefixOf)
 
 import HERMIT.Core (CoreDef(..))
@@ -40,19 +40,17 @@ import HERMIT.Plugin (hermitPlugin,phase,interactive)
 import HERMIT.Extras hiding (findTyConT)
 import qualified HERMIT.Extras as Ex
 
-import LambdaCCC.CoerceEncode
+-- import LambdaCCC.CoerceEncode
 import LambdaCCC.ReifySimple
 
 {--------------------------------------------------------------------
     Observing
 --------------------------------------------------------------------}
 
--- (Observing, observeR', triesL, labeled)
-
 observing :: Ex.Observing
 observing = False
 
--- #define LintDie
+#define LintDie
 
 #ifdef LintDie
 watchR, nowatchR :: String -> Unop ReExpr
@@ -66,8 +64,8 @@ watchR lab r = labeled observing (lab,r)  -- don't lint
 
 #endif
 
-nowatchR = watchR
--- nowatchR _ = id
+-- nowatchR = watchR
+nowatchR _ = id
 
 skipT :: Monad m => Transform c m a b
 skipT = fail "untried"
@@ -174,11 +172,11 @@ bashWith
   | otherwise   = \ rs -> bashExtendedWithE (promoteR <$> rs)
 
 simplifyAll :: ReExpr
-simplifyAll = watchR "simplifyAll" $
+simplifyAll = -- watchR "simplifyAll" $
               bashWith mySimplifiers
 
 simplifyAll' :: ReExpr
-simplifyAll' = watchR "simplifyAll'" $
+simplifyAll' = -- watchR "simplifyAll'" $
                bashWith (letSubstOneOccR : mySimplifiers)
 
 
@@ -192,6 +190,7 @@ mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
 --                 , standardizeCase
 --                 , standardizeCon
                 -- Previous two lead to nontermination. Investigate.
+--                 , watchR "recastR" recastR -- Experimental
                 ]
 
 -- From bashComponents.
@@ -260,7 +259,7 @@ passE = id
       . tryR simplifyAll  -- after let floating
       . tryR (anybuE (letFloatExprR <+ letFloatCaseAltR'))
       . tryR (anybuE (letAllR bindUnLetIntroR id))
-      . tryR (watchR "retypeExprR" retypeExprR)
+      . tryR (watchR "retypeExprR" retypeExprR) -- Needed?
       . tryR (extractR unshadowR)
       . onetdE monomorphize
 
@@ -271,9 +270,9 @@ passE = id
 letSubstOneOccR :: ReExpr
 letSubstOneOccR = oneOccT >> letNonRecSubstR
 
-standardizeR' :: (Standardizable a, SyntaxEq a, Injection a CoreTC) => RewriteH a
-standardizeR' = watchR "standardizeR" $
-                standardizeR
+-- standardizeR' :: (Standardizable a, SyntaxEq a, Injection a CoreTC) => RewriteH a
+-- standardizeR' = watchR "standardizeR" $
+--                 standardizeR
 
 {--------------------------------------------------------------------
     Yet another go at standardizing types
@@ -282,19 +281,24 @@ standardizeR' = watchR "standardizeR" $
 isStandardTy :: Type -> Bool
 isStandardTy t = any ($ t) [isUnitTy,isBoolTy,isIntTy,isPairTy]
 
+hasRepMethodF :: TransformH Type (String -> TransformH a CoreExpr)
+hasRepMethodF =
+  do ty <- id
+     hasRepTc <- findTyConT (repName "HasRep")
+     dict  <- buildDictionaryT' $* TyConApp hasRepTc [ty]
+     repTc <- findTyConT (repName "Rep")
+     (mkEqBox -> eq,ty') <- normaliseTypeT Nominal $* TyConApp repTc [ty]
+     return $ \ meth -> apps' (repName meth) [ty] [dict,Type ty',eq]
+
+hasRepMethodT :: TransformH Type (String -> ReExpr)
+hasRepMethodT = (\ f -> \ s -> App <$> f s <*> id) <$> hasRepMethodF
+
 -- | e ==> abst (repr e).  In Core, abst is
 -- abst ty $hasRepTy ty' (Eq# * ty' (Rep ty) (sym (co :: Rep ty ~ ty'))),
 -- where e :: ty, and co normalizes Rep ty to ty'.
 abstReprR :: ReExpr
-abstReprR =
-  do e <- id
-     let ty = exprType e
-     hasRepTc <- findTyConT (repName "HasRep")
-     dict <- buildDictionaryT' $* TyConApp hasRepTc [ty]
-     repTc <- findTyConT (repName "Rep")
-     (mkEqBox -> eq,ty') <- normaliseTypeT Nominal $* TyConApp repTc [ty]
-     let meth str ex = apps' (repName str) [ty] [dict,Type ty',eq,ex]
-     (meth "abst" <=< meth "repr") e
+abstReprR = do meth <- hasRepMethodT . exprTypeT
+               meth "abst" . meth "repr"
 
 -- Do one unfolding, and then a second one only if the function name starts with
 -- "$", as in the case of a method lifted to the top level.
@@ -320,6 +324,52 @@ standardizeCon =
      (appAllR id unfoldMethodR . (void callDataConT >> abstReprR))
   <+ (lamAllR id standardizeCon . etaExpandR "eta")
 
+-- -- | Replace a cast expression with a recast application.
+-- recastR :: ReExpr
+-- recastR = do Cast e (coercionKind -> Pair a b) <- id
+--              classTc <- findTyConT ("LambdaCCC.Recastable.Recastable")
+--              dict    <- buildDictionaryT' $* TyConApp classTc [a,b]
+--              apps' ("LambdaCCC.Recastable.recast") [a,b] [dict,e]
+
+-- Try again without a Recastable class.
+
+-- | Construct a recast function from a to b
+recastF :: (Type,Type) -> TransformH a CoreExpr
+recastF (a,b) = idRC <+ reprR <+ abstR <+ funR
+ where
+    idRC  = do guardMsg (a =~= b) "recast id: types differ"
+               idId <- findIdT "id"
+               return $ Var idId `App` Type a
+    reprR = tryMeth a "repr"
+    abstR = tryMeth b "abst"
+    tryMeth ty meth = do q <- hasRepMethodF $* ty
+                         f <- q meth
+                         Just (a',b') <- return (splitFunTy_maybe (exprType f))
+                         guardMsg (a' =~= a) "recast tryMeth: a' /= a"
+                         guardMsg (b' =~= b) "recast tryMeth: b' /= b"
+                         return f
+    funR = do Just (aDom,aRan) <- return $ splitFunTy_maybe a
+              Just (bDom,bRan) <- return $ splitFunTy_maybe b
+              f <- recastF (bDom,aDom)  -- contravariant
+              h <- recastF (aRan,bRan)  -- covariant
+              glueV <- findIdT "LambdaCCC.Monomorphize.-->"
+              -- return $ 
+              unfoldR $*
+                       mkApps (Var glueV)
+                              ([Type aDom,Type aRan,Type bDom,Type bRan, f,h])
+
+-- | Add pre- and post-processing.
+-- Used dynamically by recastF
+(-->) :: forall a b a' b'. (a' -> a) -> (b -> b') -> ((a -> b) -> (a' -> b'))
+(f --> h) g = h . g . f
+
+-- | Replace a cast expression with the application of a recasting function
+recastR :: ReExpr
+recastR = do Cast e (coercionKind -> Pair a b) <- id
+             f <- recastF (a,b)
+             return (App f e)
+
+
 {--------------------------------------------------------------------
     Combine steps
 --------------------------------------------------------------------}
@@ -333,6 +383,7 @@ reifyPrep = inReify (
               . tryR simplifyAll'
               . tryR (anytdE (repeatR (standardizeCase <+ standardizeCon)))
               . tryR simplifyAll'
+              . tryR (anybuE recastR)                   -- Experimental
               . tryR (repeatR passE)
               )
         -- . tryR (unfoldNameR "LambdaCCC.Run.go")
@@ -377,15 +428,16 @@ externals =
     , external "passCore" passCore ["..."]
     , externC "passE" passE "..."
     , externC "letSubstOneOccR" letSubstOneOccR "..."
-    , externC "standardizeExpr" (standardizeR' :: ReExpr) "..."
-    , externC "standardizeProg" (standardizeR' :: ReProg) "..."
-    , externC "standardizeBind" (standardizeR' :: ReBind) "..."
+--     , externC "standardizeExpr" (standardizeR' :: ReExpr) "..."
+--     , externC "standardizeProg" (standardizeR' :: ReProg) "..."
+--     , externC "standardizeBind" (standardizeR' :: ReBind) "..."
     -- Put it together
     , externC "reify-prep" reifyPrep "..."
     , externC "do-reify" doReify "..."
     , externC "compile-go" compileGo "..."
     -- TEMP:
-    , externC "abstReprR" abstReprR "..."
+    , externC "recast" recastR "..."
+    , externC "abstRepr" abstReprR "..."
     , externC "standardizeCase" standardizeCase "..."
     , externC "standardizeCon" standardizeCon "..."
     -- From Reify.
