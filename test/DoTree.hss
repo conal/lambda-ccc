@@ -12,11 +12,11 @@ binding-of 'main
 try (any-td (unfold 'go))
 try bash  -- for go unfolding
 
-one-td reify-prep
+any-td reify-prep
 
--- try (repeat (any-td (repeat reify-misc)))
--- try bash
--- try unshadow
+try (repeat (any-td (repeat reify-misc)))
+try bash
+try unshadow
 
 -- -- TEMP
 -- application-of 'reifyEP
@@ -25,3 +25,28 @@ one-td reify-prep
 -- any-bu recast
 -- simplifyAll
 
+----
+
+-- application-of 'prodA
+-- passE; passE
+-- down ; rhs-of 'liftA2
+-- passE -- bombs
+
+-- one-td monomorphize
+-- retypeExprR
+-- lint-expr
+
+-- down;down;down;down;down;down;down
+-- -- standardizeCase
+
+-- rhs-of '<*>
+-- down
+-- monomorphize
+-- rhs-of 'ap'1 ; down
+-- standardizeCase
+
+-- application-of 'reifyEP; down;right
+-- passE
+
+-- application-of 'reifyEP
+-- reify-prep
