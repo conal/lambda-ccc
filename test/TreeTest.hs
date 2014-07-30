@@ -27,12 +27,12 @@
 
 -- TODO: explicit exports
 
-import Prelude hiding (foldr,sum)
+import Prelude hiding (foldr,sum,product)
 
 import Control.Applicative (Applicative(..),liftA2)
 
-import Data.Foldable (Foldable(..),sum)
-import Data.Traversable (sequenceA)
+import Data.Foldable (Foldable(..),sum,product)
+import Data.Traversable (Traversable(..))
 
 -- transformers
 import Data.Functor.Identity
@@ -100,6 +100,12 @@ squares' = fmap (^ (2 :: Int))
 dot' :: (Applicative f, Foldable f, Num a) => f a -> f a -> a
 dot' as bs = sum (prodA as bs)
 
+dot'' :: (Foldable g, Functor g, Foldable f, Num a) => g (f a) -> a
+dot'' = sum . fmap product
+
+dot''' :: (Traversable g, Foldable f, Applicative f, Num a) => g (f a) -> a
+dot''' = dot'' . sequenceA
+
 {--------------------------------------------------------------------
     Run it
 --------------------------------------------------------------------}
@@ -110,12 +116,18 @@ go name f = run name (reifyEP f)
 -- Only works when compiled with HERMIT
 main :: IO ()
 
+-- main = go "tdott-0" (dot''' :: Pair (Tree N0 Int) -> Int)
+
+-- main = go "test" (dot'' :: Tree N4 (Pair Int) -> Int)
+
 -- main = go "plusInt" ((+) :: Int -> Int -> Int)
 -- main = go "or" ((||) :: Bool -> Bool -> Bool)
 
--- main = go "test" (sum :: Tree N1 Int -> Int)
+-- main = go "tsum-12" (sum :: Tree N12 Int -> Int)
 
--- main = go "test" (fmap not :: Unop (Tree N5 Bool))
+-- main = go "tmap-5" (fmap not :: Unop (Tree N5 Bool))
+
+-- main = go "test" (uncurry (dot' :: Tree N0 Int -> Tree N0 Int -> Int))
 
 -- main = do go "squares3" (squares :: Tree N3 Int -> Tree N3 Int)
 --           go "sum4"     (sum     :: Tree N4 Int -> Int)
@@ -129,11 +141,11 @@ main :: IO ()
 
 -- main = go "test" (dot :: Tree N4 (Int,Int) -> Int)
 
-main = go "test" (sequenceA :: Tree N4 (Pair Int) -> Pair (Tree N4 Int))
+main = go "tpsequence-4" (sequenceA :: Tree N4 (Pair Int) -> Pair (Tree N4 Int))
 
--- main = go "test" (uncurry (dot' :: Tree N0 Int -> Tree N0 Int -> Int))
+-- main = go "tdot-4" (dot :: Tree N4 (Int,Int) -> Int)
 
--- main = go "dot2" (dot :: Tree N2 (Int,Int) -> Int)
+-- main = go "tpdot-4" (dot'' :: Tree N4 (Pair Int) -> Int)
 
 -- -- Doesn't wedge.
 -- main = go "dotp" ((psum . prod) :: Pair (Int,Int) -> Int)
