@@ -145,13 +145,35 @@ filterToBool t = (t >> return True) <+ return False
 
 -- Unfold a name applied to some type and/or dictionary arguments
 specializeTyDict :: ReExpr
-specializeTyDict = tryR simplifyAll . unfoldPredR okay
+specializeTyDict =
+    tryR simplifyAll
+  . unfoldPredR okay
+  . rejectR (dictResultTy . exprType)
+  . rejectR isType
  where
    okay = -- const $ liftA2 (&&) (not.null) (all isTyOrDict)
           -- (\ v args -> isGlobalId v && not (isPrimitive v) && all isTyOrDict args)
-          (\ v args -> not (isPrimitive v) && all isTyOrDict args
+          (\ v args -> not (isPrimitive v)
+                    && all isTyOrDict args
                     && (isGlobalId v || not (null args)))
           -- const $ all isTyOrDict
+
+#if 1
+dictResultTy :: Type -> Bool
+dictResultTy (coreView -> Just ty) = dictResultTy ty
+dictResultTy (FunTy _ ty)          = dictResultTy ty
+dictResultTy (ForAllTy _ ty)       = dictResultTy ty
+dictResultTy ty                    = isDictTy ty
+#else
+dictResultTy :: Type -> Bool
+dictResultTy = isDictTy . resultTy
+
+resultTy :: Unop Type
+resultTy (coreView -> Just ty) = resultTy ty
+resultTy (FunTy _ ty)          = resultTy ty
+resultTy (ForAllTy _ ty)       = resultTy ty
+resultTy ty                    = ty
+#endif
 
 isTyOrDict :: CoreExpr -> Bool
 isTyOrDict e = isType e || isDictTy (exprType e)
@@ -249,6 +271,9 @@ passCore = tryR (promoteR simplifyAllRhs)  -- after let-floating
          . tryR (anybuR (promoteR bindUnLetIntroR))
          . tryR (promoteR retypeProgR) -- pruneAltsProg
          . tryR unshadowR
+         . tryR (anytdR (repeatR (promoteR
+                                  (  watchR "standardizeCase" standardizeCase
+                                 <+ watchR "standardizeCon" standardizeCon))))
          . onetdR (promoteR monomorphize)
 
 -- NOTE: if unshadowR is moved to later than pruneAltsProg, we can prune too
@@ -256,12 +281,15 @@ passCore = tryR (promoteR simplifyAllRhs)  -- after let-floating
 
 passE :: ReExpr
 passE = id
-      . tryR simplifyAll  -- after let floating
+      . tryR (watchR "simplifyAll" simplifyAll)  -- after let floating
       . tryR (anybuE (letFloatExprR <+ letFloatCaseAltR'))
       . tryR (anybuE (letAllR bindUnLetIntroR id))
-      . tryR (watchR "retypeExprR" retypeExprR) -- Needed?
+--       . tryR (watchR "retypeExprR" retypeExprR) -- Needed?
       . tryR (extractR unshadowR)
-      . onetdE monomorphize
+      . tryR simplifyAll'
+      . tryR (anytdE (repeatR (  watchR "standardizeCase" standardizeCase
+                              <+ watchR "standardizeCon" standardizeCon)))
+      . onetdE (watchR "monomorphize" monomorphize)
 
 -- TODO: Find a much more efficient strategy. I think repeated onetdE is very
 -- expensive. I went this way to help memoization. Revisit!
@@ -281,9 +309,14 @@ letSubstOneOccR = oneOccT >> letNonRecSubstR
 isStandardTy :: Type -> Bool
 isStandardTy t = any ($ t) [isUnitTy,isBoolTy,isIntTy,isPairTy]
 
+closedType :: Type -> Bool
+closedType = isEmptyVarSet . tyVarsOfType
+
 hasRepMethodF :: TransformH Type (String -> TransformH a CoreExpr)
 hasRepMethodF =
   do ty <- id
+     -- The following check avoids a problem in buildDictionary.
+     guardMsg (closedType ty) "Type has free variables"
      hasRepTc <- findTyConT (repName "HasRep")
      dict  <- buildDictionaryT' $* TyConApp hasRepTc [ty]
      repTc <- findTyConT (repName "Rep")
@@ -313,16 +346,19 @@ standardizeCase :: ReExpr
 standardizeCase =
      caseReduceR True
   <+ caseFloatCaseR
-  <+ onScrutineeR (unfoldMethodR . abstReprR)
+  <+ onScrutineeR (unfoldMethodR . watchR "abstReprR" abstReprR)
 
 onScrutineeR :: Unop ReExpr
 onScrutineeR r = caseAllR r id id (const id)
 
 standardizeCon :: ReExpr
-standardizeCon =
-  -- Handle both saturated and unsaturated constructors
-     (appAllR id unfoldMethodR . (void callDataConT >> abstReprR))
-  <+ (lamAllR id standardizeCon . etaExpandR "eta")
+standardizeCon = go . rejectR isType
+ where
+   -- Handle both saturated and unsaturated constructors
+   go =  (appAllR id unfoldMethodR . (void callDataConT >> abstReprR))
+      <+ (lamAllR id standardizeCon . etaExpandR "eta")
+
+-- etaExpandR dies on Type t. Avoided via rejectR isType
 
 -- -- | Replace a cast expression with a recast application.
 -- recastR :: ReExpr
@@ -381,10 +417,8 @@ reifyPrep = inReify (
                 id
               . tryR unshadowE
               . tryR simplifyAll'
-              . tryR (anytdE (repeatR (standardizeCase <+ standardizeCon)))
-              . tryR simplifyAll'
-              . tryR (anybuE recastR)                   -- Experimental
-              . tryR (repeatR passE)
+              . tryR (anytdE (watchR "recastR" recastR))             -- Experimental
+              . tryR (repeatR (watchR "passE" passE))
               )
         -- . tryR (unfoldNameR "LambdaCCC.Run.go")
 
