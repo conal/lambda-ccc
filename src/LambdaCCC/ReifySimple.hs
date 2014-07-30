@@ -256,10 +256,14 @@ reifyRepMeth :: ReExpr
 reifyRepMeth =
   unReify >>>
   do (Var v,args@(length -> 4)) <- callT
-     guardMsg (fqVarName v `elem` methNames) "not a HasRep method"
+     guardMsg (isRepMeth (fqVarName v)) "not a HasRep method"
      (\ f -> mkApps (Var f) args) <$> findIdT (lamName (uqVarName v ++ "EP"))
- where
-   methNames = repName <$> ["repr","abst"]
+
+isRepMeth :: String -> Bool
+isRepMeth = (`elem` repMethNames)
+
+repMethNames :: [String]
+repMethNames = repName <$> ["repr","abst"]
 
 -- reify of case on 0-tuple or 2-tuple
 reifyTupCase :: ReExpr
@@ -360,4 +364,6 @@ True     --> kLit  True
 -- look up IDs. We'll see.
 
 isPrimitive :: Var -> Bool
-isPrimitive v = qualifiedName (varName v) `M.member` primMap
+isPrimitive v = name `M.member` primMap || isRepMeth name
+ where
+  name = fqVarName v
