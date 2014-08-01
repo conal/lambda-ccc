@@ -30,6 +30,8 @@ import Data.Functor ((<$>),void)
 import Control.Applicative ((<*>))
 import Data.List (isPrefixOf)
 
+import CoreFVs (exprFreeIds)
+
 import HERMIT.Core (CoreDef(..))
 import HERMIT.Dictionary hiding (externals)
 import HERMIT.External (External,external)
@@ -48,7 +50,7 @@ import LambdaCCC.ReifySimple
 --------------------------------------------------------------------}
 
 observing :: Ex.Observing
-observing = False
+observing = True
 
 #define LintDie
 
@@ -213,6 +215,8 @@ mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
 --                 , standardizeCon
                 -- Previous two lead to nontermination. Investigate.
 --                 , watchR "recastR" recastR -- Experimental
+                , nowatchR "caseReduceUnfoldsDictR" caseReduceUnfoldsDictR
+                , caseDefaultR
                 ]
 
 -- From bashComponents.
@@ -244,6 +248,17 @@ bashSimplifiers =
 
 -- TODO: Trim redundant let floating. See passCore and passE.
 
+-- | Given a case scrutinee of non-standard type, case-reduce the whole
+-- expression, or unfold the scrutinee. Warning: can be quite expensive and
+-- generate a lot of code. Use only in special circumstances, e.g., dictionaries.
+caseReduceUnfoldsR :: ReExpr
+caseReduceUnfoldsR =
+  caseReduceR True . onScrutineeR (repeatR (tryR simplifyAll' . unfoldR))
+
+caseReduceUnfoldsDictR :: ReExpr
+caseReduceUnfoldsDictR =
+  void (onScrutineeR (acceptR (isDictTy . exprType))) >> caseReduceUnfoldsR
+
 simplifyAllRhs :: ReProg
 simplifyAllRhs = progRhsAnyR simplifyAll
 
@@ -262,6 +277,15 @@ letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR
 -- pruneAltsProg :: ReProg
 -- pruneAltsProg = progRhsAnyR ({-bracketR "pruneAltsR"-} pruneAltsR)
 
+-- case e of p -> body  ==>  body, when p has no free variables
+-- where the wildcard variable isn't used.
+caseDefaultR :: ReExpr
+caseDefaultR =
+  do Case _ wild _ [(_,[],body)] <- id
+     guardMsg (not (wild `elemVarSet` exprFreeIds body))
+       "caseDefaultR: wildcard used"
+     return body
+
 retypeProgR :: ReProg
 retypeProgR = progRhsAnyR ({-bracketR "retypeExprR"-} retypeExprR)
 
@@ -272,7 +296,7 @@ passCore = tryR (promoteR simplifyAllRhs)  -- after let-floating
          . tryR (promoteR retypeProgR) -- pruneAltsProg
          . tryR unshadowR
          . tryR (anytdR (repeatR (promoteR
-                                  (  watchR "standardizeCase" standardizeCase
+                                  ( watchR "standardizeCase" standardizeCase
                                  <+ watchR "standardizeCon" standardizeCon))))
          . onetdR (promoteR monomorphize)
 
@@ -343,8 +367,14 @@ unfoldMethodR =
 -- unfoldMethodR = repeatR (tryR simplifyAll . unfoldR)
 
 standardizeCase :: ReExpr
+
+-- standardizeCase =
+--     tryR (caseReduceR True <+ caseFloatCaseR)
+--   . onScrutineeR (unfoldMethodR . {- watchR "abstReprR" -} abstReprR)
+
 standardizeCase =
      caseReduceR True
+  <+ caseReduceUnfoldR True
   <+ caseFloatCaseR
   <+ onScrutineeR (unfoldMethodR . watchR "abstReprR" abstReprR)
 
@@ -418,7 +448,7 @@ reifyPrep = inReify (
               . tryR unshadowE
               . tryR simplifyAll'
               . tryR (anytdE (watchR "recastR" recastR))             -- Experimental
-              . tryR (repeatR (watchR "passE" passE))
+              . tryR (repeatR ({- watchR "passE" -} passE))
               )
         -- . tryR (unfoldNameR "LambdaCCC.Run.go")
 
@@ -474,6 +504,8 @@ externals =
     , externC "abstRepr" abstReprR "..."
     , externC "standardizeCase" standardizeCase "..."
     , externC "standardizeCon" standardizeCon "..."
+    , externC "caseReduceUnfoldsR" caseReduceUnfoldsR "..."
+    , externC "caseDefaultR" caseDefaultR "..."
     -- From Reify.
     , externC "reify-misc" reifyMisc "Simplify 'reify e'"
     , externC "reifyRepMeth" reifyRepMeth "..."
