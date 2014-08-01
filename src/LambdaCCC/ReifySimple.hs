@@ -20,7 +20,10 @@
 -- Reify a Core expression into GADT
 ----------------------------------------------------------------------
 
-module LambdaCCC.ReifySimple (reifyMisc, reifyRepMeth, inReify, isPrimitive, repName) where
+module LambdaCCC.ReifySimple
+  ( reifyMisc, isPrimitive, repName
+  , reifyRepMeth, inReify -- TEMP
+  ) where
 
 import Data.Functor ((<$>))
 import Control.Monad ((<=<))
@@ -28,7 +31,7 @@ import Control.Arrow ((>>>))
 import qualified Data.Map as M
 
 import HERMIT.Core (localFreeIdsExpr)
-import HERMIT.GHC hiding (mkStringExpr)
+import HERMIT.GHC hiding (mkStringExpr,RuleName)
 import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary hiding (externals)
@@ -194,9 +197,9 @@ worthLet _ = return True
 inReify :: Unop ReExpr
 inReify = reifyR <~ unReify
 
-#if 0
-reifyRuleNames :: [String]
-reifyRuleNames = map ("reify/" ++)
+#if 1
+reifyRuleNames :: [RuleName]
+reifyRuleNames = map (RuleName . ("reify/" ++))
   [ "not","(&&)","(||)","xor","(+)","(*)","exl","exr","pair","inl","inr"
   , "if","()","false","true"
   ]
@@ -211,15 +214,6 @@ reifyRuleNames = map ("reify/" ++)
 
 reifyRules :: ReExpr
 reifyRules = rulesR reifyRuleNames >>> cleanupUnfoldR
-
--- Apply a rule to a left application prefix
-reifyRulesPrefix :: ReExpr
-reifyRulesPrefix = reifyRules <+ (reifyApp >>> appArgs reifyRulesPrefix idR)
-
--- Like appAllR, but on a reified app.
--- 'app ta tb f x --> 'app ta tb (rf f) (rx s)'
-appArgs :: Binop ReExpr
-appArgs rf rx = appAllR (appAllR idR rf) rx
 
 #endif
 
@@ -302,7 +296,7 @@ reifyTupCase =
 reifyPrim :: ReExpr
 reifyPrim =
   unReify >>>
-  do Var v@(varName -> qualifiedName -> flip M.lookup primMap -> Just nm) <- idR
+  do Var v@(fqVarName -> flip M.lookup primMap -> Just nm) <- idR
      appsE1 "kPrimEP" [varType v] =<< Var <$> findIdP nm
 
 miscL :: [(String,ReExpr)]
@@ -316,6 +310,7 @@ miscL = [ ("reifyEval"        , reifyEval)
 --         , ("reifyCast"        , reifyCast)
         , ("reifyIntLit"      , reifyIntLit)
         , ("reifyPrim"        , reifyPrim)
+        , ("reifyRules"       , reifyRules)
         ]
 
 reifyMisc :: ReExpr
@@ -333,25 +328,24 @@ primName = ("LambdaCCC.Prim." ++)
 
 primMap :: M.Map String String
 primMap = M.fromList
-  [ ("GHC.Classes.&&","AndP")
+  [ ("GHC.Num.$fNumInt_$c+","AddP")
+  , ("GHC.Num.$fNumInt_$c*","MulP")
+  -- For the rest, rely on reifyRules
+{-
+  , ("GHC.Classes.&&","AndP")
   , ("GHC.Classes.||","OrP")
   , ("GHC.Classes.not","NotP")
-  , ("GHC.Num.$fNumInt_$c+","AddP")
-  , ("GHC.Num.$fNumInt_$c*","MulP")
+  , ("GHC.Tuple.(,)","PairP")  -- ??
+  , ("GHC.Tuple.fst","ExlP")
+  , ("GHC.Tuple.snd","ExrP")
+  , ("Data.Either.Left","InlP")
+  , ("Data.Either.Right","InrP")
+  -- , ("GHC.Types.True",??)
+-}
   ]
 
 {-
-not      --> kPrim NotP
-(&&)     --> kPrim AndP
-(||)     --> kPrim OrP
 xor      --> kPrim XorP
-(+)      --> kPrim AddP
-(*)      --> kPrim MulP
-fst      --> kPrim ExlP
-snd      --> kPrim ExrP
-(,)      --> kPrim PairP
-Left     --> kPrim InlP
-Right    --> kPrim InrP
 condBool --> kPrim CondBP
 
 ()       --> kLit  ()
@@ -361,7 +355,7 @@ True     --> kLit  True
 
 -- TODO: make primitives a map to expressions, to use during reification. Or
 -- maybe a transformation that succeeds only for primitives, since we'll have to
--- look up IDs. We'll see.
+-- look up IDs.
 
 isPrimitive :: Var -> Bool
 isPrimitive v = name `M.member` primMap || isRepMeth name
