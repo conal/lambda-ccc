@@ -22,10 +22,12 @@
 
 module LambdaCCC.ReifySimple
   ( reifyMisc, isPrimitive, repName
-  , reifyRepMeth, inReify -- TEMP
+  , inReify -- TEMP
+  , reifyEval, reifyRepMeth, reifyApp, reifyLam, reifyMonoLet
+  , reifyTupCase, reifyLit, reifyPrim
   ) where
 
-import Data.Functor ((<$>))
+import Data.Functor ((<$>),void)
 import Control.Monad ((<=<))
 import Control.Arrow ((>>>))
 import qualified Data.Map as M
@@ -197,7 +199,7 @@ worthLet _ = return True
 inReify :: Unop ReExpr
 inReify = reifyR <~ unReify
 
-#if 1
+#if 0
 reifyRuleNames :: [RuleName]
 reifyRuleNames = map (RuleName . ("reify/" ++))
   [ "not","(&&)","(||)","xor","(+)","(*)","exl","exr","pair","inl","inr"
@@ -216,12 +218,6 @@ reifyRules :: ReExpr
 reifyRules = rulesR reifyRuleNames >>> cleanupUnfoldR
 
 #endif
-
--- reify (I# n) --> intL (I# n)
-reifyIntLit :: ReExpr
-reifyIntLit = unReify >>> do _ <- callNameT "I#"
-                             e <- idR
-                             appsE "intL" [] [e]
 
 #if 0
 reifyCast :: ReExpr
@@ -296,21 +292,36 @@ reifyTupCase =
 reifyPrim :: ReExpr
 reifyPrim =
   unReify >>>
-  do Var v@(fqVarName -> flip M.lookup primMap -> Just nm) <- idR
-     appsE1 "kPrimEP" [varType v] =<< Var <$> findIdP nm
+  do ty <- exprTypeT
+     (Var (fqVarName -> flip M.lookup primMap -> Just nm), tyArgs, [])
+       <- callSplitT
+     primV <- findIdP nm
+     appsE1 "kPrimEP" [ty] (mkApps (Var primV) (Type <$> tyArgs))
+
+reifyLit :: ReExpr
+reifyLit =
+  unReify >>>
+  do ty <- exprTypeT
+     guardMsg (any ($ ty) [isUnitTy,isBoolTy,isIntTy])
+       "isLitT: must have type (), Bool, or Int"
+     void callDataConT
+     e        <- idR
+     hasLitTc <- findTyConT (primName "HasLit")
+     hasLitD  <- buildDictionaryT' $* TyConApp hasLitTc [ty]
+     appsE "kLit" [ty] [hasLitD,e]
 
 miscL :: [(String,ReExpr)]
 miscL = [ ("reifyEval"        , reifyEval)
---         , ("reifyRulesPrefix" , reifyRulesPrefix)
+--      , ("reifyRulesPrefix" , reifyRulesPrefix)
+--      , ("reifyRules"       , reifyRules)
         , ("reifyRepMeth"     , reifyRepMeth) -- before reifyApp
+        , ("reifyLit"         , reifyLit)     -- ''
         , ("reifyApp"         , reifyApp)
         , ("reifyLam"         , reifyLam)
         , ("reifyMonoLet"     , reifyMonoLet)
         , ("reifyTupCase"     , reifyTupCase)
---         , ("reifyCast"        , reifyCast)
-        , ("reifyIntLit"      , reifyIntLit)
         , ("reifyPrim"        , reifyPrim)
-        , ("reifyRules"       , reifyRules)
+--      , ("reifyCast"        , reifyCast)
         ]
 
 reifyMisc :: ReExpr
@@ -330,8 +341,7 @@ primMap :: M.Map String String
 primMap = M.fromList
   [ ("GHC.Num.$fNumInt_$c+","AddP")
   , ("GHC.Num.$fNumInt_$c*","MulP")
-  -- For the rest, rely on reifyRules
-{-
+  , ("GHC.Num.$fNumInt_$cnegate", "NegateP")
   , ("GHC.Classes.&&","AndP")
   , ("GHC.Classes.||","OrP")
   , ("GHC.Classes.not","NotP")
@@ -340,17 +350,11 @@ primMap = M.fromList
   , ("GHC.Tuple.snd","ExrP")
   , ("Data.Either.Left","InlP")
   , ("Data.Either.Right","InrP")
-  -- , ("GHC.Types.True",??)
--}
   ]
 
 {-
 xor      --> kPrim XorP
 condBool --> kPrim CondBP
-
-()       --> kLit  ()
-False    --> kLit  False
-True     --> kLit  True
 -}
 
 -- TODO: make primitives a map to expressions, to use during reification. Or
