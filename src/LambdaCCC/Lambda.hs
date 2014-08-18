@@ -46,7 +46,7 @@ module LambdaCCC.Lambda
   , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP
   , reprEP, abstEP
   -- , coerceEP
-  , evalEP, reifyEP, kPrimEP, oops
+  , evalEP, reifyEP, kPrimEP, kLit, oops
   ) where
 
 import Data.Functor ((<$>))
@@ -390,6 +390,7 @@ class HasOpInfo p where
   opInfo :: p a -> Maybe OpInfo
 
 instance HasOpInfo Prim where
+  opInfo MulP = Just $ OpInfo "*"     (7,AssocLeft )
   opInfo AddP = Just $ OpInfo "+"     (6,AssocLeft )
   opInfo AndP = Just $ OpInfo "&&"    (3,AssocRight)
   opInfo OrP  = Just $ OpInfo "||"    (2,AssocRight)
@@ -521,6 +522,7 @@ intL = kLit
 
 -- TODO: change the following rules back to reifyE
 
+#if 0
 {-# RULES
  
 "reify/not"     reifyEP not      = kPrim NotP
@@ -568,6 +570,7 @@ intL = kLit
 -- "reify/square"  reifyEP (^2) = reifyEP square
 
   #-}
+#endif
 
 -- square :: Num a => Unop a
 -- square a = a * a
