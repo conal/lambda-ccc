@@ -28,9 +28,8 @@ import qualified Prelude
 import Control.Category (id,(.))
 import Data.Functor ((<$>),void)
 import Control.Applicative ((<*>))
+-- import Control.Monad (unless)
 import Data.List (isPrefixOf)
-
-import CoreFVs (exprFreeIds)
 
 import HERMIT.Core (CoreDef(..))
 import HERMIT.Dictionary hiding (externals)
@@ -50,9 +49,9 @@ import LambdaCCC.ReifySimple
 --------------------------------------------------------------------}
 
 observing :: Ex.Observing
-observing = True
+observing = False
 
-#define LintDie
+-- #define LintDie
 
 #ifdef LintDie
 watchR, nowatchR :: String -> Unop ReExpr
@@ -199,10 +198,20 @@ simplifyAll :: ReExpr
 simplifyAll = -- watchR "simplifyAll" $
               bashWith mySimplifiers
 
+extraSimplifiers :: [ReExpr]
+extraSimplifiers =
+  [ letSubstOneOccR
+  -- Experiment
+  , watchR "standardizeCase" standardizeCase
+  , watchR "standardizeCon" standardizeCon
+  ]  
+
+fullSimpliers :: [ReExpr]
+fullSimpliers = mySimplifiers ++ extraSimplifiers
+
 simplifyAll' :: ReExpr
 simplifyAll' = -- watchR "simplifyAll'" $
-               bashWith (letSubstOneOccR : mySimplifiers)
-
+               bashWith fullSimpliers
 
 mySimplifiers :: [ReExpr]
 mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
@@ -210,13 +219,11 @@ mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
                 , castTransitiveUnivR
                 , letSubstTrivialR  -- instead of letNonRecSubstSafeR
              -- , letSubstOneOccR -- delay
-                -- Experiment
---                 , standardizeCase
---                 , standardizeCon
                 -- Previous two lead to nontermination. Investigate.
 --                 , watchR "recastR" recastR -- Experimental
                 , nowatchR "caseReduceUnfoldsDictR" caseReduceUnfoldsDictR
                 , caseDefaultR
+                , reprAbstR
                 ]
 
 -- From bashComponents.
@@ -277,28 +284,18 @@ letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR
 -- pruneAltsProg :: ReProg
 -- pruneAltsProg = progRhsAnyR ({-bracketR "pruneAltsR"-} pruneAltsR)
 
--- case e of p -> body  ==>  body, when p has no free variables
--- where the wildcard variable isn't used.
+-- case scrut wild of p -> body ==> [wild := scrut] body, when p has no free
+-- variables where the wildcard variable isn't used. If wild is a dead Id, don't
+-- bother substituting.
 caseDefaultR :: ReExpr
 caseDefaultR =
-  do Case _ wild _ [(_,[],body)] <- id
-     guardMsg (not (wild `elemVarSet` exprFreeIds body))
-       "caseDefaultR: wildcard used"
-     return body
+  do Case scrut wild _ [(_,[],body)] <- id
+     return $ case idOccInfo wild of
+                IAmDead -> body
+                _       -> Let (NonRec wild scrut) body
 
 retypeProgR :: ReProg
 retypeProgR = progRhsAnyR ({-bracketR "retypeExprR"-} retypeExprR)
-
-passCore :: ReCore
-passCore = tryR (promoteR simplifyAllRhs)  -- after let-floating
-         . tryR (anybuR letFloatR)
-         . tryR (anybuR (promoteR bindUnLetIntroR))
-         . tryR (promoteR retypeProgR) -- pruneAltsProg
-         . tryR unshadowR
-         . tryR (anytdR (repeatR (promoteR
-                                  ( watchR "standardizeCase" standardizeCase
-                                 <+ watchR "standardizeCon" standardizeCon))))
-         . onetdR (promoteR monomorphize)
 
 -- NOTE: if unshadowR is moved to later than pruneAltsProg, we can prune too
 -- many alternatives. TODO: investigate.
@@ -311,8 +308,8 @@ passE = id
 --       . tryR (watchR "retypeExprR" retypeExprR) -- Needed?
       . tryR (extractR unshadowR)
       . tryR simplifyAll'
-      . tryR (anytdE (repeatR (  watchR "standardizeCase" standardizeCase
-                              <+ watchR "standardizeCon" standardizeCon)))
+--       . tryR (anytdE (repeatR (  watchR "standardizeCase" standardizeCase
+--                               <+ watchR "standardizeCon" standardizeCon)))
       . onetdE (watchR "monomorphize" monomorphize)
 
 -- TODO: Find a much more efficient strategy. I think repeated onetdE is very
@@ -400,8 +397,9 @@ standardizeCon = go . rejectR isType
 -- Try again without a Recastable class.
 
 -- | Construct a recast function from a to b
-recastF :: (Type,Type) -> TransformH a CoreExpr
-recastF (a,b) = idRC <+ reprR <+ abstR <+ funR
+recastF :: Type -> Type -> TransformH a CoreExpr
+recastF (regularizeType -> a) (regularizeType -> b) =
+  idRC <+ reprR <+ abstR <+ funR <+ oopsR
  where
     idRC  = do guardMsg (a =~= b) "recast id: types differ"
                idId <- findIdT "id"
@@ -411,18 +409,26 @@ recastF (a,b) = idRC <+ reprR <+ abstR <+ funR
     tryMeth ty meth = do q <- hasRepMethodF $* ty
                          f <- q meth
                          Just (a',b') <- return (splitFunTy_maybe (exprType f))
+--                          str <- showPprT $* ((a,b),(a',b'))
+--                          _ <- traceR ("tryMeth " ++ meth ++ ", types: " ++ str)
                          guardMsg (a' =~= a) "recast tryMeth: a' /= a"
                          guardMsg (b' =~= b) "recast tryMeth: b' /= b"
                          return f
     funR = do Just (aDom,aRan) <- return $ splitFunTy_maybe a
               Just (bDom,bRan) <- return $ splitFunTy_maybe b
-              f <- recastF (bDom,aDom)  -- contravariant
-              h <- recastF (aRan,bRan)  -- covariant
+              f <- recastF bDom aDom  -- contravariant
+              h <- recastF aRan bRan  -- covariant
               glueV <- findIdT "LambdaCCC.Monomorphize.-->"
               -- return $ 
               unfoldR $*
                        mkApps (Var glueV)
                               ([Type aDom,Type aRan,Type bDom,Type bRan, f,h])
+    oopsR = do str <- showPprT $* (a,b)
+               _ <- traceR ("recastF unhandled: " ++ str)
+               fail "oopsR"
+
+-- guardMsg' ::  Bool -> String -> TransformH a ()
+-- guardMsg' b msg = unless b (do { _ <- traceR msg ; fail msg})
 
 -- | Add pre- and post-processing.
 -- Used dynamically by recastF
@@ -432,9 +438,17 @@ recastF (a,b) = idRC <+ reprR <+ abstR <+ funR
 -- | Replace a cast expression with the application of a recasting function
 recastR :: ReExpr
 recastR = do Cast e (coercionKind -> Pair a b) <- id
-             f <- recastF (a,b)
+             f <- recastF a b
              return (App f e)
 
+-- | repr (abst x)  ==>  x, when type preserving.
+reprAbstR :: ReExpr
+reprAbstR =
+  do (_,[Type ty ,_,_,_,e]) <- callNameT (repName "repr")
+     (_,[Type ty',_,_,_,x]) <- callNameT (repName "abst") $* e
+     guardMsg (regularizeType ty =~= regularizeType ty')
+       "reprAbstR: differing types"
+     return x
 
 {--------------------------------------------------------------------
     Combine steps
@@ -489,7 +503,6 @@ externals =
     , externC "bindUnLetIntroR" bindUnLetIntroR "..."
     , externC "letFloatCaseAltR'" letFloatCaseAltR' "..."
     , externC "monomorphize" monomorphize "..."
-    , external "passCore" passCore ["..."]
     , externC "passE" passE "..."
     , externC "letSubstOneOccR" letSubstOneOccR "..."
 --     , externC "standardizeExpr" (standardizeR' :: ReExpr) "..."
@@ -506,9 +519,18 @@ externals =
     , externC "standardizeCon" standardizeCon "..."
     , externC "caseReduceUnfoldsR" caseReduceUnfoldsR "..."
     , externC "caseDefaultR" caseDefaultR "..."
+    , externC "reprAbstR" reprAbstR "..."
+    , externC "unfoldMethodR" unfoldMethodR "..."
     -- From Reify.
     , externC "reify-misc" reifyMisc "Simplify 'reify e'"
+    , externC "reifyEval" reifyEval "..."
     , externC "reifyRepMeth" reifyRepMeth "..."
+    , externC "reifyApp" reifyApp "..."
+    , externC "reifyLam" reifyLam "..."
+    , externC "reifyMonoLet" reifyMonoLet "..."
+    , externC "reifyTupCase" reifyTupCase "..."
+    , externC "reifyLit" reifyLit "..."
+    , externC "reifyPrim" reifyPrim "..."
     -- 
     , external "let-float'"
         (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR')
