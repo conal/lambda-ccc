@@ -21,8 +21,6 @@
 -- Statically typed lambda expressions
 ----------------------------------------------------------------------
 
--- #define VecsAndTrees
-
 module LambdaCCC.Lambda
   ( Name
   , V(..), Pat(..), E(..)
@@ -34,15 +32,6 @@ module LambdaCCC.Lambda
   , vars, vars2
   , xor, condBool   -- from Prim
   , intL
-#ifdef VecsAndTrees
-  , vecCaseZ, vecCaseS   -- To remove
-  -- , Structured(..), idStruct, idVec
-  , idVecZ, idVecS, idPair, idTreeZ, idTreeS
-  -- Temporary less polymorphic variants.
-  -- Remove when I can dig up Prim as a type in Core
-  -- Hopefully temporary
-  , vecSEP, treeZEP, treeSEP
-#endif
   , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP
   , reprEP, abstEP
   -- , coerceEP
@@ -72,11 +61,6 @@ import TypeUnary.Vec (Vec(..),Z,S)
 import Circat.Category (Rep,HasRep(..),RepCat(..))
 
 -- import Circat.Classes (VecCat(..))
-
-#ifdef VecsAndTrees
-import Circat.Pair  (Pair(..)) -- ,PairCat(..)
-import Circat.RTree (Tree(..),TreeCat(..))
-#endif
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
 import LambdaCCC.ShowUtils
@@ -542,22 +526,6 @@ intL = kLit
 "reify/false"   reifyEP False    = kLit  False
 "reify/true"    reifyEP True     = kLit  True
 
-#ifdef VecsAndTrees
--- "reify/ZVec"    reifyEP ZVec     = reifyEP (toVecZ ())
--- "reify/(:<)"    reifyEP (:<)     = reifyEP toVecS
-
-"reify/ZVec"    reifyEP ZVec     = vecZEP
-"reify/(:<)"    reifyEP (:<)     = kPrim VecSP
-
-"reify/(:#)"    reifyEP (:#)     = kPrim UPairP
-"reify/L"       reifyEP L        = kPrim ToLeafP
-"reify/B"       reifyEP B        = kPrim ToBranchP
-
-"reify/unPair"   reifyEP unPair'  = kPrim UnUPairP
-"reify/unLeaf"   reifyEP unTreeZ' = kPrim UnLeafP
-"reify/unBranch" reifyEP unTreeS' = kPrim UnBranchP
-#endif
-
 -- TODO: Why reify/unPair' and not reify/unVecZ & reify/unVecS ?
 -- TODO: trees
 
@@ -574,22 +542,6 @@ intL = kLit
 
 -- square :: Num a => Unop a
 -- square a = a * a
-
-#ifdef VecsAndTrees
-vecZEP :: EP (Vec Z a)
-vecZEP = kPrim ToVecZP @^ kLit ()
-
--- Temp workaround until I can get reify/(:<) to apply to the bare constructor
-vecSEP :: forall n a. EP (a -> Vec n a -> Vec (S n) a)
-vecSEP = kPrim VecSP
-
-treeZEP :: forall a. EP (a -> Tree Z a)
-treeZEP = kPrim ToLeafP
-
-treeSEP :: forall n a. EP (Pair (Tree n a) -> Tree (S n) a)
-treeSEP = kPrim ToBranchP
-#endif
-
 
 -- For literals, I'd like to say
 -- 
@@ -650,132 +602,6 @@ condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))
 
   #-}
 
-#endif
-
-#ifdef VecsAndTrees
-
--- Use this rule only we do all the reification we can, in order to finish generating an EP.
-
--- {-# RULES "reify/oops" forall e. reifyEP e = oops  #-}
-
--- For translating case of empty vector
-vecCaseZ :: forall b a. b -> Vec Z a -> b
-vecCaseZ b ZVec = b
-
--- For translating case of nonempty vector
--- vecCaseS :: forall n a b. (a -> Vec n a -> b) -> Vec (S n) a -> b
-vecCaseS :: forall n a b. (a -> Vec n a -> b) -> Vec (S n) a -> b
-vecCaseS f (a :< as) = f a as
-
-{--------------------------------------------------------------------
-    Restructuring help. Move elsewhere. Needed by Reify.
---------------------------------------------------------------------}
-
-{-
-class Structured t where
-  type Enc t
-  encode :: t -> Enc t
-  decode :: Enc t -> t
-
-idStruct :: Structured t => t -> t
-idStruct = decode . encode
-
-instance Structured (Vec   Z   a) where
-  type Enc (Vec Z a) = ()
-  encode = unVecZ
-  decode = toVecZ
-instance Structured (Vec (S n) a) where
-  type Enc (Vec (S n) a) = a :* Vec n a
-  encode = unVecS
-  decode = toVecS
-
--- Type specialization. Drop when I can find/construct dictionaries via HERMIT.
-idVec :: forall n a. Unop (Vec n a)
-idVec = idStruct
--}
-
--- To eliminate a case-of-vec, wrap the scrutinee by idVecZ or idVecS and
--- simplify. Don't inline vector examination (unVecZ or unVecS), which would
--- yield another case-of-vec. Do inline vector construction (toVecZ or toVecS)
--- to reveal case-of-known constructor.
-
-idVecZ :: forall a. Unop (Vec Z a)
-idVecZ = toVecZ' . unVecZ'
-
-idVecS :: forall n a. Unop (Vec (S n) a)
-idVecS = toVecS' . unVecS'
-
-idPair :: forall a. Unop (Pair a)
-idPair = toPair' . unPair'
-
-idTreeZ :: forall a. Unop (Tree Z a)
-idTreeZ = toTreeZ' . unTreeZ'
-
-idTreeS :: forall n a. Unop (Tree (S n) a)
-idTreeS = toTreeS' . unTreeS'
-
--- Bogus method variants to control inlining.
-
-toVecZ' :: () -> Vec Z a
-toVecZ' () = ZVec
-{-# INLINE toVecZ' #-}
-
-toVecS' :: a :* Vec n a -> Vec (S n) a
-toVecS' (a,as) = a :< as
-{-# INLINE toVecS' #-}
-
-unVecZ' :: Vec Z a -> ()
-unVecZ' ZVec = ()
-{-# NOINLINE unVecZ' #-}
-
-unVecS' :: Vec (S n) a -> a :* Vec n a
-unVecS' (a :< as) = (a,as)
-{-# NOINLINE unVecS' #-}
-
--- TODO: If these definitions control inlining as I want, try replacing them
--- with ones that call the VecCat methods.
-
-toPair' :: a :* a -> Pair a
-toPair' (a,a') = a :# a'
-{-# INLINE toPair' #-}
-
-unPair' :: Pair a -> a :* a
-unPair' (a :# a') = (a,a')
-{-# NOINLINE unPair' #-}
-
-
-toTreeZ' :: a -> Tree Z a
-toTreeZ' = L
-{-# INLINE toTreeZ' #-}
-
-toTreeS' :: Pair (Tree n a) -> Tree (S n) a
-toTreeS' = B
-{-# INLINE toTreeS' #-}
-
-unTreeZ' :: Tree Z a -> a
-unTreeZ' = unL
-{-# NOINLINE unTreeZ' #-}
-
-unTreeS' :: Tree (S n) a -> Pair (Tree n a)
-unTreeS' = unB
-{-# NOINLINE unTreeS' #-}
-
-{-# RULES
-
-"unTreeZ'/L" forall a . unTreeZ' (L a) = a
-"unTreeS'/B" forall p . unTreeS' (B p) = p
-
-  #-}
-
-{-# RULES
-
--- "reify/toVecZ" reifyEP toVecZ' = kPrim ToVecZP
--- "reify/toVecS" reifyEP toVecS' = kPrim ToVecSP
-
-"reify/unVecZ" reifyEP unVecZ' = kPrim UnVecZP
-"reify/unVecS" reifyEP unVecS' = kPrim UnVecSP
-
- #-}
 #endif
 
 {--------------------------------------------------------------------
@@ -888,18 +714,6 @@ instance Eq1' Prim where
   ExrP      ==== ExrP      = True
   PairP     ==== PairP     = True
   CondBP    ==== CondBP    = True
-#ifdef VecsAndTrees
-  ToVecZP   ==== ToVecZP   = True
-  UnVecZP   ==== UnVecZP   = True
-  VecSP     ==== VecSP     = True
-  UnVecSP   ==== UnVecSP   = True
-  UPairP    ==== UPairP    = True
-  UnUPairP  ==== UnUPairP  = True
-  ToLeafP   ==== ToLeafP   = True
-  ToBranchP ==== ToBranchP = True
-  UnLeafP   ==== UnLeafP   = True
-  UnBranchP ==== UnBranchP = True
-#endif
   OopsP     ==== OopsP     = True
   _         ==== _         = False
 

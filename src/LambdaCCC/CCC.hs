@@ -8,8 +8,6 @@
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
--- #define VecsAndTrees
-
 ----------------------------------------------------------------------
 -- |
 -- Module      :  LambdaCCC.CCC
@@ -54,10 +52,6 @@ import LambdaCCC.Prim (Prim(..),Lit(..),primArrow) -- ,cond,ifThenElse
 
 import Circat.Category
 import Circat.Classes
-#ifdef VecsAndTrees
-import Circat.Pair  (PairCat(..))
-import Circat.RTree (TreeCat(..))
-#endif
 
 infix  0 :->
 
@@ -365,29 +359,6 @@ instance Show (a :-> b) where
 primUnc :: Prim (a :=> b :=> c) -> (a :* b :-> c)
 primUnc = uncurry . prim
 
-#ifdef VecsAndTrees
-
--- instance NatCat (:->) where
---   zeroA = prim ToZeroP
---   succA = prim SuccP
-
-instance VecCat (:->) where
-  toVecZ = prim ToVecZP
-  unVecZ = prim UnVecZP
-  toVecS = primUnc VecSP
-  unVecS = prim UnVecSP
-
-instance PairCat (:->) where
-  toPair = uncurry (prim UPairP)
-  unPair = prim UnUPairP
-
-instance TreeCat (:->) where
-  toL = prim ToLeafP
-  unL = prim UnLeafP
-  toB = prim ToBranchP
-  unB = prim UnBranchP
-#endif
-
 instance BoolCat (:->) where
   not = prim NotP
   xor = uncurry (prim XorP)
@@ -415,9 +386,6 @@ instance NumCat (:->) Int where
 
 convertC :: ( BiCCCC k Lit
             , BoolCat k, MuxCat k, NumCat k Int
-#ifdef VecsAndTrees
-            , VecCat k, PairCat k, TreeCat k
-#endif
             ) =>
             (a :-> b) -> (a `k` b)
 convertC Id           = id
