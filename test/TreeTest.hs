@@ -168,7 +168,7 @@ go name f = run name (reifyEP f)
 -- Only works when compiled with HERMIT
 main :: IO ()
 
--- main = go "map-v6" (fmap not :: Vec N6 Bool -> Vec N6 Bool)
+-- main = go "map-v3" (fmap not :: Vec N3 Bool -> Vec N3 Bool)
 
 -- main = go "tdott-2" (dot''' :: Pair (RTree N2 Int) -> Int)
 
@@ -177,6 +177,8 @@ main :: IO ()
 -- main = go "dotsp-t2t2" (dotsp :: RTree N2 (RTree N2 Int) -> Int)
 
 -- main = go "dotsp-pt3" (dotsp :: Pair (RTree N3 Int) -> Int)
+
+-- main = go "dotsp-plt3" (dotsp :: Pair (LTree N3 Int) -> Int)
 
 -- main = go "dotap-2" (uncurry (dotap :: RTree N2 Int -> RTree N2 Int -> Int))
 
@@ -191,7 +193,7 @@ main :: IO ()
 
 -- main = go "sumSquare-p" (sumSquare :: Pair Int -> Int)
 
-main = go "sumSquare-t2" (sumSquare :: RTree N2 Int -> Int)
+main = go "sumSquare-t3" (sumSquare :: RTree N3 Int -> Int)
 
 -- main = go "sum-v6-0" (sum :: Vec N6 Int -> Int)
 
@@ -320,7 +322,7 @@ main = go "sumSquare-t2" (sumSquare :: RTree N2 Int -> Int)
 
 -- main = go "lsums-rt4" (lsums :: RTree N4 Int -> (RTree N4 Int, Int))
 
--- main = go "lsums-lt3" (lsums :: LTree N3 Int -> (LTree N3 Int, Int))
+-- main = go "lsums-lt4" (lsums :: LTree N4 Int -> (LTree N4 Int, Int))
 
 -- main = go "foo" (\ a -> not a)
 

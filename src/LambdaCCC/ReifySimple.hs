@@ -2,6 +2,7 @@
 {-# LANGUAGE ViewPatterns, PatternGuards, LambdaCase #-}
 {-# LANGUAGE FlexibleContexts, ConstraintKinds #-}
 {-# LANGUAGE MagicHash, MultiWayIf, TupleSections, CPP #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# OPTIONS_GHC -Wall #-}
 
@@ -31,12 +32,14 @@ import Data.Functor ((<$>),void)
 import Control.Monad ((<=<))
 import Control.Arrow ((>>>))
 import qualified Data.Map as M
+import Data.String (fromString)
 
 import HERMIT.Core (localFreeIdsExpr)
-import HERMIT.GHC hiding (mkStringExpr,RuleName)
+import HERMIT.GHC hiding (mkStringExpr)
 import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary hiding (externals)
+import HERMIT.Name (HermitName)
 
 import LambdaCCC.Misc ((<~))
 
@@ -66,11 +69,11 @@ triesL = Ex.triesL observing
     Reification
 --------------------------------------------------------------------}
 
-repName :: Unop String
-repName = ("Circat.Rep."++)
+repName :: String -> HermitName
+repName = moduledName "Circat.Rep"
 
-lamName :: Unop String
-lamName = ("LambdaCCC.Lambda." ++)
+lamName :: String -> HermitName
+lamName = moduledName "LambdaCCC.Lambda"
 
 -- findIdE :: String -> TransformH a Id
 -- findIdE = findIdT . lamName
@@ -250,9 +253,9 @@ reifyRepMeth =
      (\ f -> mkApps (Var f) args) <$> findIdT (lamName (uqVarName v ++ "EP"))
 
 isRepMeth :: String -> Bool
-isRepMeth = (`elem` repMethNames)
+isRepMeth = (`elem` repMethNames) . fromString
 
-repMethNames :: [String]
+repMethNames :: [HermitName]
 repMethNames = repName <$> ["repr","abst"]
 
 -- reify of case on 0-tuple or 2-tuple
@@ -334,8 +337,10 @@ reifyMisc = triesL miscL
 findIdP :: String -> TransformH a Id
 findIdP = findIdT . primName
 
-primName :: Unop String
-primName = ("LambdaCCC.Prim." ++)
+primName :: String -> HermitName
+primName = moduledName "LambdaCCC.Prim"
+
+-- TODO: generalize primName, lamName, etc
 
 primMap :: M.Map String String
 primMap = M.fromList

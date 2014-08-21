@@ -2,6 +2,7 @@
 {-# LANGUAGE ViewPatterns, PatternGuards #-}
 {-# LANGUAGE FlexibleContexts, ConstraintKinds #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE OverloadedStrings #-}  -- for HermitName literals
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -36,7 +37,7 @@ import HERMIT.Dictionary hiding (externals)
 import HERMIT.External (External,external)
 import HERMIT.GHC
 import HERMIT.Kure
-import HERMIT.Plugin (hermitPlugin,phase,interactive)
+import HERMIT.Plugin (hermitPlugin,pass,interactive)
 
 import HERMIT.Extras hiding (findTyConT)
 import qualified HERMIT.Extras as Ex
@@ -490,7 +491,7 @@ unshadowE = extractR unshadowR
 --------------------------------------------------------------------}
 
 plugin :: Plugin
-plugin = hermitPlugin (phase 0 . interactive externals)
+plugin = hermitPlugin (pass 0 . interactive externals)
 
 externals :: [External]
 externals =
