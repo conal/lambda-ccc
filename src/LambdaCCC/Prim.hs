@@ -56,9 +56,9 @@ import LambdaCCC.ShowUtils (Show'(..))
 
 -- | Literals
 data Lit :: * -> * where
-  UnitL  :: Unit    -> Lit Unit
-  BoolL  :: Bool    -> Lit Bool
-  IntL   :: Int     -> Lit Int
+  UnitL  :: Unit -> Lit Unit
+  BoolL  :: Bool -> Lit Bool
+  IntL   :: Int  -> Lit Int
 
 -- The Unit argument is just for uniformity
 
