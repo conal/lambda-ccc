@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell, TypeOperators, GADTs, KindSignatures #-}
-{-# LANGUAGE ViewPatterns, PatternGuards, LambdaCase #-}
+{-# LANGUAGE ViewPatterns, PatternGuards #-}
 {-# LANGUAGE FlexibleContexts, ConstraintKinds #-}
 {-# LANGUAGE MagicHash, MultiWayIf, TupleSections, CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
