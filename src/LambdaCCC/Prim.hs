@@ -29,6 +29,8 @@ module LambdaCCC.Prim
   , primArrow
   ) where
 
+#define LitSources
+
 import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
 
 -- import Control.Arrow ((&&&))
@@ -40,7 +42,13 @@ import qualified Circat.Classes as C
 
 -- :( . TODO: Disentangle!
 -- HasUnitArrow links the category and primitive type
-import Circat.Circuit (GenBuses,(:>),constC)
+import Circat.Circuit (GenBuses,(:>)
+#ifdef LitSources
+                      , litUnit,litBool,litInt
+#else
+                      , constC
+#endif
+                      )
 
 -- import TypeEncode.Encode (EncodeCat(..))
 
@@ -118,7 +126,13 @@ instance HasUnitArrow (->) Lit where
   unitArrow x = const (eval x)
 
 instance HasUnitArrow (:>) Lit where
+#ifdef LitSources
+  unitArrow (UnitL x) = litUnit x
+  unitArrow (BoolL x) = litBool x
+  unitArrow (IntL  x) = litInt  x
+#else
   unitArrow l@LS = constC (eval l)
+#endif
 
 {--------------------------------------------------------------------
     Primitives
