@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ExplicitForAll, ConstraintKinds, FlexibleContexts #-}  -- For :< experiment
+{-# LANGUAGE DataKinds #-}  -- for TU
 
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -fcontext-stack=38 #-}
@@ -46,8 +47,10 @@ import LambdaCCC.Misc (Unop,Binop,transpose)
 
 import Circat.Misc (Unop)
 import Circat.Pair (Pair(..))
-import qualified Circat.RTree as R
-import qualified Circat.LTree as L
+import qualified Circat.RTree as RTree
+import qualified Circat.LTree as LTree
+import qualified Circat.RaggedTree as Ragged
+import Circat.RaggedTree (TU(..))
 import Circat.Scan
 import Circat.Circuit (GenBuses)
 
@@ -64,8 +67,9 @@ import qualified Data.Typeable
     Examples
 --------------------------------------------------------------------}
 
-type RTree = R.Tree
-type LTree = L.Tree
+type RTree = RTree.Tree
+type LTree = LTree.Tree
+type Ragged = Ragged.Tree
 
 t0 :: RTree N0 Bool
 t0 = pure True
@@ -193,9 +197,9 @@ main :: IO ()
 
 -- main = go "sumSquare-p" (sumSquare :: Pair Int -> Int)
 
-main = go "sumSquare-t3" (sumSquare :: RTree N3 Int -> Int)
+-- main = go "sumSquare-t3" (sumSquare :: RTree N3 Int -> Int)
 
--- main = go "sum-v6-0" (sum :: Vec N6 Int -> Int)
+-- main = go "sum-v2" (sum :: Vec N2 Int -> Int)
 
 -- main = go "sum-t2" (sum :: RTree N2 Int -> Int)
 
@@ -318,9 +322,15 @@ main = go "sumSquare-t3" (sumSquare :: RTree N3 Int -> Int)
 
 -- main = go "composeLin-t232" (uncurry ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int))
 
--- main = go "lscan-t4" (lscan :: RTree N4 (Sum Int) -> (RTree N4 (Sum Int), Sum Int))
+-- main = go "shiftL-rt1" (shiftL :: (RTree N1 Bool, Bool) -> (Bool, RTree N1 Bool))
 
--- main = go "lsums-rt4" (lsums :: RTree N4 Int -> (RTree N4 Int, Int))
+-- main = go "shiftR-rt1" (shiftR :: (Bool, RTree N1 Bool) -> (RTree N1 Bool, Bool))
+
+-- main = go "lsumsp-rt2" (lsums' :: Unop (RTree N2 Int))
+
+-- main = go "lsumsp-lt5" (lsums' :: Unop (LTree N5 Int))
+
+-- main = go "lsums-rt5" (lsums :: RTree N5 Int -> (RTree N5 Int, Int))
 
 -- main = go "lsums-lt4" (lsums :: LTree N4 Int -> (LTree N4 Int, Int))
 
@@ -329,3 +339,46 @@ main = go "sumSquare-t3" (sumSquare :: RTree N3 Int -> Int)
 -- main = go "foo" not
 
 -- main = go "and-curried" ((&&) :: Bool -> Bool -> Bool)
+
+-- main = go "test-add-with-constant-fold" foo
+--  where
+--    foo :: Int -> Int
+--    foo x = f x + g x
+--    f _ = 3
+--    g _ = 4
+
+-- Ragged trees
+
+type MatrixG p q a = Ragged q (Ragged p a)
+
+type R1  = LU
+type R2  = BU R1 R1
+type R3  = BU R2 R1
+type R4  = BU R2 R2
+type R5  = BU R3 R2
+type R8  = BU R3 R5
+type R11 = BU R8 R5
+
+type R8'  = BU R4  R4
+type R13' = BU R8' R3
+
+-- main = go "fmap-gt1" (fmap not :: Unop (Ragged R1 Bool))
+
+-- main = go "sum-gt11" (sum :: Ragged R11 Int -> Int)
+
+-- main = go "sum-gt13p" (sum :: Ragged R13' Int -> Int)
+
+-- main = go "dotsp-gt8" (dotsp :: Pair (Ragged R8 Int) -> Int)
+
+-- main = go "applyLin-gt45" (uncurry (($@) :: MatrixG R4 R5 Int -> Ragged R4 Int -> Ragged R5 Int))
+
+-- main = go "composeLin-gt234" (uncurry ((.@) :: MatrixG R3 R4 Int -> MatrixG R2 R3 Int -> MatrixG R2 R4 Int))
+
+-- Linear map composition mixing ragged trees, top-down perfect trees, and vectors.
+main = go "composeLin-gt3rt2v2"
+          (uncurry ((.@) :: Vec N2 (RTree N2 Int) -> RTree N2 (Ragged R3 Int) -> Vec N2 (Ragged R3 Int)))
+
+-- Note: some of the scan examples redundantly compute some additions.
+-- I suspect that they're only the same *after* the zero simplifications.
+
+-- main = go "lsums-gt5" (lsums' :: Unop (Ragged R5 Int))
