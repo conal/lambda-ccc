@@ -349,6 +349,7 @@ primMap = M.fromList
   , ("GHC.Num.$fNumInt_$cnegate", "NegateP")
   , ("GHC.Classes.&&","AndP")
   , ("GHC.Classes.||","OrP")
+  , ("LambdaCCC.Prim.xor","XorP")
   , ("GHC.Classes.not","NotP")
   , ("GHC.Tuple.(,)","PairP")  -- ??
   , ("GHC.Tuple.fst","ExlP")
