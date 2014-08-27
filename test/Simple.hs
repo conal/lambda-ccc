@@ -29,8 +29,8 @@ module Simple (reified) where
 
 import Prelude
 
-import LambdaCCC.Lambda (EP,reifyEP,xor,condBool)
-import LambdaCCC.Lambda (condBool)  -- TEMP
+import Circat.If (muxBool)
+import LambdaCCC.Lambda (EP,reifyEP,xor)
 
 -- #define Classes
 
@@ -44,7 +44,7 @@ class HasIf a where
   ifThenElse :: Bool -> a -> a -> a
 
 instance HasIf Bool where
-  ifThenElse i t e = condBool (i,(t,e))
+  ifThenElse i t e = muxBool (i,(e,t))
 
 instance (HasIf a, HasIf b) => HasIf (a,b) where
   ifThenElse i (t,t') (e,e') = (ifThenElse i t e, ifThenElse i t' e')
@@ -147,7 +147,7 @@ halfAddH (a,b) = (h (&&), h xor)
 #ifdef Classes
 
 if1 :: Bool -> Bool
-if1 x = condBool (x,(False,True))
+if1 x = muxBool (x,(False,True))
 
 if2 :: Bool -> Bool
 if2 x = if x then False else True
