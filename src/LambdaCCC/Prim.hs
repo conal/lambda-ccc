@@ -25,7 +25,7 @@
 
 module LambdaCCC.Prim
   ( Lit(..), HasLit(..), litSS
-  , Prim(..),litP,xor, condBool -- ,cond -- ,ifThenElse
+  , Prim(..),litP,xor, muxB -- ,cond -- ,ifThenElse
   , primArrow
   ) where
 
@@ -39,6 +39,7 @@ import Data.Constraint (Dict(..))
 import Circat.Category
 import Circat.Classes (BoolCat(not,and,or),MuxCat(..),NumCat(..))
 import qualified Circat.Classes as C
+import Circat.If
 
 -- :( . TODO: Disentangle!
 -- HasUnitArrow links the category and primitive type
@@ -149,7 +150,7 @@ data Prim :: * -> * where
   InlP          :: Prim (a -> a :+ b)
   InrP          :: Prim (b -> a :+ b)
   PairP         :: Prim (a -> b -> a :* b)
-  CondBP        :: Prim (Bool :* (Bool :* Bool) -> Bool)  -- cond on Bool
+  CondBP        :: Prim (Bool :* (Bool :* Bool) -> Bool)  -- mux on Bool
   AbstP         :: (HasRep a, Rep a ~ a') => Prim (a' -> a)
   ReprP         :: (HasRep a, Rep a ~ a') => Prim (a -> a')
   OopsP         :: Prim a
@@ -194,7 +195,7 @@ instance Show (Prim a) where
   showsPrec _ InrP       = showString "Right"
   showsPrec _ ExrP       = showString "exr"
   showsPrec _ PairP      = showString "(,)"
-  showsPrec _ CondBP     = showString "condBool"
+  showsPrec _ CondBP     = showString "mux"
   showsPrec _ AbstP      = showString "abst"
   showsPrec _ ReprP      = showString "repr"
   showsPrec _ OopsP      = showString "<oops>"
@@ -282,13 +283,6 @@ xor = (/=)
 -- ifThenElse :: Bool -> Binop a
 -- ifThenElse i t e = cond (i,(e,t)) -- note t/e swap
 -- {-# INLINE ifThenElse #-}
-
--- | Conditional on boolean values, uncurried and with then/else swapped (for
--- trie consistency).
-condBool :: (Bool,(Bool,Bool)) -> Bool
-condBool (i,(e,t)) = (i && t) || (not i && e)  -- note then/else swap
-{-# NOINLINE condBool #-}
--- Don't inline condBool, since we have a primitive for it.
 
 -- -- | Conditional, uncurried and with then/else swapped (for trie consistency)
 -- cond :: (Bool,(a,a)) -> a
