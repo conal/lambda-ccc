@@ -183,6 +183,15 @@ isTyOrDict e = isType e || isDictTy (exprType e)
 monomorphize :: ReExpr
 monomorphize = memoFloatLabelR (repeatR specializeTyDict)
 
+-- | case c of { False -> a'; True -> a }  ==>  if_then_else c a a'
+-- Assuming there's a HasIf instance.
+rewriteIf :: ReExpr
+rewriteIf = do Case c _wild ty [(_,[],a'),(_,[],a)] <- id
+               guardMsg (isBoolTy (exprType c)) "scrutinee not Boolean"
+               hasIfTc <- findTyConT (lamName "HasIf")
+               dict    <- buildDictionaryT' $* TyConApp hasIfTc [ty]
+               apps' (lamName "if_then_else") [ty] [dict,c,a,a']
+
 {--------------------------------------------------------------------
     Simplification
 --------------------------------------------------------------------}
@@ -225,6 +234,7 @@ mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
                 , nowatchR "caseReduceUnfoldsDictR" caseReduceUnfoldsDictR
                 , caseDefaultR
                 , reprAbstR
+                , watchR "rewriteIf" rewriteIf
                 ]
 
 -- From bashComponents.
@@ -522,6 +532,7 @@ externals =
     , externC "caseDefaultR" caseDefaultR "..."
     , externC "reprAbstR" reprAbstR "..."
     , externC "unfoldMethodR" unfoldMethodR "..."
+    , externC "rewriteIf" rewriteIf "..."
     -- From Reify.
     , externC "reify-misc" reifyMisc "Simplify 'reify e'"
     , externC "reifyEval" reifyEval "..."
