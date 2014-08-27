@@ -22,7 +22,7 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.ReifySimple
-  ( reifyMisc, isPrimitive, lamName, repName
+  ( reifyMisc, isPrimitive, lamName, repName, ifName
   , inReify -- TEMP
   , reifyEval, reifyRepMeth, reifyApp, reifyLam, reifyMonoLet
   , reifyTupCase, reifyLit, reifyPrim
@@ -74,6 +74,9 @@ repName = moduledName "Circat.Rep"
 
 lamName :: String -> HermitName
 lamName = moduledName "LambdaCCC.Lambda"
+
+ifName :: String -> HermitName
+ifName = moduledName "Circat.If"
 
 -- findIdE :: String -> TransformH a Id
 -- findIdE = findIdT . lamName
@@ -350,7 +353,7 @@ primMap = M.fromList
   , ("GHC.Classes.&&","AndP")
   , ("GHC.Classes.||","OrP")
   , ("LambdaCCC.Prim.xor","XorP")
-  , ("LambdaCCC.Prim.condBool","CondBP")
+  , ("Circat.If.muxB","CondBP")
   , ("GHC.Classes.not","NotP")
   , ("GHC.Tuple.(,)","PairP")  -- ??
   , ("GHC.Tuple.fst","ExlP")
@@ -358,11 +361,6 @@ primMap = M.fromList
   , ("Data.Either.Left","InlP")
   , ("Data.Either.Right","InrP")
   ]
-
-{-
-xor      --> kPrim XorP
-condBool --> kPrim CondBP
--}
 
 -- TODO: make primitives a map to expressions, to use during reification. Or
 -- maybe a transformation that succeeds only for primitives, since we'll have to

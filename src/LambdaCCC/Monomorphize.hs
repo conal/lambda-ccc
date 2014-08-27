@@ -188,9 +188,9 @@ monomorphize = memoFloatLabelR (repeatR specializeTyDict)
 rewriteIf :: ReExpr
 rewriteIf = do Case c _wild ty [(_,[],a'),(_,[],a)] <- id
                guardMsg (isBoolTy (exprType c)) "scrutinee not Boolean"
-               hasIfTc <- findTyConT (lamName "HasIf")
+               hasIfTc <- findTyConT (ifName "HasIf")
                dict    <- buildDictionaryT' $* TyConApp hasIfTc [ty]
-               apps' (lamName "if_then_else") [ty] [dict,c,a,a']
+               apps' (ifName "if_then_else") [ty] [dict,c,a,a']
 
 {--------------------------------------------------------------------
     Simplification
