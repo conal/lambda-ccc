@@ -39,7 +39,6 @@ import Data.Constraint (Dict(..))
 import Circat.Category
 import Circat.Classes (BoolCat(not,and,or),MuxCat(..),NumCat(..))
 import qualified Circat.Classes as C
-import Circat.If
 
 -- :( . TODO: Disentangle!
 -- HasUnitArrow links the category and primitive type
@@ -151,17 +150,10 @@ data Prim :: * -> * where
   InrP          :: Prim (b -> a :+ b)
   PairP         :: Prim (a -> b -> a :* b)
   CondBP        :: Prim (Bool :* (Bool :* Bool) -> Bool)  -- mux on Bool
+  CondIP        :: Prim (Bool :* (Int  :* Int ) -> Int )  -- mux on Int
   AbstP         :: (HasRep a, Rep a ~ a') => Prim (a' -> a)
   ReprP         :: (HasRep a, Rep a ~ a') => Prim (a -> a')
   OopsP         :: Prim a
-
--- TODO: Figure out how not to need type-specific constructors like the Vec ones above.
-
--- TODO: Curry CondBP to match AndP, etc.
-
--- Was:
--- 
---  AddP          :: Num  a => Prim (a -> a -> a)
 
 instance Eq' (Prim a) (Prim b) where
   LitP a    === LitP b    = a === b
@@ -175,6 +167,9 @@ instance Eq' (Prim a) (Prim b) where
   ExrP      === ExrP      = True
   InlP      === InlP      = True
   InrP      === InrP      = True
+  PairP     === PairP     = True
+  CondBP    === CondBP    = True
+  CondIP    === CondIP    = True
   AbstP     === AbstP     = True
   ReprP     === ReprP     = True
   OopsP     === OopsP     = True
@@ -195,7 +190,8 @@ instance Show (Prim a) where
   showsPrec _ InrP       = showString "Right"
   showsPrec _ ExrP       = showString "exr"
   showsPrec _ PairP      = showString "(,)"
-  showsPrec _ CondBP     = showString "mux"
+  showsPrec _ CondBP     = showString "muxB"
+  showsPrec _ CondIP     = showString "muxI"
   showsPrec _ AbstP      = showString "abst"
   showsPrec _ ReprP      = showString "repr"
   showsPrec _ OopsP      = showString "<oops>"
@@ -217,7 +213,8 @@ primArrow ExrP      = exr
 primArrow InlP      = inl
 primArrow InrP      = inr
 primArrow PairP     = curry id
-primArrow CondBP    = mux
+primArrow CondBP    = muxB
+primArrow CondIP    = muxI
 primArrow AbstP     = abstC
 primArrow ReprP     = reprC
 primArrow OopsP     = error "primArrow: Oops"
@@ -238,7 +235,8 @@ instance ( BiCCCC k Lit
   unitArrow InlP      = unitFun inl
   unitArrow InrP      = unitFun inr
   unitArrow PairP     = unitFun (curry id)
-  unitArrow CondBP    = unitFun mux
+  unitArrow CondBP    = unitFun muxB
+  unitArrow CondIP    = unitFun muxI
   unitArrow AbstP     = unitFun abstC
   unitArrow ReprP     = unitFun reprC
   unitArrow OopsP     = error "unitArrow on Prim: OopsP"
@@ -262,7 +260,8 @@ instance Evalable (Prim a) where
   eval InlP          = Left
   eval InrP          = Right
   eval PairP         = (,)
-  eval CondBP        = mux
+  eval CondBP        = muxB
+  eval CondIP        = muxI
   eval AbstP         = abstC
   eval ReprP         = reprC
   eval OopsP         = error "eval on Prim: Oops!"
@@ -278,16 +277,6 @@ infixr 3 `xor`
 xor :: Binop Bool
 xor = (/=)
 {-# NOINLINE xor #-}
-
--- -- For desugaring if-then-else expressions (assuming RebindableSyntax)
--- ifThenElse :: Bool -> Binop a
--- ifThenElse i t e = cond (i,(e,t)) -- note t/e swap
--- {-# INLINE ifThenElse #-}
-
--- -- | Conditional, uncurried and with then/else swapped (for trie consistency)
--- cond :: (Bool,(a,a)) -> a
--- cond (i,(e,t)) = if i then t else e
--- -- {-# NOINLINE cond #-}
 
 litP :: HasLit a => a -> Prim a
 litP = LitP . toLit
