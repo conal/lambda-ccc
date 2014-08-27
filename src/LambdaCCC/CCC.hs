@@ -345,9 +345,6 @@ instance Show (a :-> b) where
   showsPrec _ Apply       = showString "apply"
   showsPrec p (Curry   f) = showsApp1  "curry"   p f
   showsPrec p (Uncurry h) = showsApp1  "uncurry" p h
---   showsPrec _ Repr        = showString "repr"
---   showsPrec _ Abst        = showString "abst"
---   showsPrec _ Coerce      = showString "coerce"
   showsPrec p (Prim x)    = showsPrec p x
   showsPrec p (Lit l)     = showsApp1 "const" p l
 
@@ -368,15 +365,12 @@ instance BoolCat (:->) where
 -- etc.
 
 instance MuxCat (:->) where
-  mux = prim CondBP
+  muxB = prim CondBP
+  muxI = prim CondIP
 
 instance NumCat (:->) Int where
   add = primUnc AddP
   mul = primUnc MulP
-
--- instance NumCat (:->) Int1 where
---   add = primUnc AddP
---   mul = primUnc MulP
 
 -- TODO: reconcile curried vs uncurried, eliminating the conversions here.
 
@@ -401,9 +395,6 @@ convertC DistL        = distl
 convertC Apply        = apply
 convertC (Curry   h)  = curry   (convertC h)
 convertC (Uncurry f)  = uncurry (convertC f)
--- convertC Coerce       = coerceC
--- convertC Repr         = repC
--- convertC Abst         = absC
 convertC (Prim p)     = primArrow p
 convertC (Lit l)      = unitArrow l . it
 
