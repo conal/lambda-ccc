@@ -638,7 +638,7 @@ reifyTupCase =
    -- alternative body (RHS). Only unit and pair patterns. Others are
    -- transformed away in the type-encode plugin.
    reifyAlt :: Var -> CoreAlt -> TransformU (CoreExpr,CoreExpr)
-   reifyAlt wild (DataAlt ( isTupleTyCon . dataConTyCon -> True)
+   reifyAlt wild (DataAlt ( isBoxedTupleTyCon . dataConTyCon -> True)
                              , vars, rhs ) =
      do guardMsg (length vars `elem` [0,2])
           "Only handles unit and pair patterns"
