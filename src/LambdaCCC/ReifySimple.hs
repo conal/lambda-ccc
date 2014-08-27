@@ -22,7 +22,7 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.ReifySimple
-  ( reifyMisc, isPrimitive, repName
+  ( reifyMisc, isPrimitive, lamName, repName
   , inReify -- TEMP
   , reifyEval, reifyRepMeth, reifyApp, reifyLam, reifyMonoLet
   , reifyTupCase, reifyLit, reifyPrim
@@ -270,7 +270,7 @@ reifyTupCase =
    -- alternative body (RHS). Only unit and pair patterns. Others are
    -- transformed away in the type-encode plugin.
    reifyAlt :: Var -> CoreAlt -> TransformU (CoreExpr,CoreExpr)
-   reifyAlt wild (DataAlt ( isTupleTyCon . dataConTyCon -> True)
+   reifyAlt wild (DataAlt ( isBoxedTupleTyCon . dataConTyCon -> True)
                              , vars, rhs ) =
      do guardMsg (length vars `elem` [0,2])
           "Only handles unit and pair patterns"
@@ -350,6 +350,7 @@ primMap = M.fromList
   , ("GHC.Classes.&&","AndP")
   , ("GHC.Classes.||","OrP")
   , ("LambdaCCC.Prim.xor","XorP")
+  , ("LambdaCCC.Prim.condBool","CondBP")
   , ("GHC.Classes.not","NotP")
   , ("GHC.Tuple.(,)","PairP")  -- ??
   , ("GHC.Tuple.fst","ExlP")
