@@ -56,6 +56,8 @@ idCT = id
 
 -- Diagram and Verilog
 outGV :: GenBuses a => String -> (a :> b) -> IO ()
-outGV s c = do outGWith ("pdf","")      s c
---                outGWith ("png","-Gdpi=200") s c
+outGV s c = do 
+               outGWith ("pdf","")      s c
+--             outGWith ("svg","")      s c
+--             outGWith ("png","-Gdpi=200") s c
                outV                     s c
