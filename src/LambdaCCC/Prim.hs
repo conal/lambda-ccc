@@ -287,6 +287,8 @@ xor = (/=)
 -- trie consistency).
 condBool :: (Bool,(Bool,Bool)) -> Bool
 condBool (i,(e,t)) = (i && t) || (not i && e)  -- note then/else swap
+{-# NOINLINE condBool #-}
+-- Don't inline condBool, since we have a primitive for it.
 
 -- -- | Conditional, uncurried and with then/else swapped (for trie consistency)
 -- cond :: (Bool,(a,a)) -> a
