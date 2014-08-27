@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ExplicitForAll, ConstraintKinds, FlexibleContexts #-}  -- For :< experiment
-{-# LANGUAGE DataKinds #-}  -- for TU
+{-# LANGUAGE ScopedTypeVariables, TypeOperators #-}
+{-# LANGUAGE DataKinds, GADTs #-}  -- for TU
 
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -fcontext-stack=38 #-}
@@ -28,12 +29,12 @@
 
 -- TODO: explicit exports
 
-import Prelude hiding (foldr,sum,product)
+import Prelude hiding (foldr,sum,product,and,or,zipWith)
 
 import Data.Monoid (Monoid(..),Sum,Product)
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..),liftA2)
-import Data.Foldable (Foldable(..),sum,product)
+import Data.Foldable (Foldable(..),sum,product,and,or)
 import Data.Traversable (Traversable(..))
 
 -- transformers
@@ -43,7 +44,7 @@ import TypeUnary.TyNat
 import TypeUnary.Nat (IsNat)
 import TypeUnary.Vec hiding (transpose)
 
-import LambdaCCC.Misc (Unop,Binop,transpose)
+import LambdaCCC.Misc (Unop,Binop,transpose,(:*))
 
 import Circat.Misc (Unop)
 import Circat.Pair (Pair(..))
@@ -56,7 +57,7 @@ import Circat.Circuit (GenBuses)
 
 -- Strange -- why needed? EP won't resolve otherwise. Bug?
 import qualified LambdaCCC.Lambda
-import LambdaCCC.Lambda (EP,reifyEP)
+import LambdaCCC.Lambda (EP,reifyEP,xor)
 
 import LambdaCCC.Run (run) -- go
 
@@ -163,6 +164,22 @@ mat $@ vec = (`dot'` vec) <$> mat
 no .@ mn = transpose ((no $@) <$> transpose mn)
 
 {--------------------------------------------------------------------
+    CRC
+--------------------------------------------------------------------}
+
+crcStep :: (Traversable t, Applicative t) =>
+           t Bool -> Bool :* t Bool -> Bool -> Bool :* t Bool
+crcStep poly (s0,seg) bit = shiftL (seg',bit)
+ where
+   seg' = if s0 then liftA2 xor poly seg else seg
+
+-- Wire in a polynomial
+step4K :: Bool :* Vec N4 Bool -> Bool -> Bool :* Vec N4 Bool
+step4K = crcStep (False :< True :< False :< True :< ZVec)
+
+
+
+{--------------------------------------------------------------------
     Run it
 --------------------------------------------------------------------}
 
@@ -199,7 +216,9 @@ main :: IO ()
 
 -- main = go "sumSquare-t3" (sumSquare :: RTree N3 Int -> Int)
 
--- main = go "sum-v2" (sum :: Vec N2 Int -> Int)
+-- main = go "sum-v5" (sum :: Vec N5 Int -> Int)
+
+-- main = go "and-v5" (and :: Vec N5 Bool -> Bool)
 
 -- main = go "sum-t2" (sum :: RTree N2 Int -> Int)
 
@@ -347,6 +366,15 @@ main :: IO ()
 --    f _ = 3
 --    g _ = 4
 
+-- -- Shows an abandoned component
+-- main = go "test-or-true-constant-fold" (\ a -> not a || True)
+
+-- -- not a
+-- main = go "test-xor-true-with-constant-fold" (\ a -> a `xor` True)
+
+-- -- a
+-- main = go "test-xor-false-with-constant-fold" (\ a -> a `xor` False)
+
 -- Ragged trees
 
 type MatrixG p q a = Ragged q (Ragged p a)
@@ -374,11 +402,25 @@ type R13' = BU R8' R3
 
 -- main = go "composeLin-gt234" (uncurry ((.@) :: MatrixG R3 R4 Int -> MatrixG R2 R3 Int -> MatrixG R2 R4 Int))
 
--- Linear map composition mixing ragged trees, top-down perfect trees, and vectors.
-main = go "composeLin-gt3rt2v2"
-          (uncurry ((.@) :: Vec N2 (RTree N2 Int) -> RTree N2 (Ragged R3 Int) -> Vec N2 (Ragged R3 Int)))
+-- -- Linear map composition mixing ragged trees, top-down perfect trees, and vectors.
+-- main = go "composeLin-gt3rt2v2"
+--           (uncurry ((.@) :: Vec N2 (RTree N2 Int) -> RTree N2 (Ragged R3 Int) -> Vec N2 (Ragged R3 Int)))
+
+-- Oops -- Core Lint error.
+-- Simplifying
+
+-- main = go "composeLin-gt1rt0v1"
+--           (uncurry ((.@) :: Vec N1 (RTree N0 Int) -> RTree N0 (Ragged R1 Int) -> Vec N1 (Ragged R1 Int)))
 
 -- Note: some of the scan examples redundantly compute some additions.
 -- I suspect that they're only the same *after* the zero simplifications.
 
 -- main = go "lsums-gt5" (lsums' :: Unop (Ragged R5 Int))
+
+-- main = go "foo" (lsums' :: Unop (Ragged R3 Int))
+
+-- main = go "add3" (\ (x :: Int) -> x + 3)
+
+main = go "crcStep" ((uncurry.uncurry) (crcStep :: Vec N1 Bool -> Bool :* Vec N1 Bool -> Bool -> Bool :* Vec N1 Bool))
+
+-- main = go "foo" (\ (a,b) -> if a then b else not b)
