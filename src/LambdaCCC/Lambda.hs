@@ -36,7 +36,6 @@ module LambdaCCC.Lambda
   , reprEP, abstEP
   -- , coerceEP
   , evalEP, reifyEP, kPrimEP, kLit, oops
-  , HasIf(..), repIf
   ) where
 
 import Data.Functor ((<$>))
@@ -581,50 +580,6 @@ condPair :: (Bool,((a,b),(a,b))) -> (a,b)
 condPair (a,((b',b''),(c',c''))) = (cond (a,(b',c')),cond (a,(b'',c'')))
 
 #endif
-
-class HasIf a where
-  if_then_else :: Bool -> Binop a
-  -- TEMP hack
-  temp_hack_HasIf :: a
-  temp_hack_HasIf = undefined
-
-instance HasIf Bool where
-  if_then_else c a a' = muxB (c,(a',a))  -- note reversal
-  {-# INLINE if_then_else #-}
-
-instance HasIf () where
-  if_then_else _ () () = ()
-  {-# INLINE if_then_else #-}
-
-instance (HasIf s, HasIf t) => HasIf (s,t) where
-  if_then_else c (s,t) (s',t') = (if_then_else c s s', if_then_else c t t')
-  {-# INLINE if_then_else #-}
-
-#if 0
--- We'll get triples and quadruples via HasRep
-instance (HasIf s, HasIf t, HasIf u) => HasIf (s,t,u) where
-  if_then_else c (s,t,u) (s',t',u') =
-    ( if_then_else c s s'
-    , if_then_else c t t'
-    , if_then_else c u u' )
-  {-# INLINE if_then_else #-}
-
-instance (HasIf s, HasIf t, HasIf u, HasIf v) => HasIf (s,t,u,v) where
-  if_then_else c (s,t,u,v) (s',t',u',v') =
-    ( if_then_else c s s'
-    , if_then_else c t t'
-    , if_then_else c u u'
-    , if_then_else c v v'
-    )
-  {-# INLINE if_then_else #-}
-#endif
-
-instance (HasIf s, HasIf t) => HasIf (s -> t) where
-  if_then_else c f f' = \ s -> if_then_else c (f s) (f' s)
-  {-# INLINE if_then_else #-}
-
-repIf :: (HasRep a, HasIf (Rep a)) => Bool -> Binop a
-repIf c a a' = abst (if_then_else c (reprC a) (reprC a'))
 
 
 #if 0
