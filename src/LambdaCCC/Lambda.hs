@@ -704,19 +704,24 @@ oops = kPrim OopsP
 -- instance Eq1' Prim where (====) = (===)
 
 instance Eq1' Prim where
-  LitP a    ==== LitP b    = a ==== b
-  NotP      ==== NotP      = True
-  AndP      ==== AndP      = True
-  OrP       ==== OrP       = True
-  XorP      ==== XorP      = True
-  AddP      ==== AddP      = True
-  MulP      ==== MulP      = True
-  ExlP      ==== ExlP      = True
-  ExrP      ==== ExrP      = True
-  PairP     ==== PairP     = True
-  CondBP    ==== CondBP    = True
-  OopsP     ==== OopsP     = True
-  _         ==== _         = False
+  LitP a ==== LitP b  = a ==== b
+  NotP   ==== NotP    = True
+  AndP   ==== AndP    = True
+  OrP    ==== OrP     = True
+  XorP   ==== XorP    = True
+  AddP   ==== AddP    = True
+  MulP   ==== MulP    = True
+  ExlP   ==== ExlP    = True
+  ExrP   ==== ExrP    = True
+  InlP   ==== InlP    = True
+  InrP   ==== InrP    = True
+  PairP  ==== PairP   = True
+  CondBP ==== CondBP  = True
+  CondIP ==== CondIP  = True
+  AbstP  ==== AbstP   = True
+  ReprP  ==== ReprP   = True
+  OopsP  ==== OopsP   = True
+  _      ==== _       = False
 
 instance Eq1' Lit where
   UnitL x ==== UnitL y = x == y
