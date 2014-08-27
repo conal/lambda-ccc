@@ -353,9 +353,10 @@ primMap = M.fromList
   , ("GHC.Classes.&&","AndP")
   , ("GHC.Classes.||","OrP")
   , ("LambdaCCC.Prim.xor","XorP")
-  , ("Circat.If.muxB","CondBP")
+  , ("Circat.If.muxBool","CondBP")
+  , ("Circat.If.muxInt","CondIP")
   , ("GHC.Classes.not","NotP")
-  , ("GHC.Tuple.(,)","PairP")  -- ??
+  , ("GHC.Tuple.(,)","PairP")
   , ("GHC.Tuple.fst","ExlP")
   , ("GHC.Tuple.snd","ExrP")
   , ("Data.Either.Left","InlP")
