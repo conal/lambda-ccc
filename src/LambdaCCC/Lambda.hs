@@ -30,13 +30,13 @@ module LambdaCCC.Lambda
   , var#, lamv#, varPat#, asPat#, casev#
   , reifyE, evalE
   , vars, vars2
-  , xor, condBool   -- from Prim
+  , xor, muxB   -- from Prim  -- TODO: maybe remove
   , intL
   , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP
   , reprEP, abstEP
   -- , coerceEP
   , evalEP, reifyEP, kPrimEP, kLit, oops
-  , HasIf(..)
+  , HasIf(..), repIf
   ) where
 
 import Data.Functor ((<$>))
@@ -510,22 +510,22 @@ intL = kLit
 #if 0
 {-# RULES
  
-"reify/not"     reifyEP not      = kPrim NotP
-"reify/(&&)"    reifyEP (&&)     = kPrim AndP
-"reify/(||)"    reifyEP (||)     = kPrim OrP
-"reify/xor"     reifyEP xor      = kPrim XorP
-"reify/(+)"     reifyEP (+)      = kPrim AddP
-"reify/(*)"     reifyEP (*)      = kPrim MulP
-"reify/exl"     reifyEP fst      = kPrim ExlP
-"reify/exr"     reifyEP snd      = kPrim ExrP
-"reify/pair"    reifyEP (,)      = kPrim PairP
-"reify/inl"     reifyEP Left     = kPrim InlP
-"reify/inr"     reifyEP Right    = kPrim InrP
-"reify/if"      reifyEP condBool = kPrim CondBP
+"reify/not"     reifyEP not   = kPrim NotP
+"reify/(&&)"    reifyEP (&&)  = kPrim AndP
+"reify/(||)"    reifyEP (||)  = kPrim OrP
+"reify/xor"     reifyEP xor   = kPrim XorP
+"reify/(+)"     reifyEP (+)   = kPrim AddP
+"reify/(*)"     reifyEP (*)   = kPrim MulP
+"reify/exl"     reifyEP fst   = kPrim ExlP
+"reify/exr"     reifyEP snd   = kPrim ExrP
+"reify/pair"    reifyEP (,)   = kPrim PairP
+"reify/inl"     reifyEP Left  = kPrim InlP
+"reify/inr"     reifyEP Right = kPrim InrP
+"reify/if"      reifyEP muxB   = kPrim CondBP
 
-"reify/()"      reifyEP ()       = kLit  ()
-"reify/false"   reifyEP False    = kLit  False
-"reify/true"    reifyEP True     = kLit  True
+"reify/()"      reifyEP ()    = kLit  ()
+"reify/false"   reifyEP False = kLit  False
+"reify/true"    reifyEP True  = kLit  True
 
 -- TODO: Why reify/unPair' and not reify/unVecZ & reify/unVecS ?
 -- TODO: trees
@@ -589,13 +589,19 @@ class HasIf a where
   temp_hack_HasIf = undefined
 
 instance HasIf Bool where
-  if_then_else c a a' = condBool (c,(a,a'))  -- note reversal
+  if_then_else c a a' = muxB (c,(a',a))  -- note reversal
+  {-# INLINE if_then_else #-}
+
+instance HasIf () where
+  if_then_else _ () () = ()
   {-# INLINE if_then_else #-}
 
 instance (HasIf s, HasIf t) => HasIf (s,t) where
   if_then_else c (s,t) (s',t') = (if_then_else c s s', if_then_else c t t')
   {-# INLINE if_then_else #-}
 
+#if 0
+-- We'll get triples and quadruples via HasRep
 instance (HasIf s, HasIf t, HasIf u) => HasIf (s,t,u) where
   if_then_else c (s,t,u) (s',t',u') =
     ( if_then_else c s s'
@@ -611,10 +617,15 @@ instance (HasIf s, HasIf t, HasIf u, HasIf v) => HasIf (s,t,u,v) where
     , if_then_else c v v'
     )
   {-# INLINE if_then_else #-}
+#endif
 
 instance (HasIf s, HasIf t) => HasIf (s -> t) where
   if_then_else c f f' = \ s -> if_then_else c (f s) (f' s)
   {-# INLINE if_then_else #-}
+
+repIf :: (HasRep a, HasIf (Rep a)) => Bool -> Binop a
+repIf c a a' = abst (if_then_else c (reprC a) (reprC a'))
+
 
 #if 0
 
