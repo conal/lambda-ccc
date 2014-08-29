@@ -543,6 +543,7 @@ externals =
     , externC "reifyTupCase" reifyTupCase "..."
     , externC "reifyLit" reifyLit "..."
     , externC "reifyPrim" reifyPrim "..."
+    , externC "reifyOops" reifyOops "Generate errors for remaining reifyEP call"
     -- 
     , external "let-float'"
         (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR')

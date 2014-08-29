@@ -18,6 +18,7 @@ any-td reify-prep
 try (repeat (any-td (repeat reify-misc)))
 try bash
 try unshadow
+try (any-td reifyOops)
 
 ----
 

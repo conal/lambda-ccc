@@ -32,7 +32,7 @@ module LambdaCCC.Lambda
   , vars, vars2
   , xor, muxB   -- from Prim  -- TODO: maybe remove
   , intL
-  , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP
+  , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP,reifyOopsEP#
   , reprEP, abstEP
   -- , coerceEP
   , evalEP, reifyEP, kPrimEP, kLit, oops
@@ -387,6 +387,9 @@ data Bind = forall a. Bind (V a) a
 -- | Variable environment
 type Env = [Bind]
 
+reifyOops# :: Addr# -> E p a
+reifyOops# addr = error ("reifyE: not handled: " ++ unpackCString# addr)
+
 reifyE :: a -> E p a
 reifyE _ = error (printf "reifyE: Oops -- not eliminated.")
 {-# NOINLINE reifyE #-}  -- to give reify/eval rules a chance
@@ -694,6 +697,9 @@ kPrimEP = kPrim
 
 oops :: EP a
 oops = kPrim OopsP
+
+reifyOopsEP# :: Addr# -> EP a
+reifyOopsEP# = reifyOops#
 
 {--------------------------------------------------------------------
     Move elsewhere

@@ -26,6 +26,7 @@ module LambdaCCC.ReifySimple
   , inReify -- TEMP
   , reifyEval, reifyRepMeth, reifyApp, reifyLam, reifyMonoLet
   , reifyTupCase, reifyLit, reifyPrim
+  , reifyOops
   ) where
 
 import Data.Functor ((<$>),void)
@@ -315,6 +316,15 @@ reifyLit =
      hasLitTc <- findTyConT (primName "HasLit")
      hasLitD  <- buildDictionaryT' $* TyConApp hasLitTc [ty]
      appsE "kLit" [ty] [hasLitD,e]
+
+-- Use in a final pass to generate helpful error messages for non-reified
+-- syntax.
+reifyOops :: ReExpr
+reifyOops =
+  unReify >>>
+  do ty  <- exprTypeT
+     str <- showPprT
+     appsE "reifyOopsEP#" [ty] [Lit (mkMachString str)]
 
 miscL :: [(String,ReExpr)]
 miscL = [ ("reifyEval"        , reifyEval)
