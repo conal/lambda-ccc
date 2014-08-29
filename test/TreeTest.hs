@@ -165,9 +165,7 @@ mat $@ vec = (`dot'` vec) <$> mat
         o (n a) -> n (m a) -> o (m a)
 no .@ mn = transpose ((no $@) <$> transpose mn)
 
-{--------------------------------------------------------------------
-    CRC
---------------------------------------------------------------------}
+---- CRC
 
 -- crcStep :: (Traversable t, Zippable t) =>
 --            t Bool -> Bool -> Unop (Bool :* t Bool)
@@ -192,6 +190,66 @@ crcStep :: (Traversable poly, Applicative poly) =>
            poly Bool -> poly Bool :* Bool -> poly Bool
 crcStep poly (shiftL -> (b0,seg')) =
   (if b0 then liftA2 xor poly else id) seg'
+
+-- Utilities for constant structures
+-- TypeUnary.Vec already defines vec1,...,vec8
+
+rt0 :: a -> RT.Tree N0 a
+rt0 = RT.L
+
+rt1 :: a -> a -> RT.Tree N1 a
+rt1 a b = RT.B (rt0 a :# rt0 b)
+
+rt2 :: a -> a -> a -> a -> RT.Tree N2 a
+rt2 a b c d = RT.B (rt1 a b :# rt1 c d)
+
+rt3 :: a -> a -> a -> a -> a -> a -> a -> a -> RT.Tree N3 a
+rt3 a b c d e f g h = RT.B (rt2 a b c d :# rt2 e f g h)
+
+lt0 :: a -> LT.Tree N0 a
+lt0 = LT.L
+
+lt1 :: a -> a -> LT.Tree N1 a
+lt1 a b = LT.B (lt0 (a :# b))
+
+lt2 :: a -> a -> a -> a -> LT.Tree N2 a
+lt2 a b c d = LT.B (lt1 (a :# b) (c :# d))
+
+lt3 :: a -> a -> a -> a -> a -> a -> a -> a -> LT.Tree N3 a
+lt3 a b c d e f g h = LT.B (lt2 (a :# b) (c :# d) (e :# f) (g :# h))
+
+-- Ragged trees
+
+type MatrixG p q a = Ragged q (Ragged p a)
+
+type R1  = LU
+type R2  = BU R1 R1
+type R3  = BU R2 R1
+type R4  = BU R2 R2
+type R5  = BU R3 R2
+type R8  = BU R3 R5
+type R11 = BU R8 R5
+
+type R8'  = BU R4  R4
+type R13' = BU R8' R3
+
+ra1 :: a -> Ra.Tree R1 a
+ra1 a = Ra.L a
+
+ra2 :: a -> a -> Ra.Tree R2 a
+ra2 a b = Ra.B (ra1 a) (ra1 b)
+
+ra3 :: a -> a -> a -> Ra.Tree R3 a
+ra3 a b c = Ra.B (ra2 a b) (ra1 c)
+
+ra4 :: a -> a -> a -> a -> Ra.Tree R4 a
+ra4 a b c d = Ra.B (ra2 a b) (ra2 c d)
+
+ra5 :: a -> a -> a -> a -> a -> Ra.Tree R5 a
+ra5 a b c d e = Ra.B (ra3 a b c) (ra2 d e)
+
+ra8 :: a -> a -> a -> a -> a -> a -> a -> a -> Ra.Tree R8 a
+ra8 a b c d e f g h = Ra.B (ra3 a b c) (ra5 d e f g h)
 
 {--------------------------------------------------------------------
     Run it
@@ -425,21 +483,6 @@ main :: IO ()
 -- -- a
 -- main = go "test-xor-false-with-constant-fold" (\ a -> a `xor` False)
 
--- Ragged trees
-
-type MatrixG p q a = Ragged q (Ragged p a)
-
-type R1  = LU
-type R2  = BU R1 R1
-type R3  = BU R2 R1
-type R4  = BU R2 R2
-type R5  = BU R3 R2
-type R8  = BU R3 R5
-type R11 = BU R8 R5
-
-type R8'  = BU R4  R4
-type R13' = BU R8' R3
-
 -- main = go "fmap-gt1" (fmap not :: Unop (Ragged R1 Bool))
 
 -- main = go "sum-gt11" (sum :: Ragged R11 Int -> Int)
@@ -494,35 +537,29 @@ type R13' = BU R8' R3
 -- main = go "crcStepK-v4" step
 --  where
 --    step :: Vec N4 Bool :* Bool -> Vec N4 Bool
---    step = crcStep (True :< False :< False :< True :< ZVec)
+--    step = crcStep (vec4 True False False True)
 
 -- -- Equivalently,
--- main = go "crcStepK-v4"
---           (crcStep (True :< False :< False :< True :< ZVec))
+-- main = go "crcStepK-v4" (crcStep (vec4 True False False True))
 
 -- main = go "crcStep-rt2" (uncurry (crcStep :: RTree N2 Bool -> RTree N2 Bool :* Bool -> RTree N2 Bool))
 
 -- main = go "crcStepK-rt1" step
 --  where
 --    step :: RTree N1 Bool :* Bool -> RTree N1 Bool
---    step = crcStep (RT.B (RT.L True :# RT.L False))
+--    step = crcStep (rt1 True False)
 
 -- main = go "crcStepK-rt2" step
 --  where
 --    step :: RTree N2 Bool :* Bool -> RTree N2 Bool
---    step = crcStep (RT.B (RT.B (RT.L True :# RT.L False) :# RT.B (RT.L False :# RT.L True)))
+--    step = crcStep (rt2 True False False True)
 
--- TODO: Whip up some Template Haskell for constructing constant vectors and trees.
--- Or some utility functions.
-
-main = go "crcStepK-g5" step
+main = go "crcStepK-rt3" step
  where
-   step :: Ragged R5 Bool :* Bool -> Ragged R5 Bool
-   step = crcStep (Ra.B (Ra.B (Ra.B (Ra.L True) (Ra.L False)) (Ra.L False)) (Ra.B (Ra.L True) (Ra.L False)))
+   step :: RTree N3 Bool :* Bool -> RTree N3 Bool
+   step = crcStep (rt3 True False False True True False True False)
 
-
--- -- This one locks up my computer. Investigate.
--- main = go "crcStepK-rt3" (uncurry step)
+-- main = go "crcStepK-g5" step
 --  where
---    step :: Bool -> Unop (Bool :* RTree N3 Bool)
---    step = crcStep (RT.fromList [True,False,True,True,False,True,True,False])
+--    step :: Ragged R5 Bool :* Bool -> Ragged R5 Bool
+--    step = crcStep (ra5 True False False True False)
