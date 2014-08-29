@@ -29,7 +29,7 @@
 
 -- TODO: explicit exports
 
-import Prelude hiding (foldr,sum,product,and,or,zipWith)
+import Prelude hiding (foldr,sum,product,and,or,zipWith,reverse)
 
 import Data.Monoid (Monoid(..),Sum,Product)
 import Data.Functor ((<$>))
@@ -46,12 +46,13 @@ import TypeUnary.Vec hiding (transpose)
 
 import LambdaCCC.Misc (Unop,Binop,transpose,(:*))
 
-import Circat.Misc (Unop)
+import Circat.Misc (Unop,Reversible(..))
 import Circat.Pair (Pair(..))
 import qualified Circat.RTree as RTree
 import qualified Circat.LTree as LTree
 import qualified Circat.RaggedTree as Ragged
 import Circat.RaggedTree (TU(..))
+import Circat.Shift
 import Circat.Scan
 import Circat.Circuit (GenBuses)
 
@@ -167,15 +168,22 @@ no .@ mn = transpose ((no $@) <$> transpose mn)
     CRC
 --------------------------------------------------------------------}
 
-crcStep :: (Traversable t, Applicative t) =>
-           t Bool -> Bool :* t Bool -> Bool -> Bool :* t Bool
-crcStep poly (s0,seg) bit = shiftL (seg',bit)
- where
-   seg' = if s0 then liftA2 xor poly seg else seg
+crcStep :: (Traversable t, Zippable t) =>
+           t Bool -> Bool -> Unop (Bool :* t Bool)
 
--- Wire in a polynomial
-step4K :: Bool :* Vec N4 Bool -> Bool -> Bool :* Vec N4 Bool
-step4K = crcStep (False :< True :< False :< True :< ZVec)
+-- crcStep poly bit (s0,seg) = shiftL (seg',bit)
+--  where
+--    seg' = if s0 then zipWith xor poly seg else seg
+
+-- crcStep poly bit (s0,seg) = shiftL (tweak seg,bit)
+--  where
+--    tweak = if s0 then zipWith xor poly else id
+
+crcStep poly bit (s0, seg) =
+  shiftL ((if s0 then zipWith xor poly else id) seg, bit)
+
+-- crcStep poly bit (s0, seg) =
+--   shiftL (if s0 then zipWith xor poly seg else seg, bit)
 
 
 
@@ -341,13 +349,37 @@ main :: IO ()
 
 -- main = go "composeLin-t232" (uncurry ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int))
 
--- main = go "shiftL-rt1" (shiftL :: (RTree N1 Bool, Bool) -> (Bool, RTree N1 Bool))
+-- main = go "shiftL-v4" (shiftL :: Vec N4 Bool :* Bool -> Bool :* Vec N4 Bool)
 
--- main = go "shiftR-rt1" (shiftR :: (Bool, RTree N1 Bool) -> (RTree N1 Bool, Bool))
+-- main = go "shiftL-rt2" (shiftL :: RTree N2 Bool :* Bool -> Bool :* RTree N2 Bool)
+
+-- main = go "shiftR-rt1" (shiftR :: Bool :* RTree N1 Bool -> RTree N1 Bool :* Bool)
+
+-- main = go "shiftLF-v3v2" (shiftLF :: Vec N3 Bool :* Vec N2 Bool -> Vec N2 Bool :* Vec N3 Bool)
+
+-- main = go "shiftLF-v2v3" (shiftLF :: Vec N2 Bool :* Vec N3 Bool -> Vec N3 Bool :* Vec N2 Bool)
+
+-- -- Left-shift in two zeros
+-- main = go "shiftLF-v3v2F" (flip (curry shift) (pure False))
+--  where
+--    shift :: Vec N3 Bool :* Vec N2 Bool -> Vec N2 Bool :* Vec N3 Bool
+--    shift = shiftLF
+
+-- -- Left-shift in three zeros
+-- main = go "shiftLF-v2v3F" (flip (curry shift) (pure False))
+--  where
+--    shift :: Vec N2 Bool :* Vec N3 Bool -> Vec N3 Bool :* Vec N2 Bool
+--    shift = shiftLF
+
+-- -- Right-shift in two zeros
+-- main = go "shiftRF-v3v2F" (curry shift (pure False))
+--  where
+--    shift :: Vec N3 Bool :* Vec N2 Bool -> Vec N2 Bool :* Vec N3 Bool
+--    shift = shiftRF
 
 -- main = go "lsumsp-rt2" (lsums' :: Unop (RTree N2 Int))
 
--- main = go "lsumsp-lt5" (lsums' :: Unop (LTree N5 Int))
+-- main = go "lsumsp-lt3" (lsums' :: Unop (LTree N3 Int))
 
 -- main = go "lsums-rt5" (lsums :: RTree N5 Int -> (RTree N5 Int, Int))
 
@@ -421,6 +453,41 @@ type R13' = BU R8' R3
 
 -- main = go "add3" (\ (x :: Int) -> x + 3)
 
-main = go "crcStep" ((uncurry.uncurry) (crcStep :: Vec N1 Bool -> Bool :* Vec N1 Bool -> Bool -> Bool :* Vec N1 Bool))
-
 -- main = go "foo" (\ (a,b) -> if a then b else not b)
+
+-- main = go "foo" (\ (a,b) -> if a then b else swap b)
+--  where
+--    swap :: Unop (Int,Int)
+--    swap (p,q) = (q,p)
+
+-- main = go "foo" (\ (a, b :: Vec N2 Bool) -> if a then pure False else b)
+
+-- main = go "foo" (\ (a, b :: RTree N2 Bool) -> if a then pure False else b)
+
+-- main = go "foo" (\ (a, b :: Vec N3 Bool) -> (if a then not else id) <$> b)
+
+-- main = go "foo" (\ (a, b :: RTree N2 Bool) -> (if a then reverse else id) b)
+
+-- main = go "crcStep-v2" ((uncurry.uncurry) (crcStep :: Vec N2 Bool -> Bool -> Unop (Bool :* Vec N2 Bool)))
+
+-- main = go "crcStepK-v4-noOpt" (uncurry step)
+--  where
+--    step :: Bool -> Unop (Bool :* Vec N4 Bool)
+--    step = crcStep (True :< False :< False :< True :< ZVec)
+
+-- main = go "crcStepK-v4"
+--           (uncurry (crcStep (True :< False :< False :< True :< ZVec)))
+
+-- main = go "crcStep-rt4" ((uncurry.uncurry) (crcStep :: RTree N4 Bool -> Bool -> Unop (Bool :* RTree N4 Bool)))
+
+-- main = go "crcStepK-rt0" (uncurry step)
+--  where
+--    step :: Bool -> Unop (Bool :* RTree N0 Bool)
+--    step = crcStep (RTree.fromList [True])
+
+-- This one locks up my computer!
+
+-- main = go "crcStepK-rt3" (uncurry step)
+--  where
+--    step :: Bool -> Unop (Bool :* RTree N3 Bool)
+--    step = crcStep (RTree.fromList [True,False,True,True,False,True,True,False])
