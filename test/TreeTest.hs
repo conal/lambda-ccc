@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ExplicitForAll, ConstraintKinds, FlexibleContexts #-}  -- For :< experiment
 {-# LANGUAGE ScopedTypeVariables, TypeOperators #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DataKinds, GADTs #-}  -- for TU
 
 {-# OPTIONS_GHC -Wall #-}
@@ -48,13 +49,13 @@ import LambdaCCC.Misc (Unop,Binop,transpose,(:*))
 
 import Circat.Misc (Unop,Reversible(..))
 import Circat.Pair (Pair(..))
-import qualified Circat.RTree as RTree
-import qualified Circat.LTree as LTree
-import qualified Circat.RaggedTree as Ragged
+import qualified Circat.RTree as RT
+import qualified Circat.LTree as LT
+import qualified Circat.RaggedTree as Ra
 import Circat.RaggedTree (TU(..))
 import Circat.Shift
 import Circat.Scan
-import Circat.Circuit (GenBuses)
+import Circat.Circuit (GenBuses,systemSuccess)
 
 -- Strange -- why needed? EP won't resolve otherwise. Bug?
 import qualified LambdaCCC.Lambda
@@ -69,9 +70,9 @@ import qualified Data.Typeable
     Examples
 --------------------------------------------------------------------}
 
-type RTree = RTree.Tree
-type LTree = LTree.Tree
-type Ragged = Ragged.Tree
+type RTree = RT.Tree
+type LTree = LT.Tree
+type Ragged = Ra.Tree
 
 t0 :: RTree N0 Bool
 t0 = pure True
@@ -168,8 +169,8 @@ no .@ mn = transpose ((no $@) <$> transpose mn)
     CRC
 --------------------------------------------------------------------}
 
-crcStep :: (Traversable t, Zippable t) =>
-           t Bool -> Bool -> Unop (Bool :* t Bool)
+-- crcStep :: (Traversable t, Zippable t) =>
+--            t Bool -> Bool -> Unop (Bool :* t Bool)
 
 -- crcStep poly bit (s0,seg) = shiftL (seg',bit)
 --  where
@@ -179,13 +180,18 @@ crcStep :: (Traversable t, Zippable t) =>
 --  where
 --    tweak = if s0 then zipWith xor poly else id
 
-crcStep poly bit (s0, seg) =
-  shiftL ((if s0 then zipWith xor poly else id) seg, bit)
+-- crcStep poly bit (s0, seg) =
+--   shiftL ((if s0 then zipWith xor poly else id) seg, bit)
 
 -- crcStep poly bit (s0, seg) =
 --   shiftL (if s0 then zipWith xor poly seg else seg, bit)
 
+-- Oops. The state should be just poly. Also, drop Zippable.
 
+crcStep :: (Traversable poly, Applicative poly) =>
+           poly Bool -> poly Bool :* Bool -> poly Bool
+crcStep poly (shiftL -> (b0,seg')) =
+  (if b0 then liftA2 xor poly else id) seg'
 
 {--------------------------------------------------------------------
     Run it
@@ -193,6 +199,18 @@ crcStep poly bit (s0, seg) =
 
 go :: GenBuses a => String -> (a -> b) -> IO ()
 go name f = run name (reifyEP f)
+
+inTest :: String -> IO ()
+inTest cmd = systemSuccess ("cd ../test; " ++ cmd)
+
+doit :: IO ()
+doit = inTest "./test"
+
+do1 :: IO ()
+do1 = inTest "hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize DoTreeNoReify.hss"
+
+do2 :: IO ()
+do2 = inTest "hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize DoTree.hss"
 
 -- Only works when compiled with HERMIT
 main :: IO ()
@@ -468,26 +486,43 @@ type R13' = BU R8' R3
 
 -- main = go "foo" (\ (a, b :: RTree N2 Bool) -> (if a then reverse else id) b)
 
--- main = go "crcStep-v2" ((uncurry.uncurry) (crcStep :: Vec N2 Bool -> Bool -> Unop (Bool :* Vec N2 Bool)))
+-- crcStep :: (Traversable poly, Applicative poly) =>
+--            poly Bool -> poly Bool :* Bool -> poly Bool
 
--- main = go "crcStepK-v4-noOpt" (uncurry step)
+-- main = go "crcStep-v4" (uncurry (crcStep :: Vec N4 Bool -> Vec N4 Bool :* Bool -> Vec N4 Bool))
+
+-- main = go "crcStepK-v4" step
 --  where
---    step :: Bool -> Unop (Bool :* Vec N4 Bool)
+--    step :: Vec N4 Bool :* Bool -> Vec N4 Bool
 --    step = crcStep (True :< False :< False :< True :< ZVec)
 
+-- -- Equivalently,
 -- main = go "crcStepK-v4"
---           (uncurry (crcStep (True :< False :< False :< True :< ZVec)))
+--           (crcStep (True :< False :< False :< True :< ZVec))
 
--- main = go "crcStep-rt4" ((uncurry.uncurry) (crcStep :: RTree N4 Bool -> Bool -> Unop (Bool :* RTree N4 Bool)))
+-- main = go "crcStep-rt2" (uncurry (crcStep :: RTree N2 Bool -> RTree N2 Bool :* Bool -> RTree N2 Bool))
 
--- main = go "crcStepK-rt0" (uncurry step)
+-- main = go "crcStepK-rt1" step
 --  where
---    step :: Bool -> Unop (Bool :* RTree N0 Bool)
---    step = crcStep (RTree.fromList [True])
+--    step :: RTree N1 Bool :* Bool -> RTree N1 Bool
+--    step = crcStep (RT.B (RT.L True :# RT.L False))
 
--- This one locks up my computer!
+-- main = go "crcStepK-rt2" step
+--  where
+--    step :: RTree N2 Bool :* Bool -> RTree N2 Bool
+--    step = crcStep (RT.B (RT.B (RT.L True :# RT.L False) :# RT.B (RT.L False :# RT.L True)))
 
+-- TODO: Whip up some Template Haskell for constructing constant vectors and trees.
+-- Or some utility functions.
+
+main = go "crcStepK-g5" step
+ where
+   step :: Ragged R5 Bool :* Bool -> Ragged R5 Bool
+   step = crcStep (Ra.B (Ra.B (Ra.B (Ra.L True) (Ra.L False)) (Ra.L False)) (Ra.B (Ra.L True) (Ra.L False)))
+
+
+-- -- This one locks up my computer. Investigate.
 -- main = go "crcStepK-rt3" (uncurry step)
 --  where
 --    step :: Bool -> Unop (Bool :* RTree N3 Bool)
---    step = crcStep (RTree.fromList [True,False,True,True,False,True,True,False])
+--    step = crcStep (RT.fromList [True,False,True,True,False,True,True,False])
