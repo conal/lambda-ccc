@@ -421,17 +421,17 @@ recastF (regularizeType -> a) (regularizeType -> b) =
                idId <- findIdT "id"
                return $ Var idId `App` Type a
     reprR = do f <- hasRepMethod "repr" $* a
-               Just (a',b') <- return (splitFunTy_maybe (exprType f))
+               (a',b') <- unJustT $* splitFunTy_maybe (exprType f)
                guardMsg (a' =~= a) "recast tryMeth: a' /= a"
                g <- recastF b' b
                buildCompositionT g f
     abstR = do g <- hasRepMethod "abst" $* b
-               Just (a',b') <- return (splitFunTy_maybe (exprType g))
+               (a',b') <- unJustT $* splitFunTy_maybe (exprType g)
                guardMsg (b' =~= b) "recast tryMeth: b' /= b"
                f <- recastF a a'
                buildCompositionT g f
-    funR  = do Just (aDom,aRan) <- return $ splitFunTy_maybe a
-               Just (bDom,bRan) <- return $ splitFunTy_maybe b
+    funR  = do (aDom,aRan) <- unJustT $* splitFunTy_maybe a
+               (bDom,bRan) <- unJustT $* splitFunTy_maybe b
                f <- recastF bDom aDom  -- contravariant
                h <- recastF aRan bRan  -- covariant
                glueV <- findIdT "LambdaCCC.Monomorphize.-->"
