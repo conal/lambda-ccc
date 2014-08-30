@@ -358,6 +358,11 @@ hasRepMethodF =
 hasRepMethodT :: TransformH Type (String -> ReExpr)
 hasRepMethodT = (\ f -> \ s -> App <$> f s <*> id) <$> hasRepMethodF
 
+hasRepMethod :: String -> TransformH Type CoreExpr
+hasRepMethod meth = hasRepMethodF >>= ($ meth)
+
+-- TODO: Rethink these three names
+
 -- | e ==> abst (repr e).  In Core, abst is
 -- abst ty $hasRepTy ty' (Eq# * ty' (Rep ty) (sym (co :: Rep ty ~ ty'))),
 -- where e :: ty, and co normalizes Rep ty to ty'.
@@ -415,28 +420,31 @@ recastF (regularizeType -> a) (regularizeType -> b) =
     idRC  = do guardMsg (a =~= b) "recast id: types differ"
                idId <- findIdT "id"
                return $ Var idId `App` Type a
-    reprR = tryMeth a "repr"
-    abstR = tryMeth b "abst"
-    tryMeth ty meth = do q <- hasRepMethodF $* ty
-                         f <- q meth
-                         Just (a',b') <- return (splitFunTy_maybe (exprType f))
---                          str <- showPprT $* ((a,b),(a',b'))
---                          _ <- traceR ("tryMeth " ++ meth ++ ", types: " ++ str)
-                         guardMsg (a' =~= a) "recast tryMeth: a' /= a"
-                         guardMsg (b' =~= b) "recast tryMeth: b' /= b"
-                         return f
-    funR = do Just (aDom,aRan) <- return $ splitFunTy_maybe a
-              Just (bDom,bRan) <- return $ splitFunTy_maybe b
-              f <- recastF bDom aDom  -- contravariant
-              h <- recastF aRan bRan  -- covariant
-              glueV <- findIdT "LambdaCCC.Monomorphize.-->"
-              -- return $ 
-              unfoldR $*
+    reprR = do f <- hasRepMethod "repr" $* a
+               Just (a',b') <- return (splitFunTy_maybe (exprType f))
+               guardMsg (a' =~= a) "recast tryMeth: a' /= a"
+               g <- recastF b' b
+               buildCompositionT g f
+    abstR = do g <- hasRepMethod "abst" $* b
+               Just (a',b') <- return (splitFunTy_maybe (exprType g))
+               guardMsg (b' =~= b) "recast tryMeth: b' /= b"
+               f <- recastF a a'
+               buildCompositionT g f
+    funR  = do Just (aDom,aRan) <- return $ splitFunTy_maybe a
+               Just (bDom,bRan) <- return $ splitFunTy_maybe b
+               f <- recastF bDom aDom  -- contravariant
+               h <- recastF aRan bRan  -- covariant
+               glueV <- findIdT "LambdaCCC.Monomorphize.-->"
+               -- return $ 
+               unfoldR $*
                        mkApps (Var glueV)
-                              ([Type aDom,Type aRan,Type bDom,Type bRan, f,h])
+                               ([Type aDom,Type aRan,Type bDom,Type bRan, f,h])
     oopsR = do str <- showPprT $* (a,b)
                _ <- traceR ("recastF unhandled: " ++ str)
                fail "oopsR"
+
+-- To do: Rewrite recastF to work directly from the coercion rather than just
+-- its type, so that we won't have to search.
 
 -- guardMsg' ::  Bool -> String -> TransformH a ()
 -- guardMsg' b msg = unless b (do { _ <- traceR msg ; fail msg})
