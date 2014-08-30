@@ -437,8 +437,8 @@ recastF (regularizeType -> a) (regularizeType -> b) =
                glueV <- findIdT "LambdaCCC.Monomorphize.-->"
                -- return $ 
                unfoldR $*
-                       mkApps (Var glueV)
-                               ([Type aDom,Type aRan,Type bDom,Type bRan, f,h])
+                 mkApps (Var glueV)
+                         ([Type aDom,Type aRan,Type bDom,Type bRan, f,h])
     oopsR = do str <- showPprT $* (a,b)
                _ <- traceR ("recastF unhandled: " ++ str)
                fail "oopsR"
