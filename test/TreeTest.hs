@@ -30,13 +30,14 @@
 
 -- TODO: explicit exports
 
-import Prelude hiding (foldr,sum,product,and,or,zipWith,reverse)
+import Prelude hiding (foldl,foldr,sum,product,and,or,zipWith,reverse)
 
 import Data.Monoid (Monoid(..),Sum,Product)
 import Data.Functor ((<$>))
 import Control.Applicative (Applicative(..),liftA2)
 import Data.Foldable (Foldable(..),sum,product,and,or)
 import Data.Traversable (Traversable(..))
+import Data.Tuple (swap)
 
 -- transformers
 import Data.Functor.Identity
@@ -170,28 +171,80 @@ no .@ mn = transpose ((no $@) <$> transpose mn)
 -- crcStep :: (Traversable t, Zippable t) =>
 --            t Bool -> Bool -> Unop (Bool :* t Bool)
 
--- crcStep poly bit (s0,seg) = shiftL (seg',bit)
+-- crcStep poly bit (s0,seg) = shiftR (seg',bit)
 --  where
 --    seg' = if s0 then zipWith xor poly seg else seg
 
--- crcStep poly bit (s0,seg) = shiftL (tweak seg,bit)
+-- crcStep poly bit (s0,seg) = shiftR (tweak seg,bit)
 --  where
 --    tweak = if s0 then zipWith xor poly else id
 
 -- crcStep poly bit (s0, seg) =
---   shiftL ((if s0 then zipWith xor poly else id) seg, bit)
+--   shiftR ((if s0 then zipWith xor poly else id) seg, bit)
 
 -- crcStep poly bit (s0, seg) =
---   shiftL (if s0 then zipWith xor poly seg else seg, bit)
+--   shiftR (if s0 then zipWith xor poly seg else seg, bit)
 
 -- Oops. The state should be just poly. Also, drop Zippable.
 
 crcStep :: (Traversable poly, Applicative poly) =>
            poly Bool -> poly Bool :* Bool -> poly Bool
-crcStep poly (shiftL -> (b0,seg')) =
-  (if b0 then liftA2 xor poly else id) seg'
+
+-- crcStep poly (shiftR -> (b0,seg')) = (if b0 then liftA2 xor poly else id) seg'
+
+-- crcStep poly (shiftR -> (b0,seg')) = liftA2 tweak poly seg'
+--  where
+--    tweak c a = (b0 && c) `xor` a
+
+#if 0
+   tweak c a
+== if b then (c `xor` a) else a
+== if b then (c `xor` a) else (False `xor` a)
+== (if b then c else False) `xor` a
+== (b && c) `xor` a
+#endif
+
+crcStep poly (shiftR -> (b0,seg')) =
+  liftA2 (\ c a -> (b0 && c) `xor` a) poly seg'
+
+-- crcStep poly (shiftR -> (b0,seg')) = liftA2 tweak poly seg'
+--  where
+--    tweak c a = (b0 && c) `xor` a
+
+crc :: (Traversable poly, Applicative poly, Traversable msg) =>
+       poly Bool -> msg Bool :* poly Bool -> poly Bool
+crc poly = foldlQ (crcStep poly) . shiftRF
+
+-- Equivalently,
+--
+-- crc poly (shiftRF -> (seg',msg')) = foldlQ (crcStep poly) (seg',msg')
+--                                   = foldl (curry (crcStep poly)) seg' msg'
+
+crcEncode :: (Traversable poly, Applicative poly, Traversable msg) =>
+             poly Bool -> msg Bool -> poly Bool
+crcEncode poly msg = crc poly (msg, pure False)
+
+-- | Uncurried variant of 'foldl'
+foldlQ :: Foldable f => (b :* a -> b) -> (b :* f a -> b)
+foldlQ = uncurry . foldl . curry
+
+-- Curried versions (for consideration):
+
+crcStep' :: (Traversable poly, Applicative poly) =>
+            poly Bool -> poly Bool -> Bool -> poly Bool
+crcStep' poly seg b = (if b0 then liftA2 xor poly else id) seg'
+ where
+   (b0,seg') = shiftR (seg,b)
+
+crc' :: (Traversable poly, Applicative poly, Traversable msg) =>
+        poly Bool -> msg Bool -> poly Bool -> poly Bool
+crc' poly msg pad = foldl (crcStep' poly) seg0 msg0
+ where
+   (seg0,msg0) = shiftRF (msg,pad)
+
 
 -- Utilities for constant structures
+
 -- TypeUnary.Vec already defines vec1,...,vec8
 
 rt0 :: a -> RT.Tree N0 a
@@ -205,6 +258,12 @@ rt2 a b c d = RT.B (rt1 a b :# rt1 c d)
 
 rt3 :: a -> a -> a -> a -> a -> a -> a -> a -> RT.Tree N3 a
 rt3 a b c d e f g h = RT.B (rt2 a b c d :# rt2 e f g h)
+
+rt4 :: a -> a -> a -> a -> a -> a -> a -> a
+    -> a -> a -> a -> a -> a -> a -> a -> a
+    -> RT.Tree N4 a
+rt4 a b c d e f g h i j k l m n o p =
+  RT.B (rt3 a b c d e f g h :# rt3 i j k l m n o p)
 
 lt0 :: a -> LT.Tree N0 a
 lt0 = LT.L
@@ -259,10 +318,13 @@ go :: GenBuses a => String -> (a -> b) -> IO ()
 go name f = run name (reifyEP f)
 
 inTest :: String -> IO ()
-inTest cmd = systemSuccess ("cd ../test; " ++ cmd)
+inTest cmd = systemSuccess ("cd ../test; " ++ cmd) -- (I run ghci in ../src)
 
 doit :: IO ()
 doit = inTest "./test"
+
+make :: IO ()
+make = systemSuccess "cd ../..; make"
 
 do1 :: IO ()
 do1 = inTest "hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize DoTreeNoReify.hss"
@@ -306,7 +368,13 @@ main :: IO ()
 
 -- main = go "sum-t2" (sum :: RTree N2 Int -> Int)
 
--- main = go "sum-foldr-t4" (foldr (+) 0 :: RTree N4 Int -> Int)
+-- main = go "sum-foldl-v5" (foldl (+) 0 :: Vec N5 Int -> Int)
+
+-- main = go "sum-foldr-v5" (foldr (+) 0 :: Vec N5 Int -> Int)
+
+-- main = go "sum-foldl-t3" (foldl (+) 0 :: RTree N3 Int -> Int)
+
+-- main = go "sum-foldr-t3" (foldr (+) 0 :: RTree N3 Int -> Int)
 
 -- main = go "sum-t3" (sum :: RTree N3 Int -> Int)
 
@@ -425,32 +493,32 @@ main :: IO ()
 
 -- main = go "composeLin-t232" (uncurry ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int))
 
--- main = go "shiftL-v4" (shiftL :: Vec N4 Bool :* Bool -> Bool :* Vec N4 Bool)
+-- main = go "shiftR-v4" (shiftR :: Vec N4 Bool :* Bool -> Bool :* Vec N4 Bool)
 
--- main = go "shiftL-rt2" (shiftL :: RTree N2 Bool :* Bool -> Bool :* RTree N2 Bool)
+-- main = go "shiftR-rt2" (shiftR :: RTree N2 Bool :* Bool -> Bool :* RTree N2 Bool)
 
--- main = go "shiftR-rt1" (shiftR :: Bool :* RTree N1 Bool -> RTree N1 Bool :* Bool)
+-- main = go "shiftL-rt1" (shiftL :: Bool :* RTree N1 Bool -> RTree N1 Bool :* Bool)
 
--- main = go "shiftLF-v3v2" (shiftLF :: Vec N3 Bool :* Vec N2 Bool -> Vec N2 Bool :* Vec N3 Bool)
+-- main = go "shiftRF-v3v2" (shiftRF :: Vec N3 Bool :* Vec N2 Bool -> Vec N2 Bool :* Vec N3 Bool)
 
--- main = go "shiftLF-v2v3" (shiftLF :: Vec N2 Bool :* Vec N3 Bool -> Vec N3 Bool :* Vec N2 Bool)
+-- main = go "shiftRF-v2v3" (shiftRF :: Vec N2 Bool :* Vec N3 Bool -> Vec N3 Bool :* Vec N2 Bool)
 
--- -- Left-shift in two zeros
--- main = go "shiftLF-v3v2F" (flip (curry shift) (pure False))
+-- -- Shift in two zeros from the right
+-- main = go "shiftRF-v3v2F" (flip (curry shift) (pure False))
 --  where
 --    shift :: Vec N3 Bool :* Vec N2 Bool -> Vec N2 Bool :* Vec N3 Bool
---    shift = shiftLF
+--    shift = shiftRF
 
--- -- Left-shift in three zeros
--- main = go "shiftLF-v2v3F" (flip (curry shift) (pure False))
+-- -- Shift in two zeros from the left
+-- main = go "shiftLF-v2v3F" (curry shift (pure False))
 --  where
 --    shift :: Vec N2 Bool :* Vec N3 Bool -> Vec N3 Bool :* Vec N2 Bool
---    shift = shiftLF
+--    shift = shiftRF
 
--- -- Right-shift in two zeros
--- main = go "shiftRF-v3v2F" (curry shift (pure False))
+-- -- Shift five zeros into a tree from the left
+-- main = go "shiftLF-v5rt4F" (curry shift (pure False))
 --  where
---    shift :: Vec N3 Bool :* Vec N2 Bool -> Vec N2 Bool :* Vec N3 Bool
+--    shift :: Vec N5 Bool :* RTree N4 Bool -> RTree N4 Bool :* Vec N5 Bool
 --    shift = shiftRF
 
 -- main = go "lsumsp-rt2" (lsums' :: Unop (RTree N2 Int))
@@ -516,10 +584,9 @@ main :: IO ()
 
 -- main = go "foo" (\ (a,b) -> if a then b else not b)
 
--- main = go "foo" (\ (a,b) -> if a then b else swap b)
---  where
---    swap :: Unop (Int,Int)
---    swap (p,q) = (q,p)
+-- main = go "foo" (\ (a, (b :: Int :* Int)) -> (if a then id else swap) b)
+
+-- main = go "foo" (\ (a, b::Int, c::Int, d::Int) -> if a then (b,c,d) else (c,d,b))
 
 -- main = go "foo" (\ (a, b :: Vec N2 Bool) -> if a then pure False else b)
 
@@ -529,37 +596,72 @@ main :: IO ()
 
 -- main = go "foo" (\ (a, b :: RTree N2 Bool) -> (if a then reverse else id) b)
 
+-- -- Equivalent to \ a -> (a,not a)
+-- main = go "foo" (\ a -> if a then (True,False) else (False,True))
+
 -- crcStep :: (Traversable poly, Applicative poly) =>
 --            poly Bool -> poly Bool :* Bool -> poly Bool
 
 -- main = go "crcStep-v4" (uncurry (crcStep :: Vec N4 Bool -> Vec N4 Bool :* Bool -> Vec N4 Bool))
 
--- main = go "crcStepK-v4" step
---  where
---    step :: Vec N4 Bool :* Bool -> Vec N4 Bool
---    step = crcStep (vec4 True False False True)
+polyV2 :: Vec N2 Bool
+polyV2 = vec2 True False
+
+polyV3 :: Vec N3 Bool
+polyV3 = vec3 True False True
+
+polyV4 :: Vec N4 Bool
+polyV4 = vec4 True False False True
+
+polyV5 :: Vec N5 Bool
+polyV5 = polyV3 <+> polyV2
+
+-- main = go "crcStepK-v2-noMuxOpt" (crcStep polyV2)
+
+-- main = go "crcStepK-v4" (crcStep polyV4)
 
 -- -- Equivalently,
--- main = go "crcStepK-v4" (crcStep (vec4 True False False True))
+-- main = go "crcStepK-v4" (crcStep polyV4)
 
--- main = go "crcStep-rt2" (uncurry (crcStep :: RTree N2 Bool -> RTree N2 Bool :* Bool -> RTree N2 Bool))
+-- -- Turn off LitSources in Prim when running this example
+-- main = go "crcStepK-v4-noOpt" (crcStep polyV4)
 
--- main = go "crcStepK-rt1" step
---  where
---    step :: RTree N1 Bool :* Bool -> RTree N1 Bool
---    step = crcStep (rt1 True False)
+-- main = go "crcStep-rt4" (uncurry (crcStep :: RTree N4 Bool -> RTree N4 Bool :* Bool -> RTree N4 Bool))
 
--- main = go "crcStepK-rt2" step
---  where
---    step :: RTree N2 Bool :* Bool -> RTree N2 Bool
---    step = crcStep (rt2 True False False True)
+polyRT1 :: RTree N1 Bool
+polyRT1 = rt1 True False
 
-main = go "crcStepK-rt3" step
- where
-   step :: RTree N3 Bool :* Bool -> RTree N3 Bool
-   step = crcStep (rt3 True False False True True False True False)
+polyRT2 :: RTree N2 Bool
+polyRT2 = rt2 True False False True
 
--- main = go "crcStepK-g5" step
---  where
---    step :: Ragged R5 Bool :* Bool -> Ragged R5 Bool
---    step = crcStep (ra5 True False False True False)
+polyRT3 :: RTree N3 Bool
+polyRT3 = rt3 True False False True True False True False
+
+polyRT4 :: RTree N4 Bool
+polyRT4 = rt4 True False False True True False True False
+              False True True False True False True False
+
+-- main = go "crcStepK-rt4" (crcStep polyRT4)
+
+-- main = go "crcStepK-g5" (crcStep (ra5 True False False True False))
+
+-- crc :: (Traversable poly, Applicative poly, Traversable msg) =>
+--        poly Bool -> msg Bool :* poly Bool -> poly Bool
+
+-- main = go "crc-v3v5" (uncurry (crc :: Vec N3 Bool -> Vec N5 Bool :* Vec N3 Bool -> Vec N3 Bool))
+
+-- main = go "crcK-v3v5" (crc polyV3 :: Vec N5 Bool :* Vec N3 Bool -> Vec N3 Bool)
+
+-- main = go "crc-v4rt3" (uncurry (crc :: Vec N4 Bool -> RTree N3 Bool :* Vec N4 Bool -> Vec N4 Bool))
+
+main = go "crc-rt3rt5" (uncurry (crc :: RTree N3 Bool -> RTree N5 Bool :* RTree N3 Bool -> RTree N3 Bool))
+
+-- main = go "crcK-rt2rt4" (crc polyRT2 :: RTree N4 Bool :* RTree N2 Bool -> RTree N2 Bool)
+
+-- main = go "crcK-v5rt4" (crc polyV5 :: RTree N4 Bool :* Vec N5 Bool -> Vec N5 Bool)
+
+-- main = go "crc-encode-v3v5" (uncurry (crcEncode :: Vec N3 Bool -> Vec N5 Bool -> Vec N3 Bool))
+
+-- main = go "crc-encode-v3rt2" (uncurry (crcEncode :: Vec N3 Bool -> RTree N2 Bool -> Vec N3 Bool))
+
+-- main = go "crc-encode-rt3rt5" (uncurry (crcEncode :: RTree N3 Bool -> RTree N5 Bool -> RTree N3 Bool))
