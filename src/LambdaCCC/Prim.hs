@@ -25,7 +25,7 @@
 
 module LambdaCCC.Prim
   ( Lit(..), HasLit(..), litSS
-  , Prim(..),litP,xor, muxB -- ,cond -- ,ifThenElse
+  , Prim(..),litP,xor -- ,cond -- ,ifThenElse
   , primArrow
   ) where
 
