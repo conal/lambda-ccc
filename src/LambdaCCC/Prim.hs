@@ -31,7 +31,7 @@ module LambdaCCC.Prim
 
 #define LitSources
 
-import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
+import Prelude hiding (id,(.),not,and,or,curry,uncurry)
 
 -- import Control.Arrow ((&&&))
 import Data.Constraint (Dict(..))
