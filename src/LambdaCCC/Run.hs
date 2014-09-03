@@ -38,26 +38,29 @@ go name f = run name (reifyEP f)
 -- Run an example: reify, CCC, circuit.
 run :: GenBuses a => String -> EP (a -> b) -> IO ()
 #ifdef ViaTerm
-run str  expr = do print expr
-                   print term
+run str  expr = do 
+--                    print expr
+--                    print term
                    outGV str circ
  where
    term = toCCC' expr
    circ = convertC term
 #else
-run str  e = do print e
-                print (idCT (toCCC' e))
+run str  e = do 
+--                 print e
+--                 print (idCT (toCCC' e))
                 outGV str (toCCC' e)
 
--- Identity on CCC terms
-idCT :: Unop (a :-> b)
-idCT = id
+-- -- Identity on CCC terms
+-- idCT :: Unop (a :-> b)
+-- idCT = id
+
 #endif
 
 -- Diagram and Verilog
 outGV :: GenBuses a => String -> (a :> b) -> IO ()
 outGV s c = do 
                outGWith ("pdf","")      s c
---             outGWith ("svg","")      s c
---             outGWith ("png","-Gdpi=200") s c
+               -- outGWith ("svg","")      s c
+               -- outGWith ("png","-Gdpi=200") s c
                outV                     s c
