@@ -30,7 +30,7 @@ module LambdaCCC.Lambda
   , var#, lamv#, varPat#, asPat#, casev#
   , reifyE, evalE
   , vars, vars2
-  , xor, muxB   -- from Prim  -- TODO: maybe remove
+  , xor   -- from Prim  -- TODO: maybe remove
   , intL
   , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP,reifyOopsEP#
   , reprEP, abstEP
@@ -523,7 +523,7 @@ intL = kLit
 "reify/pair"    reifyEP (,)   = kPrim PairP
 "reify/inl"     reifyEP Left  = kPrim InlP
 "reify/inr"     reifyEP Right = kPrim InrP
-"reify/if"      reifyEP muxB   = kPrim CondBP
+"reify/if"      reifyEP muxB  = kPrim CondBP
 
 "reify/()"      reifyEP ()    = kLit  ()
 "reify/false"   reifyEP False = kLit  False
