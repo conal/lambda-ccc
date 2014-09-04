@@ -29,7 +29,7 @@ module LambdaCCC.Prim
   , primArrow
   ) where
 
-#define LitSources
+-- #define LitSources
 
 import Prelude hiding (id,(.),not,and,or,curry,uncurry)
 

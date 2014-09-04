@@ -190,7 +190,7 @@ no .@ mn = transpose ((no $@) <$> transpose mn)
 crcStep :: (Traversable poly, Applicative poly) =>
            poly Bool -> poly Bool :* Bool -> poly Bool
 
--- crcStep poly (shiftR -> (b0,seg')) = (if b0 then liftA2 xor poly else id) seg'
+crcStep poly (shiftR -> (b0,seg')) = (if b0 then liftA2 xor poly else id) seg'
 
 -- crcStep poly (shiftR -> (b0,seg')) = liftA2 tweak poly seg'
 --  where
@@ -204,8 +204,8 @@ crcStep :: (Traversable poly, Applicative poly) =>
 == (b && c) `xor` a
 #endif
 
-crcStep poly (shiftR -> (b0,seg')) =
-  liftA2 (\ c a -> (b0 && c) `xor` a) poly seg'
+-- crcStep poly (shiftR -> (b0,seg')) =
+--   liftA2 (\ c a -> (b0 && c) `xor` a) poly seg'
 
 -- crcStep poly (shiftR -> (b0,seg')) = liftA2 tweak poly seg'
 --  where
@@ -404,7 +404,7 @@ main :: IO ()
 
 -- main = go "ttranspose-23" (transpose :: MatrixT N2 N3 Int -> MatrixT N3 N2 Int)
 
--- main = go "swap" (\ (a,b) -> (b,a) :: (Int,Bool))
+-- main = go "swap" (swap :: Int :* Bool -> Bool :* Int)
 
 -- main = go "add" (\ (a,b) -> a+b :: Int)
 
@@ -582,7 +582,11 @@ main :: IO ()
 
 -- main = go "add3" (\ (x :: Int) -> x + 3)
 
--- main = go "foo" (\ (a,b) -> if a then b else not b)
+-- main = go "foo" (not . not)
+
+-- main = go "foo" (\ (a,b :: Int) -> if a then b else b)
+
+main = go "foo" (\ (a,b) -> if a then b else not b)
 
 -- main = go "foo" (\ (a, (b :: Int :* Int)) -> (if a then id else swap) b)
 
@@ -602,7 +606,7 @@ main :: IO ()
 -- crcStep :: (Traversable poly, Applicative poly) =>
 --            poly Bool -> poly Bool :* Bool -> poly Bool
 
--- main = go "crcStep-v4" (uncurry (crcStep :: Vec N4 Bool -> Vec N4 Bool :* Bool -> Vec N4 Bool))
+-- main = go "crcStep-v2" (uncurry (crcStep :: Vec N2 Bool -> Vec N2 Bool :* Bool -> Vec N2 Bool))
 
 polyV2 :: Vec N2 Bool
 polyV2 = vec2 True False
@@ -654,7 +658,7 @@ polyRT4 = rt4 True False False True True False True False
 
 -- main = go "crc-v4rt3" (uncurry (crc :: Vec N4 Bool -> RTree N3 Bool :* Vec N4 Bool -> Vec N4 Bool))
 
-main = go "crc-rt3rt5" (uncurry (crc :: RTree N3 Bool -> RTree N5 Bool :* RTree N3 Bool -> RTree N3 Bool))
+-- main = go "crc-rt3rt5" (uncurry (crc :: RTree N3 Bool -> RTree N5 Bool :* RTree N3 Bool -> RTree N3 Bool))
 
 -- main = go "crcK-rt2rt4" (crc polyRT2 :: RTree N4 Bool :* RTree N2 Bool -> RTree N2 Bool)
 
@@ -664,4 +668,4 @@ main = go "crc-rt3rt5" (uncurry (crc :: RTree N3 Bool -> RTree N5 Bool :* RTree 
 
 -- main = go "crc-encode-v3rt2" (uncurry (crcEncode :: Vec N3 Bool -> RTree N2 Bool -> Vec N3 Bool))
 
--- main = go "crc-encode-rt3rt5" (uncurry (crcEncode :: RTree N3 Bool -> RTree N5 Bool -> RTree N3 Bool))
+-- main = go "crc-encode-rt2rt4" (uncurry (crcEncode :: RTree N2 Bool -> RTree N4 Bool -> RTree N2 Bool))
