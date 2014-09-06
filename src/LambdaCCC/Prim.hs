@@ -35,6 +35,7 @@ import Prelude hiding (id,(.),not,and,or,curry,uncurry)
 
 -- import Control.Arrow ((&&&))
 import Data.Constraint (Dict(..))
+import Data.Typeable (Typeable)
 
 import Circat.Category
 import Circat.Classes (BoolCat(not,and,or),MuxCat(..),NumCat(..))
@@ -89,6 +90,11 @@ instance HasLit Int  where toLit = IntL
 
 -- Proofs
 
+litTypeable :: Lit a -> Dict (Typeable a)
+litTypeable (UnitL _) = Dict
+litTypeable (BoolL _) = Dict
+litTypeable (IntL  _) = Dict
+
 litHasShow :: Lit a -> Dict (Show a)
 litHasShow (UnitL _) = Dict
 litHasShow (BoolL _) = Dict
@@ -111,8 +117,8 @@ litGenBuses (IntL  _) = Dict
 
 #define LSo (litGenBuses -> Dict)
 
-litSS :: Lit a -> (Dict (Show a, GenBuses a))
-litSS l | (Dict,Dict) <- (litHasShow l,litGenBuses l) = Dict
+litSS :: Lit a -> (Dict (Typeable a, Show a, GenBuses a))
+litSS l | (Dict,Dict,Dict) <- (litTypeable l, litHasShow l,litGenBuses l) = Dict
 
 #define LS (litSS -> Dict)
 

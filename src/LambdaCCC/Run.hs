@@ -39,6 +39,7 @@ go name f = run name (reifyEP f)
 run :: GenBuses a => String -> EP (a -> b) -> IO ()
 #ifdef ViaTerm
 run str  expr = do 
+                  putStrLn "Generating circuit"
 --                    print expr
 --                    print term
                    outGV str circ
@@ -47,6 +48,7 @@ run str  expr = do
    circ = convertC term
 #else
 run str  e = do 
+                putStrLn "Generating circuit"
 --                 print e
 --                 print (idCT (toCCC' e))
                 outGV str (toCCC' e)

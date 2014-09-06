@@ -67,7 +67,6 @@ Library
 --                     LambdaCCC.ReifyLambda
 --                     LambdaCCC.ToCircuit
 
-
   Other-Modules:
                     LambdaCCC.Tests
 

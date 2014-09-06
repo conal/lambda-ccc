@@ -527,11 +527,13 @@ main :: IO ()
 
 -- main = go "lsums-rt5" (lsums :: RTree N5 Int -> (RTree N5 Int, Int))
 
--- main = go "lsums-lt4" (lsums :: LTree N4 Int -> (LTree N4 Int, Int))
+-- main = go "lsums-lt2" (lsums :: LTree N2 Int -> (LTree N2 Int, Int))
 
 -- main = go "foo" (\ a -> not a)
 
 -- main = go "foo" not
+
+main = go "not-pair" (\ a -> (not a, not a))
 
 -- main = go "and-curried" ((&&) :: Bool -> Bool -> Bool)
 
@@ -553,7 +555,7 @@ main :: IO ()
 
 -- main = go "fmap-gt1" (fmap not :: Unop (Ragged R1 Bool))
 
--- main = go "sum-gt11" (sum :: Ragged R11 Int -> Int)
+-- main = go "sum-gt5" (sum :: Ragged R5 Int -> Int)
 
 -- main = go "sum-gt13p" (sum :: Ragged R13' Int -> Int)
 
@@ -576,7 +578,7 @@ main :: IO ()
 -- Note: some of the scan examples redundantly compute some additions.
 -- I suspect that they're only the same *after* the zero simplifications.
 
--- main = go "lsums-gt5" (lsums' :: Unop (Ragged R5 Int))
+-- main = go "lsumsp-gt11" (lsums' :: Unop (Ragged R11 Int))
 
 -- main = go "foo" (lsums' :: Unop (Ragged R3 Int))
 
@@ -586,11 +588,16 @@ main :: IO ()
 
 -- main = go "foo" (\ (a,b :: Int) -> if a then b else b)
 
-main = go "foo" (\ (a,b) -> if a then b else not b)
+-- main = go "foo" (\ (a,b) -> if a then b else not b)
 
 -- main = go "foo" (\ (a, (b :: Int :* Int)) -> (if a then id else swap) b)
 
 -- main = go "foo" (\ (a, b::Int, c::Int, d::Int) -> if a then (b,c,d) else (c,d,b))
+
+-- main = go "boo" (\ (a,b) -> ( if a then b else False
+--                             , if a then True  else b
+--                             , if a then False else b
+--                             , if a then b else True ))
 
 -- main = go "foo" (\ (a, b :: Vec N2 Bool) -> if a then pure False else b)
 
@@ -606,7 +613,9 @@ main = go "foo" (\ (a,b) -> if a then b else not b)
 -- crcStep :: (Traversable poly, Applicative poly) =>
 --            poly Bool -> poly Bool :* Bool -> poly Bool
 
--- main = go "crcStep-v2" (uncurry (crcStep :: Vec N2 Bool -> Vec N2 Bool :* Bool -> Vec N2 Bool))
+-- main = go "crcStep-v4" (uncurry (crcStep :: Vec N4 Bool -> Vec N4 Bool :* Bool -> Vec N4 Bool))
+
+-- main = go "crcStep-rt3" (uncurry (crcStep :: RTree N3 Bool -> RTree N3 Bool :* Bool -> RTree N3 Bool))
 
 polyV2 :: Vec N2 Bool
 polyV2 = vec2 True False
@@ -620,17 +629,7 @@ polyV4 = vec4 True False False True
 polyV5 :: Vec N5 Bool
 polyV5 = polyV3 <+> polyV2
 
--- main = go "crcStepK-v2-noMuxOpt" (crcStep polyV2)
-
 -- main = go "crcStepK-v4" (crcStep polyV4)
-
--- -- Equivalently,
--- main = go "crcStepK-v4" (crcStep polyV4)
-
--- -- Turn off LitSources in Prim when running this example
--- main = go "crcStepK-v4-noOpt" (crcStep polyV4)
-
--- main = go "crcStep-rt4" (uncurry (crcStep :: RTree N4 Bool -> RTree N4 Bool :* Bool -> RTree N4 Bool))
 
 polyRT1 :: RTree N1 Bool
 polyRT1 = rt1 True False
@@ -645,7 +644,7 @@ polyRT4 :: RTree N4 Bool
 polyRT4 = rt4 True False False True True False True False
               False True True False True False True False
 
--- main = go "crcStepK-rt4" (crcStep polyRT4)
+-- main = go "crcStepK-rt3-unopt" (crcStep polyRT3)
 
 -- main = go "crcStepK-g5" (crcStep (ra5 True False False True False))
 
