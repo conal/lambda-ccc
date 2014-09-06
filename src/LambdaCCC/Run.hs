@@ -26,32 +26,32 @@ import LambdaCCC.Lambda (EP,reifyEP)
 import LambdaCCC.CCC ((:->),convertC)
 import LambdaCCC.ToCCC (toCCC')
 
-import Circat.Circuit (GenBuses,(:>),outGWith)
+import Circat.Circuit (GenBuses,(:>),outGWith,Attrs)
 import Circat.Netlist (outV)
 
 go :: GenBuses a => String -> (a -> b) -> IO ()
-go name f = run name (reifyEP f)
+go name f = run name [] (reifyEP f)
 {-# INLINE go #-}
 
 -- #define ViaTerm
 
 -- Run an example: reify, CCC, circuit.
-run :: GenBuses a => String -> EP (a -> b) -> IO ()
+run :: GenBuses a => String -> Attrs -> EP (a -> b) -> IO ()
 #ifdef ViaTerm
-run str  expr = do 
-                  putStrLn "Generating circuit"
---                    print expr
---                    print term
-                   outGV str circ
+run name attrs expr = do 
+--                          putStrLn "Generating circuit"
+--                          print expr
+--                          print term
+                         outGV name attrs circ
  where
    term = toCCC' expr
    circ = convertC term
 #else
-run str  e = do 
-                putStrLn "Generating circuit"
---                 print e
---                 print (idCT (toCCC' e))
-                outGV str (toCCC' e)
+run name attrs e = do 
+                      putStrLn "Generating circuit"
+--                       print e
+--                       print (idCT (toCCC' e))
+                      outGV name attrs (toCCC' e)
 
 -- -- Identity on CCC terms
 -- idCT :: Unop (a :-> b)
@@ -60,9 +60,9 @@ run str  e = do
 #endif
 
 -- Diagram and Verilog
-outGV :: GenBuses a => String -> (a :> b) -> IO ()
-outGV s c = do 
-               outGWith ("pdf","")      s c
+outGV :: GenBuses a => String -> Attrs -> (a :> b) -> IO ()
+outGV s attrs c = do 
+               outGWith ("pdf","") s attrs c
                -- outGWith ("svg","")      s c
                -- outGWith ("png","-Gdpi=200") s c
                outV                     s c

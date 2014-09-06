@@ -56,7 +56,7 @@ import qualified Circat.RaggedTree as Ra
 import Circat.RaggedTree (TU(..))
 import Circat.Shift
 import Circat.Scan
-import Circat.Circuit (GenBuses,systemSuccess)
+import Circat.Circuit (GenBuses,Attrs,systemSuccess)
 
 -- Strange -- why needed? EP won't resolve otherwise. Bug?
 import qualified LambdaCCC.Lambda
@@ -314,8 +314,11 @@ ra8 a b c d e f g h = Ra.B (ra3 a b c) (ra5 d e f g h)
     Run it
 --------------------------------------------------------------------}
 
+go' :: GenBuses a => String -> Attrs -> (a -> b) -> IO ()
+go' name attrs f = run name attrs (reifyEP f)
+
 go :: GenBuses a => String -> (a -> b) -> IO ()
-go name f = run name (reifyEP f)
+go name f = run name [] (reifyEP f)
 
 inTest :: String -> IO ()
 inTest cmd = systemSuccess ("cd ../test; " ++ cmd) -- (I run ghci in ../src)
@@ -355,6 +358,10 @@ main :: IO ()
 
 -- main = go "plusInt" ((+) :: Int -> Int -> Int)
 -- main = go "or" ((||) :: Bool -> Bool -> Bool)
+
+-- main = go' "pure-rt3" [("ranksep","1")] (\ () -> (pure False :: RTree N3 Bool))
+
+-- main = go "foo" (\ (_ :: RTree N3 Bool) -> False)
 
 -- main = go "sum-p" (sum :: Pair Int -> Int)
 
@@ -533,7 +540,7 @@ main :: IO ()
 
 -- main = go "foo" not
 
-main = go "not-pair" (\ a -> (not a, not a))
+-- main = go "not-pair" (\ a -> (not a, not a))
 
 -- main = go "and-curried" ((&&) :: Bool -> Bool -> Bool)
 

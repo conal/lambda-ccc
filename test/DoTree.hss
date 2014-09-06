@@ -9,8 +9,8 @@ set-pp-type     Omit
 set-pp-coercion Omit
 
 binding-of 'main
-try (any-td (unfold 'go))
-try bash  -- for go unfolding
+-- try (any-td (unfold 'go))
+-- try bash  -- for go unfolding
 down ; try simplifyAll' ; up
 
 any-td reify-prep
