@@ -540,7 +540,7 @@ main :: IO ()
 
 -- main = go "foo" not
 
--- main = go "not-pair" (\ a -> (not a, not a))
+main = go "not-pair" (\ a -> (not a, not a))
 
 -- main = go "and-curried" ((&&) :: Bool -> Bool -> Bool)
 
