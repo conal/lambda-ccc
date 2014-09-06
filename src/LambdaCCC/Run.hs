@@ -48,7 +48,7 @@ run name attrs expr = do
    circ = convertC term
 #else
 run name attrs e = do 
-                      putStrLn "Generating circuit"
+--                       putStrLn "Generating circuit"
 --                       print e
 --                       print (idCT (toCCC' e))
                       outGV name attrs (toCCC' e)
