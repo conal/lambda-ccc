@@ -57,11 +57,11 @@ gpCarry (GenProp g p) cin = g || cin && p  -- consolidate with mappend
 type Adder t = t (Pair Bool) -> t Bool :* Bool
 
 scanAdd :: (Applicative t, LScan t) => Adder t
-scanAdd ps = (liftA2 h ps cs, co)
+scanAdd ps = (liftA2 h gprs cs, co)
  where
    gprs = genProp <$> ps
    (fmap gpGen -> cs, gpGen -> co) = lscan gprs
-   h (a :# b) ci = (a `xor` b) `xor` ci
+   h (GenProp _ p) ci = p `xor` ci
 {-# INLINE scanAdd #-}
 
 type Adder' t = Bool :* t (Pair Bool) -> t Bool :* Bool
