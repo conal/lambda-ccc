@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE TypeOperators, TypeFamilies, ViewPatterns, CPP #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -48,7 +48,11 @@ instance Monoid GenProp where
 
 genProp :: Pair Bool -> GenProp
 genProp (a :# b) = GenProp (a && b) (a `xor` b)
-{-# INLINE genProp #-}
+{-# INLINE gpProp #-}
+
+gpCarry :: GenProp -> Bool -> Bool
+gpCarry (GenProp g p) cin = g || cin && p  -- consolidate with mappend
+{-# INLINE gpCarry #-}
 
 type Adder t = t (Pair Bool) -> t Bool :* Bool
 
@@ -58,6 +62,17 @@ scanAdd ps = (liftA2 h ps cs, co)
    gprs = genProp <$> ps
    (fmap gpGen -> cs, gpGen -> co) = lscan gprs
    h (a :# b) ci = (a `xor` b) `xor` ci
+{-# INLINE scanAdd #-}
+
+type Adder' t = Bool :* t (Pair Bool) -> t Bool :* Bool
+
+scanAdd' :: (Applicative t, LScan t) => Adder' t
+scanAdd' (ci,ps) = (liftA2 h gprs' gprs, gpCarry gpo ci)
+ where
+   gprs = genProp <$> ps
+   (gprs', gpo) = lscan gprs
+   h gpr' (GenProp _ p) = p `xor` gpCarry gpr' ci
+{-# INLINE scanAdd' #-}
 
 gpGen :: GenProp -> Bool
 gpGen (GenProp _ g) = g
