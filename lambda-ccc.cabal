@@ -52,6 +52,8 @@ Library
 --                     LambdaCCC.CoerceEncode
 --                     LambdaCCC.Recastable
                     LambdaCCC.Run
+                    LambdaCCC.Adder
+
 --                     LambdaCCC.Examples.Linear
 -- Phasing out:
 

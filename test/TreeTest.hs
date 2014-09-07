@@ -47,6 +47,7 @@ import TypeUnary.Nat (IsNat)
 import TypeUnary.Vec hiding (transpose)
 
 import LambdaCCC.Misc (Unop,Binop,transpose,(:*))
+import LambdaCCC.Adder
 
 import Circat.Misc (Unop,Reversible(..))
 import Circat.Pair (Pair(..))
@@ -540,7 +541,7 @@ main :: IO ()
 
 -- main = go "foo" not
 
-main = go "not-pair" (\ a -> (not a, not a))
+-- main = go "not-pair" (\ a -> (not a, not a))
 
 -- main = go "and-curried" ((&&) :: Bool -> Bool -> Bool)
 
@@ -675,3 +676,12 @@ polyRT4 = rt4 True False False True True False True False
 -- main = go "crc-encode-v3rt2" (uncurry (crcEncode :: Vec N3 Bool -> RTree N2 Bool -> Vec N3 Bool))
 
 -- main = go "crc-encode-rt2rt4" (uncurry (crcEncode :: RTree N2 Bool -> RTree N4 Bool -> RTree N2 Bool))
+
+-- Scan Adders
+
+-- main = go "mappend-gpr" (uncurry (mappend :: Binop GenProp))
+
+main = go "adder-rt2" (scanAdd :: Adder (RTree N2))
+
+-- main = go "foo" (\ ((gy,py),(gx,px)) -> (gx || gy && px, px && py))
+
