@@ -26,7 +26,7 @@ import LambdaCCC.Lambda (EP,reifyEP)
 import LambdaCCC.CCC ((:->),convertC)
 import LambdaCCC.ToCCC (toCCC')
 
-import Circat.Circuit (GenBuses,(:>),outGWith,Attrs)
+import Circat.Circuit (GenBuses,(:>),outGWith,Attr)
 import Circat.Netlist (outV)
 
 go :: GenBuses a => String -> (a -> b) -> IO ()
@@ -36,7 +36,7 @@ go name f = run name [] (reifyEP f)
 -- #define ViaTerm
 
 -- Run an example: reify, CCC, circuit.
-run :: GenBuses a => String -> Attrs -> EP (a -> b) -> IO ()
+run :: GenBuses a => String -> [Attr] -> EP (a -> b) -> IO ()
 #ifdef ViaTerm
 run name attrs expr = do 
 --                          putStrLn "Generating circuit"
@@ -60,7 +60,7 @@ run name attrs e = do
 #endif
 
 -- Diagram and Verilog
-outGV :: GenBuses a => String -> Attrs -> (a :> b) -> IO ()
+outGV :: GenBuses a => String -> [Attr] -> (a :> b) -> IO ()
 outGV s attrs c = do 
                outGWith ("pdf","") s attrs c
                -- outGWith ("svg","")      s c
