@@ -18,7 +18,6 @@
 
 module LambdaCCC.Misc
   ( module Circat.Misc
-  , transpose
   , Eq'(..), (==?)
   , Eq1'(..), (===?)
   , Evalable(..)
@@ -31,13 +30,6 @@ import Unsafe.Coerce (unsafeCoerce)     -- see below
 import Data.Proof.EQ ((:=:)(..))
 
 import Circat.Misc
-
-{--------------------------------------------------------------------
-    Misc
---------------------------------------------------------------------}
-
-transpose :: (Traversable t, Applicative f) => t (f a) -> f (t a)
-transpose = sequenceA
 
 {--------------------------------------------------------------------
     Transformations
