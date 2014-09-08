@@ -57,7 +57,7 @@ import qualified Circat.RaggedTree as Ra
 import Circat.RaggedTree (TU(..))
 import Circat.Shift
 import Circat.Scan
-import Circat.Circuit (GenBuses,Attrs,systemSuccess)
+import Circat.Circuit (GenBuses,Attr,systemSuccess)
 
 -- Strange -- why needed? EP won't resolve otherwise. Bug?
 import qualified LambdaCCC.Lambda
@@ -146,9 +146,9 @@ productA = getProductA . foldMap ProductA
 dota :: (Foldable g, Foldable f, Applicative f, Num a) => g (f a) -> a
 dota = sum . productA
 
-type Matrix m n a = Vec n (Vec m a)
-
-type MatrixT m n a = RTree n (RTree m a)
+type Matrix  m n a = Vec    n (Vec    m a)
+type MatrixT m n a = RTree  n (RTree  m a)
+type MatrixG p q a = Ragged q (Ragged p a)
 
 infixr 1 $@
 -- infixl 9 .@
@@ -243,79 +243,11 @@ crc' poly msg pad = foldl (crcStep' poly) seg0 msg0
  where
    (seg0,msg0) = shiftRF (msg,pad)
 
-
--- Utilities for constant structures
-
--- TypeUnary.Vec already defines vec1,...,vec8
-
-rt0 :: a -> RT.Tree N0 a
-rt0 = RT.L
-
-rt1 :: a -> a -> RT.Tree N1 a
-rt1 a b = RT.B (rt0 a :# rt0 b)
-
-rt2 :: a -> a -> a -> a -> RT.Tree N2 a
-rt2 a b c d = RT.B (rt1 a b :# rt1 c d)
-
-rt3 :: a -> a -> a -> a -> a -> a -> a -> a -> RT.Tree N3 a
-rt3 a b c d e f g h = RT.B (rt2 a b c d :# rt2 e f g h)
-
-rt4 :: a -> a -> a -> a -> a -> a -> a -> a
-    -> a -> a -> a -> a -> a -> a -> a -> a
-    -> RT.Tree N4 a
-rt4 a b c d e f g h i j k l m n o p =
-  RT.B (rt3 a b c d e f g h :# rt3 i j k l m n o p)
-
-lt0 :: a -> LT.Tree N0 a
-lt0 = LT.L
-
-lt1 :: a -> a -> LT.Tree N1 a
-lt1 a b = LT.B (lt0 (a :# b))
-
-lt2 :: a -> a -> a -> a -> LT.Tree N2 a
-lt2 a b c d = LT.B (lt1 (a :# b) (c :# d))
-
-lt3 :: a -> a -> a -> a -> a -> a -> a -> a -> LT.Tree N3 a
-lt3 a b c d e f g h = LT.B (lt2 (a :# b) (c :# d) (e :# f) (g :# h))
-
--- Ragged trees
-
-type MatrixG p q a = Ragged q (Ragged p a)
-
-type R1  = LU
-type R2  = BU R1 R1
-type R3  = BU R2 R1
-type R4  = BU R2 R2
-type R5  = BU R3 R2
-type R8  = BU R3 R5
-type R11 = BU R8 R5
-
-type R8'  = BU R4  R4
-type R13' = BU R8' R3
-
-ra1 :: a -> Ra.Tree R1 a
-ra1 a = Ra.L a
-
-ra2 :: a -> a -> Ra.Tree R2 a
-ra2 a b = Ra.B (ra1 a) (ra1 b)
-
-ra3 :: a -> a -> a -> Ra.Tree R3 a
-ra3 a b c = Ra.B (ra2 a b) (ra1 c)
-
-ra4 :: a -> a -> a -> a -> Ra.Tree R4 a
-ra4 a b c d = Ra.B (ra2 a b) (ra2 c d)
-
-ra5 :: a -> a -> a -> a -> a -> Ra.Tree R5 a
-ra5 a b c d e = Ra.B (ra3 a b c) (ra2 d e)
-
-ra8 :: a -> a -> a -> a -> a -> a -> a -> a -> Ra.Tree R8 a
-ra8 a b c d e f g h = Ra.B (ra3 a b c) (ra5 d e f g h)
-
 {--------------------------------------------------------------------
     Run it
 --------------------------------------------------------------------}
 
-go' :: GenBuses a => String -> Attrs -> (a -> b) -> IO ()
+go' :: GenBuses a => String -> [Attr] -> (a -> b) -> IO ()
 go' name attrs f = run name attrs (reifyEP f)
 
 go :: GenBuses a => String -> (a -> b) -> IO ()
@@ -360,7 +292,10 @@ main :: IO ()
 -- main = go "plusInt" ((+) :: Int -> Int -> Int)
 -- main = go "or" ((||) :: Bool -> Bool -> Bool)
 
--- main = go' "pure-rt3" [("ranksep","1")] (\ () -> (pure False :: RTree N3 Bool))
+ranksep :: Double -> Attr
+ranksep n = ("ranksep",show n)
+
+-- main = go' "pure-rt3" [ranksep 1] (\ () -> (pure False :: RTree N3 Bool))
 
 -- main = go "foo" (\ (_ :: RTree N3 Bool) -> False)
 
@@ -640,17 +575,17 @@ polyV5 = polyV3 <+> polyV2
 -- main = go "crcStepK-v4" (crcStep polyV4)
 
 polyRT1 :: RTree N1 Bool
-polyRT1 = rt1 True False
+polyRT1 = RT.tree1 True False
 
 polyRT2 :: RTree N2 Bool
-polyRT2 = rt2 True False False True
+polyRT2 = RT.tree2 True False False True
 
 polyRT3 :: RTree N3 Bool
-polyRT3 = rt3 True False False True True False True False
+polyRT3 = RT.tree3 True False False True True False True False
 
 polyRT4 :: RTree N4 Bool
-polyRT4 = rt4 True False False True True False True False
-              False True True False True False True False
+polyRT4 = RT.tree4 True False False True True False True False
+                   False True True False True False True False
 
 -- main = go "crcStepK-rt3-unopt" (crcStep polyRT3)
 
@@ -677,11 +612,36 @@ polyRT4 = rt4 True False False True True False True False
 
 -- main = go "crc-encode-rt2rt4" (uncurry (crcEncode :: RTree N2 Bool -> RTree N4 Bool -> RTree N2 Bool))
 
--- Scan Adders
+-- Simple carry-propagate adder
+
+-- main = go "halfAdd" halfAdd
+
+-- main = go "add1" add1
+
+-- main = go "add1p" add1'
+
+-- main = go "adder-state-v2" (adderState :: Adder' (Vec N2))
+
+-- main = go "adder-state-rt4" (adderState :: Adder' (RTree N4))
+
+-- -- GHC panic: "tcTyVarDetails b{tv ah8Z} [tv]"
+-- main = go "adder-state-trie-v2" (adderStateTrie :: Adder' (Vec N2))
+
+-- main = go "adder-accuml-v8" (adderAccumL :: Adder' (Vec N8))
+
+-- main = go "adder-accuml-rt5" (adderAccumL :: Adder' (RTree N5))
+
+-- Monoidal scan adders
 
 -- main = go "mappend-gpr" (uncurry (mappend :: Binop GenProp))
 
-main = go "adder-rt2" (scanAdd :: Adder (RTree N2))
+-- -- Ranksep: rt2=0.5, rt3=0.75, rt4=1.5,rt5=2
+-- main = go' "adder-scan-rt5" [ranksep 2] (scanAdd :: Adder (RTree N5))
 
--- main = go "foo" (\ ((gy,py),(gx,px)) -> (gx || gy && px, px && py))
+-- -- Ranksep: rt2=0.5, rt3=1, rt4=2, rt5=3
+-- main = go' "adder-scanp-rt5" [ranksep 3] (scanAdd' :: Adder' (RTree N5))
 
+-- -- Ranksep: rt2=0.5, rt3=0.75, rt4=1.5,rt5=2
+-- main = go' "adder-scanpp-rt1-unopt" [ranksep 0.5] (scanAdd :: Adder (RTree N1))
+
+main = go "foo" (\ ((gx,px),(gy,py)) -> (gx || gy && px, px && py))
