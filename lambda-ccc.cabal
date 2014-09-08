@@ -27,6 +27,7 @@ Library
                   , ghc >= 7.6
                   , ghc-prim
                   , transformers
+                  , mtl
                   , containers
                   , constraints
                   , kure >= 2.16.0
@@ -35,6 +36,7 @@ Library
                   , type-unary >= 0.2.16
                   , circat >= 0.3
                   , hermit-extras >= 0.2
+                  , MemoTrie
 
 --                  , type-encode
 
@@ -52,6 +54,7 @@ Library
 --                     LambdaCCC.CoerceEncode
 --                     LambdaCCC.Recastable
                     LambdaCCC.Run
+                    LambdaCCC.StateTrie
                     LambdaCCC.Adder
 
 --                     LambdaCCC.Examples.Linear
