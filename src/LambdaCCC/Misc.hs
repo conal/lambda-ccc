@@ -23,8 +23,6 @@ module LambdaCCC.Misc
   , Evalable(..)
   ) where
 
-import Control.Applicative (Applicative)
-import Data.Traversable (Traversable(sequenceA))
 import Unsafe.Coerce (unsafeCoerce)     -- see below
 
 import Data.Proof.EQ ((:=:)(..))
