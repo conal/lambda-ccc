@@ -122,13 +122,7 @@ adderAccumL = accumL add1
 --------------------------------------------------------------------}
 
 -- | Generate and propagate carries
-data GenProp = GenProp Bool Bool 
-
-gpGen :: GenProp -> Bool
-gpGen (GenProp _ g) = g
-
-gpProp :: GenProp -> Bool
-gpProp (GenProp p _) = p
+data GenProp = GenProp { gpGen :: Bool, gpProp :: Bool }
 
 type instance Rep GenProp = Bool :* Bool
 instance HasRep GenProp where
@@ -140,37 +134,45 @@ instance Monoid GenProp where
   mempty = GenProp False True
   GenProp gy py `mappend` GenProp gx px =
     GenProp (gx || gy && px) (px && py)
-  {-# INLINE mempty #-}
-  {-# INLINE mappend #-}
+  -- {-# INLINE mempty #-}
+  -- {-# INLINE mappend #-}
 
 genProp :: Pair Bool -> GenProp
 genProp (a :# b) = GenProp (a && b) (a `xor` b)
-{-# INLINE gpProp #-}
+-- {-# INLINE genProp #-}
 
 gpCarry :: GenProp -> Bool -> Bool
 gpCarry (GenProp g p) cin = g || cin && p -- TODO: consolidate with mappend
-{-# INLINE gpCarry #-}
+-- {-# INLINE gpCarry #-}
 
 scanAdd :: (Applicative t, LScan t) => Adder t
 scanAdd ts = (liftA2 h gprs cs, co)
  where
    gprs = genProp <$> ts
-   (mapl gpGen -> (cs,co)) = lscan gprs
+   (cs,co) = gpGen <*$> lscan gprs
    h (GenProp _ p) ci = p `xor` ci
-{-# INLINE scanAdd #-}
+-- {-# INLINE scanAdd #-}
+
+-- Just for testing
+scanGPs :: (Applicative t, LScan t) => t (Pair Bool) -> t GenProp :* GenProp
+scanGPs ts = lscan (genProp <$> ts)
+-- {-# INLINE scanGPs #-}
 
 scanAdd' :: (Applicative t, LScan t) => Adder' t
 scanAdd' (ci0,ts) = (liftA2 h gprs cs, co)
  where
    gprs = genProp <$> ts
-   (mapl (flip gpCarry ci0) -> (cs,co)) = lscan gprs
+   (cs,co) = flip gpCarry ci0 <*$> lscan gprs
    h (GenProp _ p) ci = p `xor` ci
-{-# INLINE scanAdd' #-}
+-- {-# INLINE scanAdd' #-}
 
 -- scanAdd via scanAdd'
 scanAdd'' :: (Applicative t, LScan t) => Adder t
-scanAdd'' = scanAdd' . (False,)
+scanAdd'' = carryIn False scanAdd'
 
+-- carryIn :: Bool -> Adder' t -> Adder t
+carryIn :: c -> (c :* a -> b) -> a -> b
+carryIn cin f = f . (cin,)
 
 instance GenBuses GenProp where genBuses' = genBusesRep'
 
