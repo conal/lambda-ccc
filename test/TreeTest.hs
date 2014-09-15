@@ -115,6 +115,10 @@ squares = fmap square
 squares' :: (Functor f, Num a) => f a -> f a
 squares' = fmap (^ (2 :: Int))
 
+{--------------------------------------------------------------------
+    Dot products
+--------------------------------------------------------------------}
+
 dot' :: (Applicative f, Foldable f, Num a) => f a -> f a -> a
 dot' as bs = sum (prodA as bs)
 
@@ -146,6 +150,10 @@ productA = getProductA . foldMap ProductA
 dota :: (Foldable g, Foldable f, Applicative f, Num a) => g (f a) -> a
 dota = sum . productA
 
+{--------------------------------------------------------------------
+    Generalized matrices
+--------------------------------------------------------------------}
+
 type Matrix  m n a = Vec    n (Vec    m a)
 type MatrixT m n a = RTree  n (RTree  m a)
 type MatrixG p q a = Ragged q (Ragged p a)
@@ -167,7 +175,9 @@ mat $@ vec = (`dot'` vec) <$> mat
         o (n a) -> n (m a) -> o (m a)
 no .@ mn = transpose ((no $@) <$> transpose mn)
 
----- CRC
+{--------------------------------------------------------------------
+    CRC
+--------------------------------------------------------------------}
 
 -- crcStep :: (Traversable t, Zippable t) =>
 --            t Bool -> Bool -> Unop (Bool :* t Bool)
@@ -242,6 +252,52 @@ crc' :: (Traversable poly, Applicative poly, Traversable msg) =>
 crc' poly msg pad = foldl (crcStep' poly) seg0 msg0
  where
    (seg0,msg0) = shiftRF (msg,pad)
+
+{--------------------------------------------------------------------
+    Permutations
+--------------------------------------------------------------------}
+
+invertR :: IsNat n => RTree n a -> LTree n a
+invertR = invertR' nat
+
+invertR' :: Nat n -> RTree n a -> LTree n a
+invertR' Zero     = \ (RT.L a ) -> LT.L a
+invertR' (Succ m) = \ (RT.B ts) -> LT.B (invertR' m (transpose ts))
+-- invertR' (Succ m) = \ (RT.B ts) -> LT.B (transpose (invertR' m <$> ts))
+
+#if 0
+RT.unB    :: RTree (S n)   a  -> Pair (RTree n a)
+transpose :: Pair (RTree n a) -> RTree n (Pair a)
+invertR   :: RTree n (Pair a) -> LTree n (Pair a)
+LT.B      :: LTree n (Pair a) -> LTree (S n)   a
+
+RT.unB       :: RTree (S n)   a  -> Pair (RTree n a)
+fmap invertR :: Pair (RTree n a) -> Pair (LTree n a)
+transpose    :: Pair (LTree n a) -> LTree n (Pair a)
+LT.B         :: LTree n (Pair a) -> LTree (S n)   a
+#endif
+
+-- We needed the IsNat n for Applicative on RTree n.
+-- The reverse transformation is easier, since we know Pair is Applicative.
+
+invertL :: LTree n a -> RTree n a
+invertL (LT.L a ) = RT.L a
+invertL (LT.B ts) = RT.B (transpose (invertL ts))
+-- invertL (LT.B ts) = RT.B (invertL <$> transpose ts)
+
+-- invertR' (Succ m) = \ (RT.B ts) -> LT.B (transpose (invertR' m <$> ts))
+
+#if 0
+LT.unB    :: LTree (S n)   a  -> LTree n (Pair a)
+invertL   :: LTree n (Pair a) -> RTree n (Pair a)
+transpose :: RTree n (Pair a) -> Pair (RTree n a)
+RT.B      :: Pair (RTree n a) -> RTree (S n)   a
+
+LT.unB       :: LTree (S n)   a  -> LTree n (Pair a)
+transpose    :: LTree n (Pair a) -> Pair (LTree n a)
+fmap invertL :: Pair (LTree n a) -> Pair (RTree n a)
+RT.B         :: Pair (RTree n a) -> RTree (S n)   a
+#endif
 
 {--------------------------------------------------------------------
     Run it
@@ -337,9 +393,16 @@ ranksep n = ("ranksep",show n)
 
 -- main = go "test" (dot :: RTree N4 (Int,Int) -> Int)
 
--- main = go "transpose-pt4" (transpose :: Pair (RTree N4 Int) -> RTree N4 (Pair Int))
+-- -- Ranksep: rt1=0.5, rt2=1, rt3=2, rt4=4,rt5=8
+-- main = go' "transpose-pt5" [ranksep 8] (transpose :: Pair (RTree N5 Bool) -> RTree N5 (Pair Bool))
 
--- main = go "transpose-t4p" (transpose :: RTree N4 (Pair Int) -> Pair (RTree N4 Int))
+-- Ranksep: rt1=1, rt2=2, rt3=4, rt4=8, rt5=16
+main = go' "transpose-v3t5" [ranksep 16] (transpose :: Vec N3 (RTree N5 Bool) -> RTree N5 (Vec N3 Bool))
+
+-- -- Ranksep: rt1=0.5, rt2=1, rt3=2, rt4=4, rt5=8
+-- main = go' "invertR-5" [ranksep 8] (invertR :: RTree N5 Bool -> LTree N5 Bool)
+
+-- main = go "transpose-t4p" (transpose :: RTree N4 (Pair Bool) -> Pair (RTree N4 Bool))
 
 -- main = go "vtranspose-34" (transpose :: Matrix N3 N4 Int -> Matrix N4 N3 Int)
 
@@ -521,9 +584,9 @@ ranksep n = ("ranksep",show n)
 -- Note: some of the scan examples redundantly compute some additions.
 -- I suspect that they're only the same *after* the zero simplifications.
 
--- main = go "lsumsp-gt11" (lsums' :: Unop (Ragged R11 Int))
+-- main = go "lsumsp-gt3" (lsums' :: Unop (Ragged Ra.R3 Int))
 
--- main = go "foo" (lsums' :: Unop (Ragged R3 Int))
+-- main = go "foo" (lsums' :: Unop (Ragged Ra.R3 Int))
 
 -- main = go "add3" (\ (x :: Int) -> x + 3)
 
@@ -618,30 +681,54 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go "add1" add1
 
+-- main = go "add1-0" (carryIn False add1)
+
 -- main = go "add1p" add1'
 
--- main = go "adder-state-v2" (adderState :: Adder' (Vec N2))
+-- main = go "adder-state-v3" (adderState :: Adder' (Vec N3))
 
--- main = go "adder-state-rt4" (adderState :: Adder' (RTree N4))
+-- main = go "adder-state-rt3" (adderState :: Adder' (RTree N3))
+
+-- main = go "adder-state-0-v1" (carryIn False adderState :: Adder (Vec N1))
+
+-- main = go "adder-state-0-rt0" (carryIn False adderState :: Adder (RTree N0))
 
 -- -- GHC panic: "tcTyVarDetails b{tv ah8Z} [tv]"
 -- main = go "adder-state-trie-v2" (adderStateTrie :: Adder' (Vec N2))
 
--- main = go "adder-accuml-v8" (adderAccumL :: Adder' (Vec N8))
+-- main = go "adder-accuml-v3" (adderAccumL :: Adder' (Vec N3))
 
 -- main = go "adder-accuml-rt5" (adderAccumL :: Adder' (RTree N5))
 
 -- Monoidal scan adders
 
+-- main = go "gpCarry" (uncurry gpCarry)
+
 -- main = go "mappend-gpr" (uncurry (mappend :: Binop GenProp))
 
--- -- Ranksep: rt2=0.5, rt3=0.75, rt4=1.5,rt5=2
+-- main = go "gprs-pair" (fmap genProp :: Pair (Pair Bool) -> Pair GenProp)
+
+-- main = go "scan-gpr-pair" (scanGPs :: Pair (Pair Bool) -> Pair GenProp :* GenProp)
+
+-- main = go "adder-scan-pair" (scanAdd :: Adder Pair)
+
+-- main = go "adder-scanp-pair" (scanAdd' :: Adder' Pair)
+
+-- main = go "adder-scanpp-pair" (scanAdd'' :: Adder Pair)
+
+-- -- Ranksep: rt1=0.5, rt2=0.5, rt3=0.75, rt4=1.5,rt5=2
+-- main = go' "adder-scan-noinline-rt2" [ranksep 0.5] (scanAdd :: Adder (RTree N2))
+
+-- -- Ranksep: rt1=0.5, rt2=0.5, rt3=0.75, rt4=1.5,rt5=2
 -- main = go' "adder-scan-rt5" [ranksep 2] (scanAdd :: Adder (RTree N5))
 
+-- -- Ranksep: rt2=0.5, rt3=0.75, rt4=1.5,rt5=2
+-- main = go' "adder-scan-unopt-rt0" [ranksep 0.5] (scanAdd :: Adder (RTree N0))
+
 -- -- Ranksep: rt2=0.5, rt3=1, rt4=2, rt5=3
--- main = go' "adder-scanp-rt5" [ranksep 3] (scanAdd' :: Adder' (RTree N5))
+-- main = go' "adder-scanp-rt3" [ranksep 1] (scanAdd' :: Adder' (RTree N3))
 
 -- -- Ranksep: rt2=0.5, rt3=0.75, rt4=1.5,rt5=2
--- main = go' "adder-scanpp-rt1-unopt" [ranksep 0.5] (scanAdd :: Adder (RTree N1))
+-- main = go' "adder-scanpp-rt1" [ranksep 0.5] (scanAdd'' :: Adder (RTree N1))
 
-main = go "foo" (\ ((gx,px),(gy,py)) -> (gx || gy && px, px && py))
+-- main = go "foo" (\ ((gx,px),(gy,py)) -> (gx || gy && px, px && py))
