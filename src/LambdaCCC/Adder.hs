@@ -26,7 +26,7 @@ import Prelude hiding (mapM)
 
 import Data.Monoid (Monoid(..))
 import Control.Applicative (Applicative,liftA2,(<$>))
-import Data.Traversable (Traversable,mapM)
+import Data.Traversable (Traversable(..))
 
 -- import Control.Monad.Trans.State
 import Control.Monad.State (MonadState(..),runState) -- mtl
@@ -54,6 +54,10 @@ type Adder t = t (Pair Bool) -> t Bool :* Bool
 
 type Adder' t = Bool :* t (Pair Bool) -> t Bool :* Bool
 
+-- NOTE: the INLINE pragmas below preserve the original definitions for
+-- inlining. Otherwise, we sometimes get the GHC-optimized versions, in which
+-- operations like 'not', '(&&)', and '(||)' have been inlined to conditionals.
+
 {--------------------------------------------------------------------
     One-bit adders
 --------------------------------------------------------------------}
@@ -70,10 +74,11 @@ add1 (ci, a :# b) = (s,co)
    co = (a && b) || (ci && q)
 {-# INLINE add1 #-}
 
+-- Equivalently,
 add1' :: Bool :* Pair Bool -> Bool :* Bool
-add1' (ci, a :# b) = (s',co || co')
+add1' (ci, ab) = (s',co || co')
  where
-   (s ,co ) = halfAdd (a :# b)
+   (s ,co ) = halfAdd ab
    (s',co') = halfAdd (s :# ci)
 {-# INLINE add1' #-}
 
@@ -116,6 +121,10 @@ adderStateTrie = adderSt runStateTrie
 
 adderAccumL :: Traversable t => Adder' t
 adderAccumL = accumL add1
+{-# INLINE adderAccumL #-}
+
+-- Operationally (and denotationally) equivalent to adderState, unsurprisingly,
+-- since they both use State.
 
 {--------------------------------------------------------------------
     Scan-based
@@ -142,7 +151,7 @@ genProp (a :# b) = GenProp (a && b) (a `xor` b)
 -- {-# INLINE genProp #-}
 
 gpCarry :: GenProp -> Bool -> Bool
-gpCarry (GenProp g p) cin = g || cin && p -- TODO: consolidate with mappend
+gpCarry (GenProp g p) cin = g || p && cin -- TODO: consolidate with mappend
 -- {-# INLINE gpCarry #-}
 
 scanAdd :: (Applicative t, LScan t) => Adder t
@@ -165,6 +174,9 @@ scanAdd' (ci0,ts) = (liftA2 h gprs cs, co)
    (cs,co) = flip gpCarry ci0 <*$> lscan gprs
    h (GenProp _ p) ci = p `xor` ci
 -- {-# INLINE scanAdd' #-}
+
+-- TODO: perhaps define a variant of lscan that takes an initial and tweaks all
+-- values accordingly.
 
 -- scanAdd via scanAdd'
 scanAdd'' :: (Applicative t, LScan t) => Adder t
