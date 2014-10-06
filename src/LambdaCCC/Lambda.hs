@@ -35,7 +35,7 @@ module LambdaCCC.Lambda
   , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP,reifyOopsEP#
   , reprEP, abstEP
   -- , coerceEP
-  , evalEP, reifyEP, kPrimEP, kLit, oops
+  , evalEP, reifyEP, kPrimEP, kLit -- , oops
   ) where
 
 import Data.Functor ((<$>))
@@ -64,7 +64,7 @@ import Circat.Category (Rep,HasRep(..),RepCat(..))
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
 import LambdaCCC.ShowUtils
-import LambdaCCC.Prim
+-- import LambdaCCC.Prim
 
 -- Whether to sugar during show, including 'let'
 #define Sugared
@@ -695,8 +695,8 @@ reifyEP = reifyE
 kPrimEP :: Prim a -> EP a
 kPrimEP = kPrim
 
-oops :: EP a
-oops = kPrim OopsP
+-- oops :: EP a
+-- oops = kPrim OopsP
 
 reifyOopsEP# :: Addr# -> EP a
 reifyOopsEP# = reifyOops#
