@@ -283,6 +283,9 @@ instance RepCat (:->) where
   reprC = prim ReprP
   abstC = prim AbstP
 
+instance BottomCat (:->) where
+  bottom = prim OopsP
+
 {--------------------------------------------------------------------
     Factoring (decomposition)
 --------------------------------------------------------------------}
