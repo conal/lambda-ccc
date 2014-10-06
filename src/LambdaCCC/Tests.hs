@@ -20,11 +20,11 @@ module LambdaCCC.Tests where
 import Prelude hiding (id,(.),curry,uncurry,not)
 
 import LambdaCCC.Misc
-import LambdaCCC.Prim
 import LambdaCCC.Lambda
 import LambdaCCC.CCC
 import LambdaCCC.ToCCC
 
+import Circat.Prim
 import Circat.Category
 import Circat.Classes
 

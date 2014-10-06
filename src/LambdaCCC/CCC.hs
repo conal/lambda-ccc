@@ -46,12 +46,12 @@ import Data.Proof.EQ
 import LambdaCCC.Misc (Unop,Evalable(..),Unit,(:*),(:+),(:=>),Eq'(..),(==?))
 import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 -- import LambdaCCC.Ty
-import LambdaCCC.Prim (Prim(..),Lit(..),primArrow) -- ,cond,ifThenElse
 
 -- import TypeEncode.Encode (EncodeCat(..))
 
 import Circat.Category
 import Circat.Classes
+import Circat.Prim (Prim(..),Lit(..),primArrow) -- ,cond,ifThenElse
 
 infix  0 :->
 
@@ -360,10 +360,10 @@ primUnc :: Prim (a :=> b :=> c) -> (a :* b :-> c)
 primUnc = uncurry . prim
 
 instance BoolCat (:->) where
-  not = prim NotP
-  xor = uncurry (prim XorP)
-  and = uncurry (prim AndP)
-  or  = uncurry (prim OrP)
+  notC = prim NotP
+  xorC = uncurry (prim XorP)
+  andC = uncurry (prim AndP)
+  orC  = uncurry (prim OrP)
 
 -- etc.
 

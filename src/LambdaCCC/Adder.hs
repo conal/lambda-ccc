@@ -46,8 +46,9 @@ import Circat.Pair
 import Circat.Shift (accumL)
 import Circat.Circuit (GenBuses(..),genBusesRep')
 
+import Circat.Misc (xor)
+
 import LambdaCCC.Misc ((:*))
-import LambdaCCC.Prim (xor)
 import LambdaCCC.StateTrie
 
 type Adder t = t (Pair Bool) -> t Bool :* Bool
