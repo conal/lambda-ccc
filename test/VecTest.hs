@@ -37,7 +37,7 @@ import TypeUnary.Vec
 import qualified LambdaCCC.Lambda
 import LambdaCCC.Lambda (EP,reifyEP)
 
-import LambdaCCC.Prim (Prim(VecSP))
+import Circat.Prim (Prim(VecSP))
 import LambdaCCC.Misc (Unop)
 
 import Circat.Misc ((:*))

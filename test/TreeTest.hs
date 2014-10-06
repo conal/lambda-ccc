@@ -329,7 +329,7 @@ do2 = inTest "hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize DoTree.hss"
 -- Only works when compiled with HERMIT
 main :: IO ()
 
--- main = go "map-not-v1" (fmap not :: Vec N1 Bool -> Vec N1 Bool)
+main = go "map-not-v3" (fmap not :: Vec N3 Bool -> Vec N3 Bool)
 
 -- main = go "map-square-v5" (fmap square :: Vec N5 Int -> Vec N5 Int)
 
@@ -771,6 +771,6 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go "foo" (\ (a,v :: RTree N2 Bool) -> if a then v else v)
 
-main = go "foo" (\ (a,v :: Maybe Int) -> if a then v else v)
+-- main = go "foo" (\ (a,v :: Maybe Int) -> if a then v else v)
 
 -- main = undefined (reifyEP (fromMaybe :: Int -> Maybe Int -> Int))

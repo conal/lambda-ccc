@@ -67,7 +67,7 @@ import HERMIT.Dictionary.Unfold (cleanupUnfoldR) -- unfoldNameR,
 
 import LambdaCCC.Misc (Unop) -- ,Binop
 -- import qualified LambdaCCC.Ty as T
--- import qualified LambdaCCC.Prim as P
+-- import qualified Circat.Prim as P
 -- import qualified LambdaCCC.Lambda as E
 -- import LambdaCCC.MkStringExpr (mkStringExpr)
 

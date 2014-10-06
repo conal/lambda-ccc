@@ -25,7 +25,7 @@ module LambdaCCC.ToCircuit
 import Prelude hiding (id,(.),curry,uncurry)
 import Data.Constraint (Dict(..))
 
-import LambdaCCC.Prim hiding (xor)
+import Circat.Prim hiding (xor)
 import LambdaCCC.CCC
 import LambdaCCC.Lambda (E)
 import LambdaCCC.ToCCC (toCCC)

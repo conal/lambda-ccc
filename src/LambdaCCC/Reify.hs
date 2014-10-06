@@ -517,14 +517,14 @@ reifyDecodeF = unReify >>>
                do -- (_,[Type a,Type b]) <- callNameT "TypeDecode.Encode.decodeF"
                   (Var f,[Type a,Type b]) <- callT
                   guardMsg (uqVarName f == "decodeF") "oops -- not decodeF"
-                  apps' "LambdaCCC.Prim.DecodeP" [a,b] [] >>= appsE1 "kPrimEP" [FunTy a b]
+                  apps' "Circat.Prim.DecodeP" [a,b] [] >>= appsE1 "kPrimEP" [FunTy a b]
 
 reifyEncodeF :: ReExpr
 reifyEncodeF = unReify >>>
                do -- (_,[Type a,Type b]) <- callNameT "TypeDecode.Encode.encodeF"
                   (Var f,[Type a,Type b]) <- callT
                   guardMsg (uqVarName f == "encodeF") "oops -- not encodeF"
-                  apps' "LambdaCCC.Prim.EncodeP" [a,b] [] >>= appsE1 "kPrimEP" [FunTy a b]
+                  apps' "Circat.Prim.EncodeP" [a,b] [] >>= appsE1 "kPrimEP" [FunTy a b]
 
 reifyCodeF :: ReExpr
 reifyCodeF = reifyEncodeF <+ reifyDecodeF

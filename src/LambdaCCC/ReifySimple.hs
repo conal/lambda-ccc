@@ -351,7 +351,7 @@ findIdP :: String -> TransformH a Id
 findIdP = findIdT . primName
 
 primName :: String -> HermitName
-primName = moduledName "LambdaCCC.Prim"
+primName = moduledName "Circat.Prim"
 
 -- TODO: generalize primName, lamName, etc
 
@@ -362,7 +362,7 @@ primMap = M.fromList
   , ("GHC.Num.$fNumInt_$cnegate", "NegateP")
   , ("GHC.Classes.&&","AndP")
   , ("GHC.Classes.||","OrP")
-  , ("LambdaCCC.Prim.xor","XorP")
+  , ("Circat.Prim.xor","XorP")
   , ("Circat.If.muxBool","CondBP")
   , ("Circat.If.muxInt","CondIP")
   , ("Circat.Rep.oops","OopsP")
