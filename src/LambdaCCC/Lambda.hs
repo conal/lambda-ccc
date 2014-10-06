@@ -64,7 +64,7 @@ import Circat.Category (Rep,HasRep(..),RepCat(..))
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
 import LambdaCCC.ShowUtils
--- import LambdaCCC.Prim
+import LambdaCCC.Prim
 
 -- Whether to sugar during show, including 'let'
 #define Sugared
