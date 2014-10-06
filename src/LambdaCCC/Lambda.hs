@@ -72,18 +72,6 @@ import LambdaCCC.ShowUtils
 -- Whether to simplify during construction
 #define Simplify
 
-class PrimBasics p where
-  unitP :: p Unit
-  pairP :: p (a :=> b :=> a :* b)
-
-instance PrimBasics Prim where
-  unitP = LitP (UnitL ())
-  pairP = PairP
-
-class EvalableP p where evalP :: p a -> a
-
-instance EvalableP Prim where evalP = eval
-
 -- | Variable names
 type Name = String
 
