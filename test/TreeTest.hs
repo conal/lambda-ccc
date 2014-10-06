@@ -3,6 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables, TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DataKinds, GADTs #-}  -- for TU
+{-# LANGUAGE LambdaCase #-}
 
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -fcontext-stack=38 #-}
@@ -38,6 +39,7 @@ import Control.Applicative (Applicative(..),liftA2)
 import Data.Foldable (Foldable(..),sum,product,and,or)
 import Data.Traversable (Traversable(..))
 import Data.Tuple (swap)
+import Data.Maybe (fromMaybe,maybe)
 
 -- transformers
 import Data.Functor.Identity
@@ -50,6 +52,7 @@ import LambdaCCC.Misc (Unop,Binop,transpose,(:*))
 import LambdaCCC.Adder
 
 import Circat.Misc (Unop,Reversible(..))
+import Circat.Rep (oops)
 import Circat.Pair (Pair(..))
 import qualified Circat.RTree as RT
 import qualified Circat.LTree as LT
@@ -200,7 +203,6 @@ no .@ mn = transpose ((no $@) <$> transpose mn)
 
 crcStep :: (Traversable poly, Applicative poly) =>
            poly Bool -> poly Bool :* Bool -> poly Bool
-
 crcStep poly (shiftR -> (b0,seg')) = (if b0 then liftA2 xor poly else id) seg'
 
 -- crcStep poly (shiftR -> (b0,seg')) = liftA2 tweak poly seg'
@@ -327,7 +329,11 @@ do2 = inTest "hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize DoTree.hss"
 -- Only works when compiled with HERMIT
 main :: IO ()
 
--- main = go "map-v3" (fmap not :: Vec N3 Bool -> Vec N3 Bool)
+-- main = go "map-not-v1" (fmap not :: Vec N1 Bool -> Vec N1 Bool)
+
+-- main = go "map-square-v5" (fmap square :: Vec N5 Int -> Vec N5 Int)
+
+-- main = go "map-t3" (fmap not :: Unop (RTree N3 Bool))
 
 -- main = go "tdott-2" (dot''' :: Pair (RTree N2 Int) -> Int)
 
@@ -377,8 +383,6 @@ ranksep n = ("ranksep",show n)
 
 -- main = go "sum-t3" (sum :: RTree N3 Int -> Int)
 
--- main = go "map-t3" (fmap not :: Unop (RTree N3 Bool))
-
 -- main = go "test" (uncurry (dot' :: RTree N0 Int -> RTree N0 Int -> Int))
 
 -- main = do go "squares3" (squares :: RTree N3 Int -> RTree N3 Int)
@@ -394,15 +398,19 @@ ranksep n = ("ranksep",show n)
 -- main = go "test" (dot :: RTree N4 (Int,Int) -> Int)
 
 -- -- Ranksep: rt1=0.5, rt2=1, rt3=2, rt4=4,rt5=8
--- main = go' "transpose-pt5" [ranksep 8] (transpose :: Pair (RTree N5 Bool) -> RTree N5 (Pair Bool))
+-- main = go' "transpose-pt4" [ranksep 4] (transpose :: Pair (RTree N4 Bool) -> RTree N4 (Pair Bool))
 
--- Ranksep: rt1=1, rt2=2, rt3=4, rt4=8, rt5=16
-main = go' "transpose-v3t5" [ranksep 16] (transpose :: Vec N3 (RTree N5 Bool) -> RTree N5 (Vec N3 Bool))
+-- -- Ranksep: rt1=0.5, rt2=1, rt3=2, rt4=4,rt5=8
+-- main = go' "transpose-t4p" [ranksep 4] (transpose :: RTree N4 (Pair Bool) -> Pair (RTree N4 Bool))
+
+-- -- Ranksep: rt1=1, rt2=2, rt3=4, rt4=8, rt5=16
+-- main = go' "transpose-v3t5" [ranksep 16] (transpose :: Vec N3 (RTree N5 Bool) -> RTree N5 (Vec N3 Bool))
+
+-- -- Ranksep: rt1=2, rt2=4, rt3=8, rt4=16, rt5=32
+-- main = go' "transpose-v5t3" [ranksep 8] (transpose :: Vec N5 (RTree N3 Bool) -> RTree N3 (Vec N5 Bool))
 
 -- -- Ranksep: rt1=0.5, rt2=1, rt3=2, rt4=4, rt5=8
 -- main = go' "invertR-5" [ranksep 8] (invertR :: RTree N5 Bool -> LTree N5 Bool)
-
--- main = go "transpose-t4p" (transpose :: RTree N4 (Pair Bool) -> Pair (RTree N4 Bool))
 
 -- main = go "vtranspose-34" (transpose :: Matrix N3 N4 Int -> Matrix N4 N3 Int)
 
@@ -450,7 +458,7 @@ main = go' "transpose-v3t5" [ranksep 16] (transpose :: Vec N3 (RTree N5 Bool) ->
 -- main = go "tsum1" (tsum :: RTree N1 Int -> Int)
 
 -- -- Not working yet: the (^) is problematic.
--- main = go "squares2" (squares' :: Unop (RTree N0 Int))
+-- main = go "squaresp-rt0" (squares' :: Unop (RTree N0 Int))
 
 -- -- Working out a reify issue.
 -- main = go "sum2f" (sum :: RTree N2 Int -> Int)
@@ -472,7 +480,7 @@ main = go' "transpose-v3t5" [ranksep 16] (transpose :: Vec N3 (RTree N5 Bool) ->
 
 -- main = go "applyLin-v45" (uncurry (($@) :: Matrix N4 N5 Int -> Vec N4 Int -> Vec N5 Int))
 
--- main = go "applyLin-t21" (uncurry (($@) :: MatrixT N2 N1 Int -> RTree N2 Int -> RTree N1 Int))
+-- main = go' [ranksep 2] "applyLin-t21" (uncurry (($@) :: MatrixT N2 N1 Int -> RTree N2 Int -> RTree N1 Int))
 
 -- main = go "applyLin-t22" (uncurry (($@) :: MatrixT N2 N2 Int -> RTree N2 Int -> RTree N2 Int))
 
@@ -621,7 +629,8 @@ main = go' "transpose-v3t5" [ranksep 16] (transpose :: Vec N3 (RTree N5 Bool) ->
 
 -- main = go "crcStep-v4" (uncurry (crcStep :: Vec N4 Bool -> Vec N4 Bool :* Bool -> Vec N4 Bool))
 
--- main = go "crcStep-rt3" (uncurry (crcStep :: RTree N3 Bool -> RTree N3 Bool :* Bool -> RTree N3 Bool))
+-- ranksep: rt2=1, rt3=2, rt4=4.5
+-- main = go' "crcStep-rt3" [ranksep 4.5] (uncurry (crcStep :: RTree N3 Bool -> RTree N3 Bool :* Bool -> RTree N3 Bool))
 
 polyV2 :: Vec N2 Bool
 polyV2 = vec2 True False
@@ -687,7 +696,7 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go "adder-state-v3" (adderState :: Adder' (Vec N3))
 
--- main = go "adder-state-rt3" (adderState :: Adder' (RTree N3))
+-- main = go "adder-state-rt2" (adderState :: Adder' (RTree N2))
 
 -- main = go "adder-state-0-v1" (carryIn False adderState :: Adder (Vec N1))
 
@@ -732,3 +741,36 @@ polyRT4 = RT.tree4 True False False True True False True False
 -- main = go' "adder-scanpp-rt1" [ranksep 0.5] (scanAdd'' :: Adder (RTree N1))
 
 -- main = go "foo" (\ ((gx,px),(gy,py)) -> (gx || gy && px, px && py))
+
+-- main = go "case-just-2" (\ case Just b  -> not b
+--                                 Nothing -> True)
+
+-- main = go "foo" (\ (b,a) -> a || b)
+
+-- main = go "or-with-swap" (\ (a,b) -> (a || b, b || a))
+
+-- main = go "foo" (\ (b,a) -> not a || not b)
+
+-- main = go "fmap-maybe-square" (fmap square :: Unop (Maybe Bool))
+
+-- main = go "fmap-maybe-not" (fmap not :: Unop (Maybe Bool))
+
+-- TODO: Tweak examples to eliminate Maybe on the outside.
+
+-- main = go "foo" (\ () -> (oops,False))
+
+-- main = go "foo" (\ (a,b) -> if b then (not a,True) else (oops,False))
+
+-- main = go "fromMaybe-bool" (uncurry (fromMaybe :: Bool -> Maybe Bool -> Bool))
+
+-- main = go "foo" (uncurry (fromMaybe :: Vec N1 Bool -> Maybe (Vec N1 Bool) -> Vec N1 Bool))
+
+-- main = go "foo" (uncurry (fromMaybe :: Vec N2 Bool -> Maybe (Vec N2 Bool) -> Vec N2 Bool))
+
+-- main = go "foo" (\ (a,v :: Vec N1 Bool) -> if a then v else v)
+
+-- main = go "foo" (\ (a,v :: RTree N2 Bool) -> if a then v else v)
+
+main = go "foo" (\ (a,v :: Maybe Int) -> if a then v else v)
+
+-- main = undefined (reifyEP (fromMaybe :: Int -> Maybe Int -> Int))
