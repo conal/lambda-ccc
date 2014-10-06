@@ -31,7 +31,7 @@
 
 -- TODO: explicit exports
 
-import Prelude hiding (foldl,foldr,sum,product,and,or,zipWith,reverse)
+import Prelude hiding (foldl,foldr,sum,product,zipWith,reverse)
 
 import Data.Monoid (Monoid(..),Sum,Product)
 import Data.Functor ((<$>))

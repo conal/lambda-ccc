@@ -22,7 +22,7 @@ module LambdaCCC.ToCircuit
   ( expToCircuit, cccToCircuit
   ) where
 
-import Prelude hiding (id,(.),not,and,or,curry,uncurry)
+import Prelude hiding (id,(.),curry,uncurry)
 import Data.Constraint (Dict(..))
 
 import LambdaCCC.Prim hiding (xor)

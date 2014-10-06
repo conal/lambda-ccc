@@ -32,7 +32,7 @@ module LambdaCCC.CCC
   , convertC
   ) where
 
-import Prelude hiding (id,(.),not,and,or,curry,uncurry,const)
+import Prelude hiding (id,(.),curry,uncurry,const)
 -- import Data.Typeable (Typeable)
 -- import Data.Coerce
 

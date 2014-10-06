@@ -28,7 +28,7 @@ module LambdaCCC.ToCCC
 #endif
   ) where
 
-import Prelude hiding (id,(.),curry,uncurry,const,not,and,or)
+import Prelude hiding (id,(.),curry,uncurry,const)
 
 import Data.Functor ((<$>))
 import Control.Monad (mplus)
