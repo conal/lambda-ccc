@@ -179,6 +179,8 @@ resultTy ty                    = ty
 
 isTyOrDict :: CoreExpr -> Bool
 isTyOrDict e = isType e || isDictTy (exprType e)
+            || isEqBox e  -- experiment
+-- TODO: Fix function name if we keep isEqBox
 
 monomorphize :: ReExpr
 monomorphize = memoFloatLabelR (repeatR specializeTyDict)
@@ -204,6 +206,15 @@ bashWith
   | replaceBash = \ rs -> bashUsingE (promoteR <$> (rs ++ bashSimplifiers))
   | otherwise   = \ rs -> bashExtendedWithE (promoteR <$> rs)
 
+-- Experiment
+simplifyAll'' :: ReExpr
+simplifyAll'' = go
+ where
+   go = -- tryR (tryR go . reIf) . simplifyAll'
+        (tryR (tryR go . reIf) . simplifyAll') <+ (tryR go . reIf)
+        -- tryR go . (simplifyAll' <+ reIf)
+   reIf = anytdE (watchR "rewriteIf" rewriteIf)
+
 simplifyAll :: ReExpr
 simplifyAll = -- watchR "simplifyAll" $
               bashWith mySimplifiers
@@ -213,7 +224,7 @@ extraSimplifiers =
   [ letSubstOneOccR
   -- Experiment
   , watchR "standardizeCase" standardizeCase
-  , watchR "standardizeCon" standardizeCon
+  , watchR "standardizeCon"  standardizeCon
   ]  
 
 fullSimpliers :: [ReExpr]
@@ -234,8 +245,12 @@ mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
                 , nowatchR "caseReduceUnfoldsDictR" caseReduceUnfoldsDictR
                 , caseDefaultR
                 , reprAbstR
-                , watchR "rewriteIf" rewriteIf
+--                 , watchR "rewriteIf" rewriteIf
                 ]
+
+-- 2014-10-03: I moved rewriteIf from mySimplifiers to simplifyAll''. It was kicking in
+-- too soon, leading to a transformation cycle with Maybe. See journal notes from
+-- 2014-10-02.
 
 -- From bashComponents.
 bashSimplifiers :: [ReExpr]
@@ -280,11 +295,11 @@ caseReduceUnfoldsDictR =
 simplifyAllRhs :: ReProg
 simplifyAllRhs = progRhsAnyR simplifyAll
 
-simplifyAllRhs' :: ReProg
-simplifyAllRhs' = progRhsAnyR simplifyAll'
+-- simplifyAllRhs' :: ReProg
+-- simplifyAllRhs' = progRhsAnyR simplifyAll'
 
-simplifyAllBind' :: ReBind
-simplifyAllBind' = nonRecAllR id simplifyAll'
+-- simplifyAllBind' :: ReBind
+-- simplifyAllBind' = nonRecAllR id simplifyAll'
 
 letFloatCaseAltR' :: ReExpr
 letFloatCaseAltR' = letFloatCaseAltR Nothing
@@ -318,7 +333,7 @@ passE = id
       . tryR (anybuE (letAllR bindUnLetIntroR id))
 --       . tryR (watchR "retypeExprR" retypeExprR) -- Needed?
       . tryR (extractR unshadowR)
-      . tryR simplifyAll'
+      . tryR simplifyAll''
 --       . tryR (anytdE (repeatR (  watchR "standardizeCase" standardizeCase
 --                               <+ watchR "standardizeCon" standardizeCon)))
       . onetdE (watchR "monomorphize" monomorphize)
@@ -355,6 +370,11 @@ hasRepMethodF =
      (mkEqBox -> eq,ty') <- normaliseTypeT Nominal $* TyConApp repTc [ty]
      return $ \ meth -> apps' (repName meth) [ty] [dict,Type ty',eq]
 
+isEqBox :: CoreExpr -> Bool
+isEqBox (collectArgs -> (Var (isDataConWorkId_maybe -> Just dc), _))
+        = dc `elem` [eqBoxDataCon, coercibleDataCon]
+isEqBox _ = False
+
 hasRepMethodT :: TransformH Type (String -> ReExpr)
 hasRepMethodT = (\ f -> \ s -> App <$> f s <*> id) <$> hasRepMethodF
 
@@ -373,7 +393,7 @@ abstReprR = do meth <- hasRepMethodT . exprTypeT
 -- Do one unfolding, and then a second one only if the function name starts with
 -- "$", as in the case of a method lifted to the top level.
 unfoldMethodR :: ReExpr
-unfoldMethodR =
+unfoldMethodR = watchR "unfoldMethodR" $
     tryR (tryR simplifyAll . unfoldPredR (\ v _ -> isPrefixOf "$" (uqVarName v)))
   . (tryR simplifyAll . unfoldR)
 
@@ -443,6 +463,39 @@ recastF (regularizeType -> a) (regularizeType -> b) =
                _ <- traceR ("recastF unhandled: " ++ str)
                fail "oopsR"
 
+
+-- TEMP:
+recastF' :: Type -> Type -> TransformH a CoreExpr
+recastF' (regularizeType -> a) (regularizeType -> b) =
+  {- idRC <+ -} reprR {- <+ abstR <+ funR <+ oopsR -}
+ where
+--     idRC  = do guardMsg (a =~= b) "recast id: types differ"
+--                idId <- findIdT "id"
+--                return $ Var idId `App` Type a
+    reprR = do f <- hasRepMethod "repr" $* a
+               (a',b') <- unJustT $* splitFunTy_maybe (exprType f)
+               guardMsg (a' =~= a) "recast tryMeth: a' /= a"
+               g <- recastF b' b
+               buildCompositionT g f
+--     abstR = do g <- hasRepMethod "abst" $* b
+--                (a',b') <- unJustT $* splitFunTy_maybe (exprType g)
+--                guardMsg (b' =~= b) "recast tryMeth: b' /= b"
+--                f <- recastF a a'
+--                buildCompositionT g f
+--     funR  = do (aDom,aRan) <- unJustT $* splitFunTy_maybe a
+--                (bDom,bRan) <- unJustT $* splitFunTy_maybe b
+--                f <- recastF bDom aDom  -- contravariant
+--                h <- recastF aRan bRan  -- covariant
+--                glueV <- findIdT "LambdaCCC.Monomorphize.-->"
+--                -- return $ 
+--                unfoldR $*
+--                  mkApps (Var glueV)
+--                          ([Type aDom,Type aRan,Type bDom,Type bRan, f,h])
+--     oopsR = do str <- showPprT $* (a,b)
+--                _ <- traceR ("recastF unhandled: " ++ str)
+--                fail "oopsR"
+
+
 -- To do: Rewrite recastF to work directly from the coercion rather than just
 -- its type, so that we won't have to search.
 
@@ -459,6 +512,12 @@ recastR :: ReExpr
 recastR = do Cast e (coercionKind -> Pair a b) <- id
              f <- recastF a b
              return (App f e)
+
+-- TEMP
+recastR' :: ReExpr
+recastR' = do Cast e (coercionKind -> Pair a b) <- id
+              f <- recastF' a b
+              return (App f e)
 
 -- | repr (abst x)  ==>  x, when type preserving.
 reprAbstR :: ReExpr
@@ -515,9 +574,11 @@ externals :: [External]
 externals =
     [ externC "simplifyAll" simplifyAll "Bash with normalization simplifiers (no inlining)"
     , externC "simplifyAll'" simplifyAll' "simplifyAll plus letSubstOneOccR"
+    , externC "simplifyAll'" simplifyAll' "simplifyAll plus letSubstOneOccR"
+    , externC "simplifyAll''" simplifyAll'' "..."
     , externC "simplifyAllRhs" simplifyAllRhs "simplify-all on all top-level RHSs"
-    , externC "simplifyAllRhs'" simplifyAllRhs' "simplify-all' on all top-level RHSs"
-    , externC "simplifyAllBind'" simplifyAllBind' "simplify-all' on all binding RHS"
+--     , externC "simplifyAllRhs'" simplifyAllRhs' "simplify-all' on all top-level RHSs"
+--     , externC "simplifyAllBind'" simplifyAllBind' "simplify-all' on all binding RHS"
     , externC "specializeTyDict" specializeTyDict "..."
     , externC "bindUnLetIntroR" bindUnLetIntroR "..."
     , externC "letFloatCaseAltR'" letFloatCaseAltR' "..."
@@ -533,6 +594,7 @@ externals =
     , externC "compile-go" compileGo "..."
     -- TEMP:
     , externC "recast" recastR "..."
+    , externC "recast'" recastR' "..."  -- TEMP
     , externC "abstRepr" abstReprR "..."
     , externC "standardizeCase" standardizeCase "..."
     , externC "standardizeCon" standardizeCon "..."
