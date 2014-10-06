@@ -29,7 +29,6 @@ Library
                   , transformers
                   , mtl
                   , containers
-                  , constraints
                   , kure >= 2.16.0
                   , hermit >= 0.5.0.1
                   , ty >= 0.1.5
