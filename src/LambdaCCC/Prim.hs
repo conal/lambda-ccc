@@ -38,7 +38,7 @@ import Data.Constraint (Dict(..))
 import Data.Typeable (Typeable)
 
 import Circat.Category
-import Circat.Classes (BoolCat(not,and,or),MuxCat(..),NumCat(..))
+import Circat.Classes (BoolCat(not,and,or),MuxCat(..),NumCat(..),BottomCat(..))
 import qualified Circat.Classes as C
 
 -- :( . TODO: Disentangle!
@@ -200,7 +200,7 @@ instance Show (Prim a) where
   showsPrec _ CondIP     = showString "muxI"
   showsPrec _ AbstP      = showString "abst"
   showsPrec _ ReprP      = showString "repr"
-  showsPrec _ OopsP      = showString "<oops>"
+  showsPrec _ OopsP      = showString "oops"
 
 instance Show' Prim where showsPrec' = showsPrec
 
@@ -227,7 +227,7 @@ primArrow OopsP     = error "primArrow: Oops"
 primArrow (LitP _)  = error ("primArrow: LitP with function type?!")
 
 instance ( BiCCCC k Lit
-         , BoolCat k, MuxCat k, NumCat k Int
+         , BoolCat k, MuxCat k, NumCat k Int, BottomCat k
          ) =>
          HasUnitArrow k Prim where
   unitArrow NotP      = unitFun not
@@ -245,7 +245,8 @@ instance ( BiCCCC k Lit
   unitArrow CondIP    = unitFun muxI
   unitArrow AbstP     = unitFun abstC
   unitArrow ReprP     = unitFun reprC
-  unitArrow OopsP     = error "unitArrow on Prim: OopsP"
+  unitArrow OopsP     = bottom
+                        -- error "unitArrow on Prim: OopsP"
   unitArrow (LitP l)  = unitArrow l
 
 --     Variable `k' occurs more often than in the instance head
