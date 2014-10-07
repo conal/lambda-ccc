@@ -22,9 +22,9 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.ReifySimple
-  ( reifyMisc, isPrimitive, lamName, repName, ifName
+  ( reifyMisc, isPrimitive, lamName, repName --, ifName
   , inReify -- TEMP
-  , reifyEval, reifyRepMeth, reifyApp, reifyLam, reifyMonoLet
+  , reifyEval, reifyIf, reifyRepMeth, reifyApp, reifyLam, reifyMonoLet
   , reifyTupCase, reifyLit, reifyPrim
   , reifyOops
   ) where
@@ -76,8 +76,8 @@ repName = moduledName "Circat.Rep"
 lamName :: String -> HermitName
 lamName = moduledName "LambdaCCC.Lambda"
 
-ifName :: String -> HermitName
-ifName = moduledName "Circat.If"
+-- ifName :: String -> HermitName
+-- ifName = moduledName "Circat.If"
 
 -- findIdE :: String -> TransformH a Id
 -- findIdE = findIdT . lamName
@@ -247,6 +247,13 @@ toRep co | coercionRole co == Representational = co
 
 #endif
 
+reifyIf :: ReExpr
+reifyIf =
+  unReify >>>
+  do (Var (fqVarName -> "LambdaCCC.Lambda.if'"),args@(length -> 2)) <- callT
+--      appsE "ifEP" [] args
+     (\ f -> mkApps (Var f) args) <$> findIdT (lamName ("ifEP"))
+
 -- Reify an application of 'repr' or 'abst' to its type, dict, and coercion
 -- args (four in total), leaving the final expression argument for reifyApp.
 reifyRepMeth :: ReExpr
@@ -331,6 +338,7 @@ miscL = [ ("reifyEval"        , reifyEval)
 --      , ("reifyRulesPrefix" , reifyRulesPrefix)
 --      , ("reifyRules"       , reifyRules)
         , ("reifyRepMeth"     , reifyRepMeth) -- before reifyApp
+        , ("reifyIf"          , reifyIf)      -- ''
         , ("reifyLit"         , reifyLit)     -- ''
         , ("reifyApp"         , reifyApp)
         , ("reifyLam"         , reifyLam)
