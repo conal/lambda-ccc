@@ -23,7 +23,7 @@ import Prelude
 
 import LambdaCCC.Misc (Unop)
 import LambdaCCC.Lambda (EP,reifyEP)
-import LambdaCCC.CCC ((:->),convertC)
+-- import LambdaCCC.CCC ((:->),convertC)
 import LambdaCCC.ToCCC (toCCC')
 
 import Circat.Circuit (GenBuses,(:>),outGWith,Attr)
@@ -33,6 +33,7 @@ go :: GenBuses a => String -> (a -> b) -> IO ()
 go name f = run name [] (reifyEP f)
 {-# INLINE go #-}
 
+-- Broken:
 -- #define ViaTerm
 
 -- Run an example: reify, CCC, circuit.
