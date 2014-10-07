@@ -38,6 +38,7 @@ import HERMIT.External (External,external)
 import HERMIT.GHC
 import HERMIT.Kure
 import HERMIT.Plugin (hermitPlugin,pass,interactive)
+-- import HERMIT.Name (HermitName)
 
 import HERMIT.Extras hiding (findTyConT)
 import qualified HERMIT.Extras as Ex
@@ -187,12 +188,25 @@ monomorphize = memoFloatLabelR (repeatR specializeTyDict)
 
 -- | case c of { False -> a'; True -> a }  ==>  if_then_else c a a'
 -- Assuming there's a HasIf instance.
+#if 0
 rewriteIf :: ReExpr
 rewriteIf = do Case c _wild ty [(_,[],a'),(_,[],a)] <- id
                guardMsg (isBoolTy (exprType c)) "scrutinee not Boolean"
                hasIfTc <- findTyConT (ifName "HasIf")
                dict    <- buildDictionaryT' $* TyConApp hasIfTc [ty]
                apps' (ifName "if_then_else") [ty] [dict,c,a,a']
+#else
+
+rewriteIf :: ReExpr
+rewriteIf = do Case c _wild ty [(_False,[],a'),(_True,[],a)] <- id
+               guardMsg (isBoolTy (exprType c)) "scrutinee not Boolean"
+               ifCircTc <- findTyConT (lamName "IfCirc")
+               dict     <- buildDictionaryT' $* TyConApp ifCircTc [ty]
+               apps' (lamName "if'") [ty] [dict,pair c (pair a a')]
+ where
+   pair p q = mkCoreTup [p,q]
+
+#endif
 
 {--------------------------------------------------------------------
     Simplification
@@ -208,12 +222,16 @@ bashWith
 
 -- Experiment
 simplifyAll'' :: ReExpr
+#if 0
 simplifyAll'' = go
  where
    go = -- tryR (tryR go . reIf) . simplifyAll'
         (tryR (tryR go . reIf) . simplifyAll') <+ (tryR go . reIf)
         -- tryR go . (simplifyAll' <+ reIf)
    reIf = anytdE (watchR "rewriteIf" rewriteIf)
+#else
+simplifyAll'' = simplifyAll'             -- TODO:  eliminate simplifyAll''
+#endif
 
 simplifyAll :: ReExpr
 simplifyAll = -- watchR "simplifyAll" $
@@ -245,7 +263,7 @@ mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
                 , nowatchR "caseReduceUnfoldsDictR" caseReduceUnfoldsDictR
                 , caseDefaultR
                 , reprAbstR
---                 , watchR "rewriteIf" rewriteIf
+                , watchR "rewriteIf" rewriteIf
                 ]
 
 -- 2014-10-03: I moved rewriteIf from mySimplifiers to simplifyAll''. It was kicking in
@@ -458,43 +476,12 @@ recastF (regularizeType -> a) (regularizeType -> b) =
                -- return $ 
                unfoldR $*
                  mkApps (Var glueV)
-                         ([Type aDom,Type aRan,Type bDom,Type bRan, f,h])
+                        ([Type aDom,Type aRan,Type bDom,Type bRan, f,h])
     oopsR = do str <- showPprT $* (a,b)
-               _ <- traceR ("recastF unhandled: " ++ str)
-               fail "oopsR"
-
-
--- TEMP:
-recastF' :: Type -> Type -> TransformH a CoreExpr
-recastF' (regularizeType -> a) (regularizeType -> b) =
-  {- idRC <+ -} reprR {- <+ abstR <+ funR <+ oopsR -}
- where
---     idRC  = do guardMsg (a =~= b) "recast id: types differ"
---                idId <- findIdT "id"
---                return $ Var idId `App` Type a
-    reprR = do f <- hasRepMethod "repr" $* a
-               (a',b') <- unJustT $* splitFunTy_maybe (exprType f)
-               guardMsg (a' =~= a) "recast tryMeth: a' /= a"
-               g <- recastF b' b
-               buildCompositionT g f
---     abstR = do g <- hasRepMethod "abst" $* b
---                (a',b') <- unJustT $* splitFunTy_maybe (exprType g)
---                guardMsg (b' =~= b) "recast tryMeth: b' /= b"
---                f <- recastF a a'
---                buildCompositionT g f
---     funR  = do (aDom,aRan) <- unJustT $* splitFunTy_maybe a
---                (bDom,bRan) <- unJustT $* splitFunTy_maybe b
---                f <- recastF bDom aDom  -- contravariant
---                h <- recastF aRan bRan  -- covariant
---                glueV <- findIdT "LambdaCCC.Monomorphize.-->"
---                -- return $ 
---                unfoldR $*
---                  mkApps (Var glueV)
---                          ([Type aDom,Type aRan,Type bDom,Type bRan, f,h])
---     oopsR = do str <- showPprT $* (a,b)
---                _ <- traceR ("recastF unhandled: " ++ str)
---                fail "oopsR"
-
+               -- _ <- traceR ("recastF unhandled: " ++ str)
+               -- fail "oopsR"
+               -- Can be okay for dictionaries, esp IfCat (:>)
+               fail ("recastF unhandled: " ++ str)
 
 -- To do: Rewrite recastF to work directly from the coercion rather than just
 -- its type, so that we won't have to search.
@@ -512,12 +499,6 @@ recastR :: ReExpr
 recastR = do Cast e (coercionKind -> Pair a b) <- id
              f <- recastF a b
              return (App f e)
-
--- TEMP
-recastR' :: ReExpr
-recastR' = do Cast e (coercionKind -> Pair a b) <- id
-              f <- recastF' a b
-              return (App f e)
 
 -- | repr (abst x)  ==>  x, when type preserving.
 reprAbstR :: ReExpr
@@ -594,7 +575,6 @@ externals =
     , externC "compile-go" compileGo "..."
     -- TEMP:
     , externC "recast" recastR "..."
-    , externC "recast'" recastR' "..."  -- TEMP
     , externC "abstRepr" abstReprR "..."
     , externC "standardizeCase" standardizeCase "..."
     , externC "standardizeCon" standardizeCon "..."
@@ -606,6 +586,7 @@ externals =
     -- From Reify.
     , externC "reify-misc" reifyMisc "Simplify 'reify e'"
     , externC "reifyEval" reifyEval "..."
+    , externC "reifyIf" reifyIf "..."
     , externC "reifyRepMeth" reifyRepMeth "..."
     , externC "reifyApp" reifyApp "..."
     , externC "reifyLam" reifyLam "..."
