@@ -60,11 +60,17 @@ infixl 6 +@
     CCC conversion
 --------------------------------------------------------------------}
 
+#if 0
+
 toCU :: EP (a :=> b) -> (Unit :-> (a :=> b))
 toCU = toCCC
 
 toC :: EP (a :=> b) -> (a :-> b)
 toC = toCCC'
+
+--     No instance for (HasUnitArrow (:->) Prim)
+
+#endif
 
 {--------------------------------------------------------------------
     Examples
