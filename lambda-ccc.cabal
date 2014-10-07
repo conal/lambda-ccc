@@ -43,7 +43,7 @@ Library
                     LambdaCCC.ShowUtils
 --                     LambdaCCC.Prim
                     LambdaCCC.Lambda
-                    LambdaCCC.CCC
+--                     LambdaCCC.CCC
                     LambdaCCC.ToCCC
 --                     LambdaCCC.Encode
 --                     LambdaCCC.CoreEncode
