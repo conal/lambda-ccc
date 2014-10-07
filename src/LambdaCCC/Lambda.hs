@@ -3,6 +3,7 @@
 {-# LANGUAGE MagicHash, ConstraintKinds, ViewPatterns, MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE UndecidableInstances #-} -- see below
 
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 
@@ -33,9 +34,10 @@ module LambdaCCC.Lambda
   , xor   -- from Prim  -- TODO: maybe remove
   , intL
   , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP,reifyOopsEP#
-  , reprEP, abstEP
+  , reprEP, abstEP, ifEP
   -- , coerceEP
   , evalEP, reifyEP, kPrimEP, kLit -- , oops
+  , IfCirc, if'
   ) where
 
 import Data.Functor ((<$>))
@@ -61,7 +63,8 @@ import TypeUnary.Vec (Vec(..),Z,S)
 import Circat.Category (Rep,HasRep(..),RepCat(..))
 import Circat.Prim
 
--- import Circat.Classes (VecCat(..))
+import Circat.Classes (IfT, IfCat(..))
+import Circat.Circuit ((:>))
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
 import LambdaCCC.ShowUtils
@@ -669,6 +672,10 @@ reprEP = kPrim ReprP
 -- The odd signatures of abstEP and reprEP are to match those of the abst and
 -- repr methods.
 
+
+ifEP :: forall a. IfCat (:>) a => EP (Bool :* (a :* a) -> a)
+ifEP = kPrim IfP
+
 evalEP :: EP a -> a
 evalEP = evalE
 {-# NOINLINE evalEP #-}
@@ -710,8 +717,12 @@ instance Eq1' Prim where
   InlP   ==== InlP    = True
   InrP   ==== InrP    = True
   PairP  ==== PairP   = True
+#if 0
   CondBP ==== CondBP  = True
   CondIP ==== CondIP  = True
+#else
+  IfP    ==== IfP     = True
+#endif
   AbstP  ==== AbstP   = True
   ReprP  ==== ReprP   = True
   OopsP  ==== OopsP   = True
@@ -722,3 +733,10 @@ instance Eq1' Lit where
   BoolL x ==== BoolL y = x == y
   IntL  x ==== IntL  y = x == y
   _       ==== _       = False
+
+type IfCirc = IfCat (:>)
+
+-- Matches ifC from IfCat in Circat.Classes
+if' :: forall a. IfCirc a => Bool :* (a :* a) -> a
+if' (i,(t,e)) = if i then t else e
+{-# NOINLINE if' #-}
