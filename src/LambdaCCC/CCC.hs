@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, GADTs, KindSignatures, CPP #-}
 {-# LANGUAGE PatternGuards, ViewPatterns, ConstraintKinds #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}   -- for Int1 hack
 {-# OPTIONS_GHC -Wall #-}
 
@@ -32,7 +32,7 @@ module LambdaCCC.CCC
   , convertC
   ) where
 
-import Prelude hiding (id,(.),curry,uncurry,const)
+import Prelude hiding (id,(.),curry,uncurry)
 -- import Data.Typeable (Typeable)
 -- import Data.Coerce
 
@@ -52,6 +52,7 @@ import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 import Circat.Category
 import Circat.Classes
 import Circat.Prim (Prim(..),Lit(..),primArrow) -- ,cond,ifThenElse
+import Circat.Circuit ((:>))
 
 infix  0 :->
 
@@ -125,7 +126,7 @@ instance Eq (a :-> b) where (==) = (===)
 -- syntax ("a :-> b").
 
 -- Homomorphic evaluation
-#if 0
+#if 1
 
 distlF :: a :* (b :+ c) -> a :* b :+ a :* c
 distlF (a, Left  b) = Left  (a,b)
@@ -137,15 +138,16 @@ instance Evalable (a :-> b) where
   eval (g :. f)    = eval g . eval f
   eval Exl         = fst
   eval Exr         = snd
-  eval (f :&&& g)  = eval f A.&&& eval g
+  eval (f :&&& g)  = eval f &&& eval g
+  eval It          = it
   eval Inl         = Left
   eval Inr         = Right
-  eval (f :||| g)  = eval f A.||| eval g
+  eval (f :||| g)  = eval f ||| eval g
   eval DistL       = distlF
   eval Apply       = uncurry ($)
   eval (Curry   h) = curry   (eval h)
   eval (Uncurry f) = uncurry (eval f)
-  eval Coerce      = coerce
+--   eval Coerce      = coerce
   eval (Prim p)    = eval p
   eval (Lit l)     = const (eval l)
 #else
@@ -367,9 +369,18 @@ instance BoolCat (:->) where
 
 -- etc.
 
+#if 0
 instance MuxCat (:->) where
   muxB = prim CondBP
   muxI = prim CondIP
+#else
+
+-- instance IfCat (:->) a where
+--   ifC = prim IfP
+
+--     No instance for (IfCat (Circat.Circuit.:>) a)
+
+#endif
 
 instance NumCat (:->) Int where
   add = primUnc AddP
@@ -381,10 +392,9 @@ instance NumCat (:->) Int where
     Experiment: convert to other CCC
 --------------------------------------------------------------------}
 
-convertC :: ( BiCCCC k Lit
-            , BoolCat k, MuxCat k, NumCat k Int
-            ) =>
-            (a :-> b) -> (a `k` b)
+convertC :: -- ( BiCCCC k Lit, BoolCat k, NumCat k Int)
+            (k ~ (:>))
+         => (a :-> b) -> (a `k` b)
 convertC Id           = id
 convertC (g :. f)     = convertC g . convertC f
 convertC Exl          = exl
