@@ -30,7 +30,7 @@ import Prelude
 import LambdaCCC.Misc (Unop)
 import LambdaCCC.Lambda (reifyEP)
 import LambdaCCC.ToCCC (toCCC')
-import LambdaCCC.CCC (convertC,(:->))
+-- import LambdaCCC.CCC (convertC,(:->))
 
 #ifdef MakeCircuit
 import Circat.Circuit (IsSourceP2,(:>),outGWith)
