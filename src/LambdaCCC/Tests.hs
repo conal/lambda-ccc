@@ -21,7 +21,7 @@ import Prelude hiding (id,(.),curry,uncurry,not)
 
 import LambdaCCC.Misc
 import LambdaCCC.Lambda
-import LambdaCCC.CCC
+-- import LambdaCCC.CCC
 import LambdaCCC.ToCCC
 
 import Circat.Prim
