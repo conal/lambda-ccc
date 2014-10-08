@@ -52,7 +52,7 @@ import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 import Circat.Category
 import Circat.Classes
 import Circat.Prim (Prim(..),Lit(..),primArrow) -- ,cond,ifThenElse
-import Circat.Circuit ((:>))
+import Circat.Circuit ((:>),GenBuses)
 
 infix  0 :->
 
@@ -286,7 +286,8 @@ instance RepCat (:->) where
   abstC = prim AbstP
 
 instance BottomCat (:->) where
-  bottom = prim OopsP
+  type BottomKon (:->) a = GenBuses a
+  bottomC = prim BottomC
 
 {--------------------------------------------------------------------
     Factoring (decomposition)
