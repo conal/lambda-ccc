@@ -196,7 +196,6 @@ rewriteIf = do Case c _wild ty [(_,[],a'),(_,[],a)] <- id
                dict    <- buildDictionaryT' $* TyConApp hasIfTc [ty]
                apps' (ifName "if_then_else") [ty] [dict,c,a,a']
 #else
-
 rewriteIf :: ReExpr
 rewriteIf = do Case c _wild ty [(_False,[],a'),(_True,[],a)] <- id
                guardMsg (isBoolTy (exprType c)) "scrutinee not Boolean"
@@ -205,7 +204,6 @@ rewriteIf = do Case c _wild ty [(_False,[],a'),(_True,[],a)] <- id
                apps' (lamName "if'") [ty] [dict,pair c (pair a a')]
  where
    pair p q = mkCoreTup [p,q]
-
 #endif
 
 {--------------------------------------------------------------------
@@ -243,6 +241,7 @@ extraSimplifiers =
   -- Experiment
   , watchR "standardizeCase" standardizeCase
   , watchR "standardizeCon"  standardizeCon
+  , watchR "rewriteIf" rewriteIf
   ]  
 
 fullSimpliers :: [ReExpr]
@@ -263,7 +262,6 @@ mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
                 , nowatchR "caseReduceUnfoldsDictR" caseReduceUnfoldsDictR
                 , caseDefaultR
                 , reprAbstR
-                , watchR "rewriteIf" rewriteIf
                 ]
 
 -- 2014-10-03: I moved rewriteIf from mySimplifiers to simplifyAll''. It was kicking in
@@ -418,16 +416,29 @@ unfoldMethodR = watchR "unfoldMethodR" $
 -- unfoldMethodR = repeatR (tryR simplifyAll . unfoldR)
 
 standardizeCase :: ReExpr
-
--- standardizeCase =
---     tryR (caseReduceR True <+ caseFloatCaseR)
---   . onScrutineeR (unfoldMethodR . {- watchR "abstReprR" -} abstReprR)
-
+#if 0
 standardizeCase =
      caseReduceR True
   <+ caseReduceUnfoldR True
   <+ caseFloatCaseR
   <+ onScrutineeR (unfoldMethodR . watchR "abstReprR" abstReprR)
+#else
+standardizeCase =
+    ( caseReduceR True <+
+      ( anytdE ((onCaseAlts . onAltRhs) (caseReduceR True <+ caseReduceUnfoldR True))
+      . anytdE caseFloatCaseR ) )
+  . onScrutineeR (unfoldMethodR . watchR "abstReprR" abstReprR)
+-- TODO: Will I need caseReduceUnfoldR twice?
+#endif
+
+-- For experimentation
+standardizeCase' :: ReExpr
+standardizeCase' =
+    id
+--   . anytdE ((onCaseAlts . onAltRhs) (caseReduceR True <+ caseReduceUnfoldR True))
+--   . anytdE caseFloatCaseR
+  . onScrutineeR (unfoldMethodR . watchR "abstReprR" abstReprR)
+
 
 onScrutineeR :: Unop ReExpr
 onScrutineeR r = caseAllR r id id (const id)
@@ -577,6 +588,7 @@ externals =
     , externC "recast" recastR "..."
     , externC "abstRepr" abstReprR "..."
     , externC "standardizeCase" standardizeCase "..."
+    , externC "standardizeCase'" standardizeCase' "..."
     , externC "standardizeCon" standardizeCon "..."
     , externC "caseReduceUnfoldsR" caseReduceUnfoldsR "..."
     , externC "caseDefaultR" caseDefaultR "..."
