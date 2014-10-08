@@ -44,7 +44,7 @@ import Circat.Rep
 import Circat.Scan
 import Circat.Pair
 import Circat.Shift (accumL)
-import Circat.Circuit (GenBuses(..),genBusesRep')
+import Circat.Circuit (GenBuses(..),genBusesRep',botBRep)
 
 import Circat.Misc (xor)
 
@@ -187,8 +187,9 @@ scanAdd'' = carryIn False scanAdd'
 carryIn :: c -> (c :* a -> b) -> a -> b
 carryIn cin f = f . (cin,)
 
-instance GenBuses GenProp where genBuses' = genBusesRep'
-
+instance GenBuses GenProp where
+  genBuses' = genBusesRep'
+  botB = botBRep
 
 -- Handy operations
 
