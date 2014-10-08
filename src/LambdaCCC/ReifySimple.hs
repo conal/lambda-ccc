@@ -251,8 +251,16 @@ reifyIf :: ReExpr
 reifyIf =
   unReify >>>
   do (Var (fqVarName -> "LambdaCCC.Lambda.if'"),args@(length -> 2)) <- callT
---      appsE "ifEP" [] args
      (\ f -> mkApps (Var f) args) <$> findIdT (lamName ("ifEP"))
+
+reifyBottom :: ReExpr
+reifyBottom =
+  do App (Var (fqVarName -> "Circat.Rep.bottom")) (Type ty) <- unReify
+     botCircTc <- findTyConT (lamName "BottomCirc")
+     dict      <- buildDictionaryT' $* TyConApp botCircTc [ty]
+     appsE "bottomEP" [ty] [dict]
+
+-- TODO: factor out commonalities between reifyIf and reifyBottom.
 
 -- Reify an application of 'repr' or 'abst' to its type, dict, and coercion
 -- args (four in total), leaving the final expression argument for reifyApp.
@@ -339,6 +347,7 @@ miscL = [ ("reifyEval"        , reifyEval)
 --      , ("reifyRules"       , reifyRules)
         , ("reifyRepMeth"     , reifyRepMeth) -- before reifyApp
         , ("reifyIf"          , reifyIf)      -- ''
+        , ("reifyBottom"      , reifyBottom)  -- ''
         , ("reifyLit"         , reifyLit)     -- ''
         , ("reifyApp"         , reifyApp)
         , ("reifyLam"         , reifyLam)
@@ -373,7 +382,6 @@ primMap = M.fromList
   , ("Circat.Misc.xor","XorP")
 --   , ("Circat.If.muxBool","CondBP")
 --   , ("Circat.If.muxInt","CondIP")
-  , ("Circat.Rep.oops","OopsP")
   , ("GHC.Classes.not","NotP")
   , ("GHC.Tuple.(,)","PairP")
   , ("GHC.Tuple.fst","ExlP")
