@@ -34,10 +34,10 @@ module LambdaCCC.Lambda
   , xor   -- from Prim  -- TODO: maybe remove
   , intL
   , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP,reifyOopsEP#
-  , reprEP, abstEP, ifEP
+  , reprEP, abstEP, ifEP, bottomEP
   -- , coerceEP
   , evalEP, reifyEP, kPrimEP, kLit -- , oops
-  , IfCirc, if'
+  , IfCirc, if', BottomCirc
   ) where
 
 import Data.Functor ((<$>))
@@ -63,7 +63,7 @@ import TypeUnary.Vec (Vec(..),Z,S)
 import Circat.Category (Rep,HasRep(..),RepCat(..))
 import Circat.Prim
 
-import Circat.Classes (IfT, IfCat(..))
+import Circat.Classes (IfT, IfCat(..), BottomCat(..))
 import Circat.Circuit ((:>))
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
@@ -676,6 +676,9 @@ reprEP = kPrim ReprP
 ifEP :: forall a. IfCat (:>) a => EP (Bool :* (a :* a) -> a)
 ifEP = kPrim IfP
 
+bottomEP :: forall a. BottomCat (:>) a => EP a
+bottomEP = kPrim BottomP @^ ConstE unitP
+
 evalEP :: EP a -> a
 evalEP = evalE
 {-# NOINLINE evalEP #-}
@@ -723,10 +726,10 @@ instance Eq1' Prim where
 #else
   IfP    ==== IfP     = True
 #endif
-  AbstP  ==== AbstP   = True
-  ReprP  ==== ReprP   = True
-  OopsP  ==== OopsP   = True
-  _      ==== _       = False
+  AbstP   ==== AbstP   = True
+  ReprP   ==== ReprP   = True
+  BottomP ==== BottomP = True
+  _       ==== _       = False
 
 instance Eq1' Lit where
   UnitL x ==== UnitL y = x == y
@@ -740,3 +743,12 @@ type IfCirc = IfCat (:>)
 if' :: forall a. IfCirc a => Bool :* (a :* a) -> a
 if' (i,(t,e)) = if i then t else e
 {-# NOINLINE if' #-}
+
+type BottomCirc = BottomCat (:>)
+
+#if 0
+-- Matches bottom from BottomCat in Circat.Classes
+bottom' :: forall a. BottomCirc a => Bool :* (a :* a) -> a
+bottom' = error "bottom'"
+{-# NOINLINE bottom' #-}
+#endif
