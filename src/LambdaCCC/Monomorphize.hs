@@ -188,15 +188,14 @@ monomorphize = memoFloatLabelR (repeatR specializeTyDict)
 
 -- | case c of { False -> a'; True -> a }  ==>  if_then_else c a a'
 -- Assuming there's a HasIf instance.
-#if 0
 rewriteIf :: ReExpr
+#if 0
 rewriteIf = do Case c _wild ty [(_,[],a'),(_,[],a)] <- id
                guardMsg (isBoolTy (exprType c)) "scrutinee not Boolean"
                hasIfTc <- findTyConT (ifName "HasIf")
                dict    <- buildDictionaryT' $* TyConApp hasIfTc [ty]
                apps' (ifName "if_then_else") [ty] [dict,c,a,a']
 #else
-rewriteIf :: ReExpr
 rewriteIf = do Case c _wild ty [(_False,[],a'),(_True,[],a)] <- id
                guardMsg (isBoolTy (exprType c)) "scrutinee not Boolean"
                ifCircTc <- findTyConT (lamName "IfCirc")
