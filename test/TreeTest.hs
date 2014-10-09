@@ -739,9 +739,11 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go "foo" (\ x -> if x then True else bottom)
 
-main = go "foo" (\ () -> bottom :: Bool)
+-- main = go "foo" (\ () -> bottom :: Bool)
 
 -- main = go "foo" (\ x -> if x then bottom else bottom :: Bool)
+
+main = go "foo" (\ () -> (bottom::Bool, bottom::Int, bottom::Bool))
 
 -- main = go' "if-maybe" [ranksep 0.75] (\ (a,b :: Maybe Bool,c) -> if a then b else c)
 

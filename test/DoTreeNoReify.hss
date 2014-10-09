@@ -15,7 +15,8 @@ down ; try simplifyAll'' ; up
 
 any-td reify-prep
 
-application-of 'reifyEP ; down ; right
+application-of 'reifyEP
+-- down ; right
 
 -- try (repeat (any-td (repeat reify-misc)))
 -- try bash
