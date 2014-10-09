@@ -741,32 +741,26 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go "foo" (\ () -> bottom :: Bool)
 
--- main = go "foo" (\ x -> if x then bottom else bottom :: Bool)
+-- main = go "foo" (\ () -> (bottom::Int,False))
 
-main = go "foo" (\ () -> (bottom::Bool, bottom::Int, bottom::Bool))
+-- main = go "foo" (\ () -> (bottom::Bool, bottom::Int, bottom::Bool))
+
+-- main = go "foo" (\ x -> if x then bottom else bottom :: Bool)
 
 -- main = go' "if-maybe" [ranksep 0.75] (\ (a,b :: Maybe Bool,c) -> if a then b else c)
 
--- main = go "fmap-maybe-square" (fmap square :: Unop (Maybe Int))
+main = go "fmap-maybe-square" (fmap square :: Unop (Maybe Int))
 
 -- main = go "fmap-maybe-not" (fmap not :: Unop (Maybe Bool))
-
--- TODO: Tweak examples to eliminate Maybe on the outside.
-
--- main = go "foo" (\ () -> (bottom,False))
 
 -- main = go "foo" (\ (a,b) -> if b then (not a,True) else (bottom,False))
 
 -- main = go "fromMaybe-bool" (uncurry (fromMaybe :: Bool -> Maybe Bool -> Bool))
 
--- main = go "foo" (uncurry (fromMaybe :: Vec N1 Bool -> Maybe (Vec N1 Bool) -> Vec N1 Bool))
-
--- main = go "foo" (uncurry (fromMaybe :: Vec N2 Bool -> Maybe (Vec N2 Bool) -> Vec N2 Bool))
+-- main = go' "fromMaybe-v3" [ranksep 1.5] (uncurry (fromMaybe :: Vec N3 Bool -> Maybe (Vec N3 Bool) -> Vec N3 Bool))
 
 -- main = go "foo" (\ (a,v :: Vec N1 Bool) -> if a then v else v)
 
 -- main = go "foo" (\ (a,v :: RTree N2 Bool) -> if a then v else v)
 
 -- main = go "foo" (\ (a,v :: Maybe Int) -> if a then v else v)
-
--- main = undefined (reifyEP (fromMaybe :: Int -> Maybe Int -> Int))
