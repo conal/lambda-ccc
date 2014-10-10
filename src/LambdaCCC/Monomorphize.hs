@@ -598,6 +598,7 @@ externals =
     , externC "reify-misc" reifyMisc "Simplify 'reify e'"
     , externC "reifyEval" reifyEval "..."
     , externC "reifyIf" reifyIf "..."
+    , externC "reifyBottom" reifyBottom "..."
     , externC "reifyRepMeth" reifyRepMeth "..."
     , externC "reifyApp" reifyApp "..."
     , externC "reifyLam" reifyLam "..."
