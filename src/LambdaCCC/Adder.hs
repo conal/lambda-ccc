@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, ViewPatterns, TupleSections, CPP #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -44,7 +44,8 @@ import Circat.Rep
 import Circat.Scan
 import Circat.Pair
 import Circat.Shift (accumL)
-import Circat.Circuit (GenBuses(..),genBusesRep',mkBotRep,tyRep)
+import Circat.Classes (BottomCat(..))
+import Circat.Circuit (GenBuses(..),(:>),genBusesRep',bottomRep,tyRep)
 
 import Circat.Misc (xor)
 
@@ -189,8 +190,9 @@ carryIn cin f = f . (cin,)
 
 instance GenBuses GenProp where
   genBuses' = genBusesRep'
-  mkBot = mkBotRep
   ty = tyRep
+
+instance BottomCat (:>) GenProp where bottomC = bottomRep
 
 -- Handy operations
 
