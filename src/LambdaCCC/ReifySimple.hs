@@ -24,10 +24,12 @@
 module LambdaCCC.ReifySimple
   ( reifyMisc, isPrimitive, lamName, repName --, ifName
   , inReify -- TEMP
-  , reifyEval, reifyIf, reifyRepMeth, reifyApp, reifyLam, reifyMonoLet
+  , reifyEval, reifyIf, reifyBottom, reifyRepMeth, reifyApp, reifyLam, reifyMonoLet
   , reifyTupCase, reifyLit, reifyPrim
   , reifyOops
   ) where
+
+  -- TODO: export externals instead, and use in Monomorphize
 
 import Data.Functor ((<$>),void)
 import Control.Monad ((<=<))
