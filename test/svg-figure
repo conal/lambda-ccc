@@ -1,0 +1,7 @@
+cd out
+
+monthDay=`date "+%m-%d"`
+dir="/Users/conal/Tabula/Journal/wikidata/2014/Figures"
+svg="$monthDay-$1.svg"
+
+dot -Tsvg $1.dot -o $dir/$svg && (cd $dir ; ls -l $svg)
