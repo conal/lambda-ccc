@@ -35,7 +35,7 @@ import Prelude hiding (foldl,foldr,sum,product,zipWith,reverse,and,or)
 
 import Data.Monoid (Monoid(..),Sum,Product)
 import Data.Functor ((<$>))
-import Control.Applicative (Applicative(..),liftA2)
+import Control.Applicative -- (Applicative(..),liftA2,liftA3)
 import Data.Foldable (Foldable(..),sum,product,and,or)
 import Data.Traversable (Traversable(..))
 import Data.Tuple (swap)
@@ -749,7 +749,7 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go' "if-maybe" [ranksep 0.75] (\ (a,b :: Maybe Bool,c) -> if a then b else c)
 
-main = go "fmap-maybe-square" (fmap square :: Unop (Maybe Int))
+-- main = go "fmap-maybe-square" (fmap square :: Unop (Maybe Int))
 
 -- main = go "fmap-maybe-not" (fmap not :: Unop (Maybe Bool))
 
@@ -759,8 +759,14 @@ main = go "fmap-maybe-square" (fmap square :: Unop (Maybe Int))
 
 -- main = go' "fromMaybe-v3" [ranksep 1.5] (uncurry (fromMaybe :: Vec N3 Bool -> Maybe (Vec N3 Bool) -> Vec N3 Bool))
 
--- main = go "foo" (\ (a,v :: Vec N1 Bool) -> if a then v else v)
+-- main = go "liftA2-maybe" (uncurry (liftA2 (*)) :: (Maybe Int,Maybe Int) -> Maybe Int)
 
--- main = go "foo" (\ (a,v :: RTree N2 Bool) -> if a then v else v)
+main = go "liftA3-maybe" (\ (a,b,c) -> (liftA3 f a b c :: Maybe Int))
+ where
+   f x y z = x * (y + z)
 
--- main = go "foo" (\ (a,v :: Maybe Int) -> if a then v else v)
+-- main = go "liftA4-maybe" (\ (a,b,c,d) -> (f <$> a <*> b <*> c <*> d :: Maybe Int))
+--  where
+--    f w x y z = (w + x) * (y + z)
+
+-- main = go "liftA2-justs" (\ (a,b) -> liftA2 (*) (Just a) (Just b) :: Maybe Int)
