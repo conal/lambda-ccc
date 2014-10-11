@@ -759,14 +759,14 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go' "fromMaybe-v3" [ranksep 1.5] (uncurry (fromMaybe :: Vec N3 Bool -> Maybe (Vec N3 Bool) -> Vec N3 Bool))
 
--- main = go "liftA2-maybe" (uncurry (liftA2 (*)) :: (Maybe Int,Maybe Int) -> Maybe Int)
+-- main = go' "liftA2-maybe" [ranksep 0.8] (\ (a,b) -> liftA2 (*) a b :: Maybe Int)
 
-main = go "liftA3-maybe" (\ (a,b,c) -> (liftA3 f a b c :: Maybe Int))
- where
-   f x y z = x * (y + z)
-
--- main = go "liftA4-maybe" (\ (a,b,c,d) -> (f <$> a <*> b <*> c <*> d :: Maybe Int))
+-- main = go' "liftA3-maybe" [ranksep 0.8] (\ (a,b,c) -> (liftA3 f a b c :: Maybe Int))
 --  where
---    f w x y z = (w + x) * (y + z)
+--    f x y z = x * (y + z)
+
+main = go' "liftA4-maybe" [ranksep 0.8] (\ (a,b,c,d) -> (f <$> a <*> b <*> c <*> d :: Maybe Int))
+ where
+   f w x y z = (w + x) * (y + z)
 
 -- main = go "liftA2-justs" (\ (a,b) -> liftA2 (*) (Just a) (Just b) :: Maybe Int)
