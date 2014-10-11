@@ -1,0 +1,63 @@
+set-pp-renderer ascii
+set-pp-width 80
+
+set-pp-type     Show
+-- set-pp-coercion Show
+set-pp-coercion Kind
+
+-- set-pp-type     Omit
+-- set-pp-coercion Omit
+
+binding-of 'main
+try (any-td (unfold 'go))  -- still needed?
+try bash  -- for go unfolding
+down ; try simplifyAll'' ; up
+
+any-td reify-prep
+
+repeat (any-td (repeat reify-misc))
+
+-- Find failure
+application-of 'reifyEP
+
+
+
+
+-- try bash
+-- try unshadow
+
+----
+
+-- -- TEMP
+-- application-of 'reifyEP
+
+-- reifyPair
+-- down;right
+
+-- down;right
+-- any-bu recast
+-- simplifyAll
+
+-- application-of 'prodA
+-- passE; passE
+-- down ; rhs-of 'liftA2
+-- passE -- bombs
+
+-- one-td monomorphize
+-- retypeExprR
+-- lint-expr
+
+-- down;down;down;down;down;down;down
+-- -- standardizeCase
+
+-- rhs-of '<*>
+-- down
+-- monomorphize
+-- rhs-of 'ap'1 ; down
+-- standardizeCase
+
+-- application-of 'reifyEP; down;right
+-- passE
+
+-- application-of 'reifyEP
+-- reify-prep
