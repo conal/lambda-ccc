@@ -73,6 +73,14 @@ import LambdaCCC.Run (run) -- go
 import qualified Data.Typeable
 
 {--------------------------------------------------------------------
+    Misc
+--------------------------------------------------------------------}
+
+liftA4 :: Applicative f =>
+          (a -> b -> c -> a -> d) -> f a -> f b -> f c -> f a -> f d
+liftA4 f as bs cs ds = liftA3 f as bs cs <*> ds
+
+{--------------------------------------------------------------------
     Examples
 --------------------------------------------------------------------}
 
@@ -321,6 +329,12 @@ doit = inTest "./test"
 make :: IO ()
 make = systemSuccess "cd ../..; make"
 
+figureSvg :: String -> IO ()
+figureSvg str = systemSuccess ("cd ../test; ./figure-svg " ++ str)
+
+latestSvg :: IO ()
+latestSvg = systemSuccess "cd ../test; ./latest-svg"
+
 do1 :: IO ()
 do1 = inTest "hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize DoTreeNoReify.hss"
 
@@ -564,7 +578,8 @@ ranksep n = ("ranksep",show n)
 -- I suspect that they're only the same *after* the zero simplifications.
 -- These zero additions are now removed in the circuit generation back-end.
 
--- main = go "lsumsp-gt3" (lsums' :: Unop (Ragged Ra.R3 Int))
+-- ranksep: 8=1.5, 11=2.5
+-- main = go' "lsumsp-gt3" [ranksep=1.5] (lsums' :: Unop (Ragged Ra.R3 Int))
 
 -- main = go "foo" (lsums' :: Unop (Ragged Ra.R3 Int))
 
@@ -761,12 +776,49 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go' "liftA2-maybe" [ranksep 0.8] (\ (a,b) -> liftA2 (*) a b :: Maybe Int)
 
--- main = go' "liftA3-maybe" [ranksep 0.8] (\ (a,b,c) -> (liftA3 f a b c :: Maybe Int))
+-- main = go' "liftA3-maybe" [ranksep 0.8] (\ (a,b,c) -> liftA3 f a b c :: Maybe Int)
 --  where
 --    f x y z = x * (y + z)
 
-main = go' "liftA4-maybe" [ranksep 0.8] (\ (a,b,c,d) -> (f <$> a <*> b <*> c <*> d :: Maybe Int))
+main = go' "liftA4-maybe" [ranksep 0.8] (\ (a,b,c,d) -> liftA4 f a b c d :: Maybe Int)
  where
    f w x y z = (w + x) * (y + z)
+
+-- main = go "lift-maybe-1-1a" h
+--  where
+--    h a = pure square <*> a :: Maybe Int
+
+-- main = go "lift-maybe-1-1b" h
+--  where
+--    h a = liftA2 (*) a a :: Maybe Int
+
+-- main = go "lift-maybe-1-1c-no-idem" h
+--  where
+--    h a = fmap square b :: Maybe Int
+--     where
+--       b = liftA2 (+) a a
+
+-- main = go "lift-maybe-1-2" h
+--  where
+--    h a = liftA2 (*) a b :: Maybe Int
+--     where
+--       b = liftA2 (+) a a
+
+-- main = go "lift-maybe-1-3" h
+--  where
+--    h a = liftA3 f a b c :: Maybe Int
+--     where
+--       b = liftA2 (*) a a
+--       c = liftA2 (+) b a
+--       f w x y = (w + x) * y
+
+-- main = go' "lift-maybe-1-4" [ranksep 0.8] h
+--  where
+--    h a = liftA4 f a b c d :: Maybe Int
+--     where
+--       b = liftA2 (*) a a
+--       c = liftA2 (+) b a
+--       d = liftA2 (*) c b
+--       f w x y z = (w + x) * (y + z)
 
 -- main = go "liftA2-justs" (\ (a,b) -> liftA2 (*) (Just a) (Just b) :: Maybe Int)
