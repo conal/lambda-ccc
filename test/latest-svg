@@ -1,2 +1,2 @@
 latest=`cd out; ls -t -1 *.dot | head -1 | sed -e 's/.dot//'`
-./svg-figure $latest
+./figure-svg $latest
