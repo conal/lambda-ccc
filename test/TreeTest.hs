@@ -382,7 +382,7 @@ ranksep n = ("ranksep",show n)
 
 -- main = go "sumSquare-t3" (sumSquare :: RTree N3 Int -> Int)
 
--- main = go "sum-v5" (sum :: Vec N5 Int -> Int)
+-- main = go "sum-v8" (sum :: Vec N8 Int -> Int)
 
 -- main = go "and-v5" (and :: Vec N5 Bool -> Bool)
 
@@ -764,7 +764,7 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go' "if-maybe" [ranksep 0.75] (\ (a,b :: Maybe Bool,c) -> if a then b else c)
 
--- main = go "fmap-maybe-square" (fmap square :: Unop (Maybe Int))
+main = go "fmap-maybe-square" (fmap square :: Unop (Maybe Int))
 
 -- main = go "fmap-maybe-not" (fmap not :: Unop (Maybe Bool))
 
@@ -780,9 +780,9 @@ polyRT4 = RT.tree4 True False False True True False True False
 --  where
 --    f x y z = x * (y + z)
 
-main = go' "liftA4-maybe" [ranksep 0.8] (\ (a,b,c,d) -> liftA4 f a b c d :: Maybe Int)
- where
-   f w x y z = (w + x) * (y + z)
+-- main = go' "liftA4-maybe" [ranksep 0.8] (\ (a,b,c,d) -> liftA4 f a b c d :: Maybe Int)
+--  where
+--    f w x y z = (w + x) * (y + z)
 
 -- main = go "lift-maybe-1-1a" h
 --  where
@@ -804,7 +804,7 @@ main = go' "liftA4-maybe" [ranksep 0.8] (\ (a,b,c,d) -> liftA4 f a b c d :: Mayb
 --     where
 --       b = liftA2 (+) a a
 
--- main = go "lift-maybe-1-3" h
+-- main = go' "lift-maybe-1-3" [ranksep 1] h
 --  where
 --    h a = liftA3 f a b c :: Maybe Int
 --     where
