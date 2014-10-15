@@ -764,7 +764,7 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go' "if-maybe" [ranksep 0.75] (\ (a,b :: Maybe Bool,c) -> if a then b else c)
 
-main = go "fmap-maybe-square" (fmap square :: Unop (Maybe Int))
+-- main = go "fmap-maybe-square" (fmap square :: Unop (Maybe Int))
 
 -- main = go "fmap-maybe-not" (fmap not :: Unop (Maybe Bool))
 
@@ -822,3 +822,48 @@ main = go "fmap-maybe-square" (fmap square :: Unop (Maybe Int))
 --       f w x y z = (w + x) * (y + z)
 
 -- main = go "liftA2-justs" (\ (a,b) -> liftA2 (*) (Just a) (Just b) :: Maybe Int)
+
+-- Sums
+
+-- main = go "fmap-either-square" (fmap square :: Unop (Either Bool Int))
+
+-- main = go "case-of-either" 
+--          (\ case Left  x -> if x then 3 else 5 :: Int
+--                  Right n -> n + 3)
+
+-- -- ranksep 1.5 when unoptimized.
+-- main = go' "if-to-either" [ranksep 1.5] 
+--         (\ a -> if a then Left 2 else Right (3,5) :: Either Int (Int,Int))
+
+-- main = go' "case-if-either" [ranksep 1]
+--         (\ a -> let e :: Either Int (Int,Int)
+--                     e = if a then Left 2 else Right (3,5)
+--                 in
+--                   case e of
+--                     Left n      -> n + 5
+--                     Right (p,q) -> p * q )
+
+-- main = go' "case-if-either-2" [ranksep 1]
+--         (\ (a,b,c,d) -> let e :: Either Int (Int,Int)
+--                             e = if a then Left b else Right (c,d)
+--                 in
+--                   case e of
+--                     Left n      -> n + 5
+--                     Right (p,q) -> p * q )
+
+-- main = go' "case-if-either-3" [ranksep 1]
+--         (\ (a,b,c) -> let e :: Either Int (Int -> Int)
+--                           e = if a then Left b else Right (b *)
+--                 in
+--                   case e of
+--                     Left  n -> n + c
+--                     Right f -> f c )
+
+-- The conditionals vanish
+main = go' "case-if-either-3b" [ranksep 0.7]
+        (\ (a,b,c) -> let e :: Either Int (Int -> Int)
+                          e = if a then Left b else Right (b +)
+                in
+                  case e of
+                    Left  n -> n + c
+                    Right f -> f c )
