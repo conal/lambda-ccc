@@ -16,7 +16,7 @@ set-pp-coercion Kind
 -- try unshadow
 
 binding-of 'main
--- try (any-td (unfold 'go))  -- still needed?
+try (any-td (unfold 'go'))  -- still needed?
 try bash  -- for go unfolding
 -- down ; try simplifyAll' ; up
 
