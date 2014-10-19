@@ -48,7 +48,7 @@ import TypeUnary.TyNat
 import TypeUnary.Nat (IsNat)
 import TypeUnary.Vec hiding (transpose)
 
-import LambdaCCC.Misc (Unop,Binop,transpose,(:*))
+import LambdaCCC.Misc (dup,Unop,Binop,transpose,(:*))
 import LambdaCCC.Adder
 
 import Circat.Misc (Unop,Reversible(..))
@@ -60,6 +60,7 @@ import qualified Circat.RaggedTree as Ra
 import Circat.RaggedTree (TU(..), R1, R2, R3, R4, R5, R8, R11, R13)
 import Circat.Shift
 import Circat.Scan
+import Circat.Mealy
 import Circat.Circuit (GenBuses,Attr,systemSuccess)
 
 -- Strange -- why needed? EP won't resolve otherwise. Bug?
@@ -320,6 +321,14 @@ go' name attrs f = run name attrs (reifyEP f)
 go :: GenBuses a => String -> (a -> b) -> IO ()
 go name f = run name [] (reifyEP f)
 
+-- TODO: Try using go from Run instead. I was getting inlining failures earlier.
+
+ranksep :: Double -> Attr
+ranksep n = ("ranksep",show n)
+
+goSep :: GenBuses a => String -> Double -> (a -> b) -> IO ()
+goSep name s = go' name [ranksep s]
+
 inTest :: String -> IO ()
 inTest cmd = systemSuccess ("cd ../test; " ++ cmd) -- (I run ghci in ../src)
 
@@ -369,10 +378,7 @@ main :: IO ()
 -- main = go "plusInt" ((+) :: Int -> Int -> Int)
 -- main = go "or" ((||) :: Bool -> Bool -> Bool)
 
-ranksep :: Double -> Attr
-ranksep n = ("ranksep",show n)
-
--- main = go' "pure-rt3" [ranksep 1] (\ () -> (pure False :: RTree N3 Bool))
+-- main = goSep "pure-rt3" 1 (\ () -> (pure False :: RTree N3 Bool))
 
 -- main = go "foo" (\ (_ :: RTree N3 Bool) -> False)
 
@@ -403,19 +409,19 @@ ranksep n = ("ranksep",show n)
 -- main = go "test" (dot :: RTree N4 (Int,Int) -> Int)
 
 -- -- Ranksep: rt1=0.5, rt2=1, rt3=2, rt4=4,rt5=8
--- main = go' "transpose-pt4" [ranksep 4] (transpose :: Pair (RTree N4 Bool) -> RTree N4 (Pair Bool))
+-- main = goSep "transpose-pt4" 4 (transpose :: Pair (RTree N4 Bool) -> RTree N4 (Pair Bool))
 
 -- -- Ranksep: rt1=0.5, rt2=1, rt3=2, rt4=4,rt5=8
--- main = go' "transpose-t4p" [ranksep 4] (transpose :: RTree N4 (Pair Bool) -> Pair (RTree N4 Bool))
+-- main = goSep "transpose-t4p" 4 (transpose :: RTree N4 (Pair Bool) -> Pair (RTree N4 Bool))
 
 -- -- Ranksep: rt1=1, rt2=2, rt3=4, rt4=8, rt5=16
--- main = go' "transpose-v3t5" [ranksep 16] (transpose :: Vec N3 (RTree N5 Bool) -> RTree N5 (Vec N3 Bool))
+-- main = goSep "transpose-v3t5" 16 (transpose :: Vec N3 (RTree N5 Bool) -> RTree N5 (Vec N3 Bool))
 
 -- -- Ranksep: rt1=2, rt2=4, rt3=8, rt4=16, rt5=32
--- main = go' "transpose-v5t3" [ranksep 8] (transpose :: Vec N5 (RTree N3 Bool) -> RTree N3 (Vec N5 Bool))
+-- main = goSep "transpose-v5t3" 8 (transpose :: Vec N5 (RTree N3 Bool) -> RTree N3 (Vec N5 Bool))
 
 -- -- Ranksep: rt1=0.5, rt2=1, rt3=2, rt4=4, rt5=8
--- main = go' "invertR-5" [ranksep 8] (invertR :: RTree N5 Bool -> LTree N5 Bool)
+-- main = goSep "invertR-5" 8 (invertR :: RTree N5 Bool -> LTree N5 Bool)
 
 -- main = go "vtranspose-34" (transpose :: Matrix N3 N4 Int -> Matrix N4 N3 Int)
 
@@ -461,13 +467,13 @@ ranksep n = ("ranksep",show n)
 -- -- Not working yet: the (^) is problematic.
 -- main = go "squaresp-rt0" (squares' :: Unop (RTree N0 Int))
 
--- main = go' "applyLin-v23" [ranksep 1] (uncurry (($@) :: Matrix N2 N3 Int -> Vec N2 Int -> Vec N3 Int))
+-- main = goSep "applyLin-v23" 1 (uncurry (($@) :: Matrix N2 N3 Int -> Vec N2 Int -> Vec N3 Int))
 
--- main = go' "applyLin-v42" [ranksep 1] (uncurry (($@) :: Matrix N4 N2 Int -> Vec N4 Int -> Vec N2 Int))
+-- main = goSep "applyLin-v42" 1 (uncurry (($@) :: Matrix N4 N2 Int -> Vec N4 Int -> Vec N2 Int))
 
--- main = go' "applyLin-v45" [ranksep 1] (uncurry (($@) :: Matrix N4 N5 Int -> Vec N4 Int -> Vec N5 Int))
+-- main = goSep "applyLin-v45" 1 (uncurry (($@) :: Matrix N4 N5 Int -> Vec N4 Int -> Vec N5 Int))
 
--- main = go' [ranksep 2] "applyLin-t21" (uncurry (($@) :: MatrixT N2 N1 Int -> RTree N2 Int -> RTree N1 Int))
+-- main = goSep [ranksep 2] -t21 (uncurry (($@) :: MatrixT N2 N1 Int -> RTree N2 Int -> RTree N1 Int))
 
 -- main = go "applyLin-t22" (uncurry (($@) :: MatrixT N2 N2 Int -> RTree N2 Int -> RTree N2 Int))
 
@@ -579,7 +585,7 @@ ranksep n = ("ranksep",show n)
 -- These zero additions are now removed in the circuit generation back-end.
 
 -- ranksep: 8=1.5, 11=2.5
--- main = go' "lsumsp-gt3" [ranksep=1.5] (lsums' :: Unop (Ragged Ra.R3 Int))
+-- main = goSep "lsumsp-gt3" =1.5 (lsums' :: Unop (Ragged Ra.R3 Int))
 
 -- main = go "foo" (lsums' :: Unop (Ragged Ra.R3 Int))
 
@@ -594,7 +600,7 @@ ranksep n = ("ranksep",show n)
 
 -- main = go "foo" (\ (a, (b :: Int :* Int)) -> (if a then id else swap) b)
 
--- main = go' "foo" [ranksep 2.5] (\ (a, b::Int, c::Int, d::Int) -> if a then (b,c,d) else (c,d,b))
+-- main = goSep "foo" 2.5 (\ (a, b::Int, c::Int, d::Int) -> if a then (b,c,d) else (c,d,b))
 
 -- main = go "foo" (\ (a,b) -> ( if a then b else False --     a && b
 --                             , if a then True  else b --     a || b
@@ -603,18 +609,18 @@ ranksep n = ("ranksep",show n)
 --                             ))
 
 -- -- Equivalently, (&& not a) <$> b
--- main = go' "foo" [ranksep 2] (\ (a, b :: Vec N4 Bool) -> if a then pure False else b)
+-- main = goSep "foo" 2 (\ (a, b :: Vec N4 Bool) -> if a then pure False else b)
 
 -- -- Equivalently, (|| a) <$> b
--- main = go' "foo" [ranksep 2] (\ (a, b :: Vec N4 Bool) -> if a then pure True  else b)
+-- main = goSep "foo" 2 (\ (a, b :: Vec N4 Bool) -> if a then pure True  else b)
 
 -- -- Equivalently, (&& not a) <$> b
--- main = go' "foo" [ranksep 2] (\ (a, b :: RTree N3 Bool) -> if a then pure False else b)
+-- main = goSep "foo" 2 (\ (a, b :: RTree N3 Bool) -> if a then pure False else b)
 
 -- -- Equivalently, (a `xor`) <$> b
 -- main = go "foo" (\ (a, b :: Vec N3 Bool) -> (if a then not else id) <$> b)
 
--- main = go' "foo" [ranksep 2] (\ (a, b :: RTree N2 Bool) -> (if a then reverse else id) b)
+-- main = goSep "foo" 2 (\ (a, b :: RTree N2 Bool) -> (if a then reverse else id) b)
 
 -- -- Equivalent to \ a -> (a,not a)
 -- main = go "foo" (\ a -> if a then (True,False) else (False,True))
@@ -622,11 +628,11 @@ ranksep n = ("ranksep",show n)
 -- crcStep :: (Traversable poly, Applicative poly) =>
 --            poly Bool -> poly Bool :* Bool -> poly Bool
 
--- main = go' "crcStep-v4" [ranksep 1]
+-- main = goSep "crcStep-v4" 1
 --         (uncurry (crcStep :: Vec N4 Bool -> Vec N4 Bool :* Bool -> Vec N4 Bool))
 
 -- -- ranksep: rt2=1, rt3=2, rt4=4.5
--- main = go' "crcStep-rt3" [ranksep 2] (uncurry (crcStep :: RTree N3 Bool -> RTree N3 Bool :* Bool -> RTree N3 Bool))
+-- main = goSep "crcStep-rt3" 2 (uncurry (crcStep :: RTree N3 Bool -> RTree N3 Bool :* Bool -> RTree N3 Bool))
 
 polyV2 :: Vec N2 Bool
 polyV2 = vec2 True False
@@ -655,9 +661,9 @@ polyRT4 :: RTree N4 Bool
 polyRT4 = RT.tree4 True False False True True False True False
                    False True True False True False True False
 
--- main = go' "crcStepK-rt3" [ranksep 1] (crcStep polyRT3)
+-- main = goSep "crcStepK-rt3" 1 (crcStep polyRT3)
 
--- main = go' "crcStepK-g5" [ranksep 1]
+-- main = goSep "crcStepK-g5" 1
 --         (crcStep (ra5 True False False True False))
 
 -- crc :: (Traversable poly, Applicative poly, Traversable msg) =>
@@ -723,19 +729,19 @@ polyRT4 = RT.tree4 True False False True True False True False
 -- main = go "adder-scanpp-pair" (scanAdd'' :: Adder Pair)
 
 -- -- Ranksep: rt1=0.5, rt2=0.5, rt3=0.75, rt4=1.5,rt5=2
--- main = go' "adder-scan-noinline-rt2" [ranksep 0.5] (scanAdd :: Adder (RTree N2))
+-- main = goSep "adder-scan-noinline-rt2" 0.5 (scanAdd :: Adder (RTree N2))
 
 -- -- Ranksep: rt1=0.5, rt2=0.5, rt3=0.75, rt4=1.5,rt5=2
--- main = go' "adder-scan-rt5" [ranksep 2] (scanAdd :: Adder (RTree N5))
+-- main = goSep "adder-scan-rt5" 2 (scanAdd :: Adder (RTree N5))
 
 -- -- Ranksep: rt2=0.5, rt3=0.75, rt4=1.5,rt5=2
--- main = go' "adder-scan-unopt-rt0" [ranksep 0.5] (scanAdd :: Adder (RTree N0))
+-- main = goSep "adder-scan-unopt-rt0" 0.5 (scanAdd :: Adder (RTree N0))
 
 -- -- Ranksep: rt2=0.5, rt3=1, rt4=2, rt5=3
--- main = go' "adder-scanp-rt3" [ranksep 1] (scanAdd' :: Adder' (RTree N3))
+-- main = goSep "adder-scanp-rt3" 1 (scanAdd' :: Adder' (RTree N3))
 
 -- -- Ranksep: rt2=0.5, rt3=0.75, rt4=1.5,rt5=2
--- main = go' "adder-scanpp-rt1" [ranksep 0.5] (scanAdd'' :: Adder (RTree N1))
+-- main = goSep "adder-scanpp-rt1" 0.5 (scanAdd'' :: Adder (RTree N1))
 
 -- main = go "foo" (\ ((gx,px),(gy,py)) -> (gx || gy && px, px && py))
 
@@ -762,7 +768,7 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go "foo" (\ x -> if x then bottom else bottom :: Bool)
 
--- main = go' "if-maybe" [ranksep 0.75] (\ (a,b :: Maybe Bool,c) -> if a then b else c)
+-- main = goSep "if-maybe" 0.75 (\ (a,b :: Maybe Bool,c) -> if a then b else c)
 
 -- main = go "fmap-maybe-square" (fmap square :: Unop (Maybe Int))
 
@@ -772,15 +778,15 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go "fromMaybe-bool" (uncurry (fromMaybe :: Bool -> Maybe Bool -> Bool))
 
--- main = go' "fromMaybe-v3" [ranksep 1.5] (uncurry (fromMaybe :: Vec N3 Bool -> Maybe (Vec N3 Bool) -> Vec N3 Bool))
+-- main = goSep "fromMaybe-v3" 1.5 (uncurry (fromMaybe :: Vec N3 Bool -> Maybe (Vec N3 Bool) -> Vec N3 Bool))
 
--- main = go' "liftA2-maybe" [ranksep 0.8] (\ (a,b) -> liftA2 (*) a b :: Maybe Int)
+-- main = goSep "liftA2-maybe" 0.8 (\ (a,b) -> liftA2 (*) a b :: Maybe Int)
 
--- main = go' "liftA3-maybe" [ranksep 0.8] (\ (a,b,c) -> liftA3 f a b c :: Maybe Int)
+-- main = goSep "liftA3-maybe" 0.8 (\ (a,b,c) -> liftA3 f a b c :: Maybe Int)
 --  where
 --    f x y z = x * (y + z)
 
--- main = go' "liftA4-maybe" [ranksep 0.8] (\ (a,b,c,d) -> liftA4 f a b c d :: Maybe Int)
+-- main = goSep "liftA4-maybe" 0.8 (\ (a,b,c,d) -> liftA4 f a b c d :: Maybe Int)
 --  where
 --    f w x y z = (w + x) * (y + z)
 
@@ -804,7 +810,7 @@ polyRT4 = RT.tree4 True False False True True False True False
 --     where
 --       b = liftA2 (+) a a
 
--- main = go' "lift-maybe-1-3" [ranksep 1] h
+-- main = goSep "lift-maybe-1-3" 1 h
 --  where
 --    h a = liftA3 f a b c :: Maybe Int
 --     where
@@ -812,7 +818,7 @@ polyRT4 = RT.tree4 True False False True True False True False
 --       c = liftA2 (+) b a
 --       f w x y = (w + x) * y
 
--- main = go' "lift-maybe-1-4" [ranksep 0.8] h
+-- main = goSep "lift-maybe-1-4" 0.8 h
 --  where
 --    h a = liftA4 f a b c d :: Maybe Int
 --     where
@@ -832,10 +838,10 @@ polyRT4 = RT.tree4 True False False True True False True False
 --                  Right n -> n + 3)
 
 -- -- ranksep 1.5 when unoptimized.
--- main = go' "if-to-either" [ranksep 1.5] 
+-- main = goSep "if-to-either" 1.5 
 --         (\ a -> if a then Left 2 else Right (3,5) :: Either Int (Int,Int))
 
--- main = go' "case-if-either" [ranksep 1]
+-- main = goSep "case-if-either" 1
 --         (\ a -> let e :: Either Int (Int,Int)
 --                     e = if a then Left 2 else Right (3,5)
 --                 in
@@ -843,7 +849,7 @@ polyRT4 = RT.tree4 True False False True True False True False
 --                     Left n      -> n + 5
 --                     Right (p,q) -> p * q )
 
--- main = go' "case-if-either-2" [ranksep 1]
+-- main = goSep "case-if-either-2" 1
 --         (\ (a,b,c,d) -> let e :: Either Int (Int,Int)
 --                             e = if a then Left b else Right (c,d)
 --                 in
@@ -851,7 +857,7 @@ polyRT4 = RT.tree4 True False False True True False True False
 --                     Left n      -> n + 5
 --                     Right (p,q) -> p * q )
 
--- main = go' "case-if-either-3" [ranksep 1]
+-- main = goSep "case-if-either-3" 1
 --         (\ (a,b,c) -> let e :: Either Int (Int -> Int)
 --                           e = if a then Left b else Right (b *)
 --                 in
@@ -859,11 +865,17 @@ polyRT4 = RT.tree4 True False False True True False True False
 --                     Left  n -> n + c
 --                     Right f -> f c )
 
--- The conditionals vanish
-main = go' "case-if-either-3b" [ranksep 0.7]
-        (\ (a,b,c) -> let e :: Either Int (Int -> Int)
-                          e = if a then Left b else Right (b +)
-                in
-                  case e of
-                    Left  n -> n + c
-                    Right f -> f c )
+-- -- The conditionals vanish
+-- main = goSep "case-if-either-3b" 0.7
+--         (\ (a,b,c) -> let e :: Either Int (Int -> Int)
+--                           e = if a then Left b else Right (b +)
+--                 in
+--                   case e of
+--                     Left  n -> n + c
+--                     Right f -> f c )
+
+-- main = go "foo" (Mealy (\ (old,a::Int) -> dup (old+a)) 0)
+
+main = go "foo" (\ (old,a::Int) -> dup (old+a))
+
+-- main = go "foo" (Mealy (\ (old,a::Int) -> dup (old+a)) 0)
