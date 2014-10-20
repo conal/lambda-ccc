@@ -26,8 +26,8 @@ import LambdaCCC.Lambda (EP,reifyEP)
 -- import LambdaCCC.CCC ((:->),convertC)
 import LambdaCCC.ToCCC (toCCC')
 
-import Circat.Circuit (GenBuses,(:>),outGWith,Attr)
-import Circat.Netlist (outV)
+import Circat.Circuit (GenBuses,(:>),Attr,mkGraph,unitize,outDotG)
+import Circat.Netlist (saveAsVerilog)
 
 go :: GenBuses a => String -> (a -> b) -> IO ()
 go name f = run name [] (reifyEP f)
@@ -62,8 +62,14 @@ run name attrs e = do
 
 -- Diagram and Verilog
 outGV :: GenBuses a => String -> [Attr] -> (a :> b) -> IO ()
-outGV s attrs c = do 
-               outGWith ("pdf","") s attrs c
-               -- outGWith ("svg","")      s c
-               -- outGWith ("png","-Gdpi=200") s c
-               outV                     s c
+outGV name attrs circ =
+  do outD ("pdf","")
+     -- outD ("svg","") 
+     -- outD ("png","-Gdpi=200")
+     outV
+ where
+   g       = mkGraph name (unitize circ)
+   outD ss = outDotG ss attrs g
+   outV    = saveAsVerilog g
+
+-- TODO: Move file-saving code from outD and saveVerilog to here.
