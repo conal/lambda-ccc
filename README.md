@@ -30,10 +30,4 @@ To try out:
         Wrote out/sumSquare-t3.v.txt
 
 The `.v.txt` file is Verilog code. Additionally the PDF will be displayed if the display code figures out how to on your system.
-For instance,
 
-<table style="margin:auto;width:60%">
-<td style="text-align: center">
- <img src="Figures/sumSquare-t3.svg"/>
-</td>
-</table>
