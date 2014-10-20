@@ -31,14 +31,14 @@
 
 -- TODO: explicit exports
 
-import Prelude hiding (id,(.),foldl,foldr,sum,product,zipWith,reverse,and,or)
+import Prelude hiding ({- id,(.), -}foldl,foldr,sum,product,zipWith,reverse,and,or)
 
 import Data.Monoid (Monoid(..),Sum,Product)
 import Data.Functor ((<$>))
 import Control.Applicative -- (Applicative(..),liftA2,liftA3)
 import Data.Foldable (Foldable(..),sum,product,and,or)
 import Data.Traversable (Traversable(..))
-import Control.Category (id,(.))
+-- import Control.Category (id,(.))
 import Control.Arrow (Arrow(..),ArrowLoop(..))
 import Data.Tuple (swap)
 import Data.Maybe (fromMaybe,maybe)
