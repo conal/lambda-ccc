@@ -1,5 +1,0 @@
-#! /bin/sh
-
-# rm -f SimpleMain *.o *.hi
-hermit Simple.hs -v0 -opt=LambdaCCC.Reify Auto.hss resume
-ghc SimpleMain.hs && ./SimpleMain

@@ -1,9 +1,0 @@
--- HERMIT script for Tests.hs
-
-{ rhs-of 'step4cK
-; any-td (inline ['curry,'shiftL4c,'xor5,'liftA2_5,'step4c])
-; bash
-; any-bu (apply-rules ["True/xor","xor/True","False/xor","xor/False"]) ; bash
-}
-reify-named 'step4cK
--- consider 'step4cK_reified
