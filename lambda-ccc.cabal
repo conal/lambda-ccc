@@ -37,40 +37,15 @@ Library
                   , hermit-extras >= 0.2
                   , MemoTrie
 
---                  , type-encode
-
   Exposed-Modules:  LambdaCCC.Misc
                     LambdaCCC.ShowUtils
---                     LambdaCCC.Prim
                     LambdaCCC.Lambda
---                     LambdaCCC.CCC
                     LambdaCCC.ToCCC
---                     LambdaCCC.Encode
---                     LambdaCCC.CoreEncode
                     LambdaCCC.Monomorphize
---                     LambdaCCC.TransCode
---                     LambdaCCC.Standardize
---                     LambdaCCC.CoerceEncode
---                     LambdaCCC.Recastable
                     LambdaCCC.Run
                     LambdaCCC.StateTrie
                     LambdaCCC.Adder
-
---                     LambdaCCC.Examples.Linear
--- Phasing out:
-
---                     LambdaCCC.Reify
                     LambdaCCC.ReifySimple
---                     LambdaCCC.SReify
---                     LambdaCCC.NormalizeCore
-
-
-
---                     LambdaCCC.Ty
---                     LambdaCCC.MkStringExpr
---                     LambdaCCC.ReifyLambda
---                     LambdaCCC.ToCircuit
-
   Other-Modules:
                     LambdaCCC.Tests
 

@@ -333,7 +333,7 @@ inTest :: String -> IO ()
 inTest cmd = systemSuccess ("cd ../test; " ++ cmd) -- (I run ghci in ../src)
 
 doit :: IO ()
-doit = inTest "./test"
+doit = inTest "make"
 
 make :: IO ()
 make = systemSuccess "cd ../..; make"
