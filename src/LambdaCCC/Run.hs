@@ -79,12 +79,10 @@ reifyMealy (Mealy f s) = MealyE (reifyEP f) (reifyEP s)
 
 toMealyC :: MealyE a b -> MealyC a b
 toMealyC (MealyE f s) = MealyC (toCCC' f) (toCCC s)
-{-# NOINLINE toMealyC #-}
 
 runM :: GenBuses a => String -> [Attr] -> MealyE a b -> IO ()
 runM name attrs e = do print e
                        outGV name attrs (unitizeMealyC (toMealyC e))
-{-# NOINLINE runM #-}
 
 goM :: GenBuses a => String -> Mealy a b -> IO ()
 goM name = goM' name []
@@ -93,6 +91,12 @@ goM name = goM' name []
 goM' :: GenBuses a => String -> [Attr] -> Mealy a b -> IO ()
 goM' name attrs m = runM name attrs (reifyMealy m)
 {-# INLINE goM' #-}
+
+-- Despite INLINE pragmas, I still have to explicitly tell HERMIT to unfold
+-- definitions from this module:
+-- 
+--   try (any-td (unfold ['go,'go','goM,'goM','reifyMealy]))
+
 
 -- TODO: Maybe pull unitizeMealyC into toMealyC, renaming to "toMealyU"
 
