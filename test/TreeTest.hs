@@ -378,7 +378,7 @@ main :: IO ()
 
 -- main = go "sumSquare-p" (sumSquare :: Pair Int -> Int)
 
--- main = go "sumSquare-t3" (sumSquare :: RTree N3 Int -> Int)
+main = go "sumSquare-t3" (sumSquare :: RTree N3 Int -> Int)
 
 -- main = go "sum-v8" (sum :: Vec N8 Int -> Int)
 
@@ -870,4 +870,4 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go "foo" (\ (old,a::Int) -> dup (old+a))
 
-main = goM "foo" (Mealy (\ (old,a::Int) -> dup (old+a)) 0)
+-- main = goM "foo" (Mealy (\ (old,a::Int) -> dup (old+a)) 0)
