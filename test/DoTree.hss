@@ -9,9 +9,9 @@ set-pp-type     Omit
 set-pp-coercion Omit
 
 binding-of 'main
-try (any-td (unfold 'go'))
--- try bash  -- for go unfolding
-down ; try simplifyAll'' ; up
+-- Marked INLINE in LambdaCCC.Run, but still needs explicit unfolding here:
+try (any-td (unfold ['go,'go','goM,'goM','reifyMealy]))
+down ; try simplifyAll' ; up
 
 any-td reify-prep
 

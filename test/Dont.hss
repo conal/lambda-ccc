@@ -16,10 +16,11 @@ set-pp-coercion Kind
 -- try unshadow
 
 binding-of 'main
-try (any-td (unfold 'go'))  -- still needed?
-try bash  -- for go unfolding
--- down ; try simplifyAll' ; up
+-- Marked INLINE in LambdaCCC.Run, but still needs explicit unfolding here:
+try (any-td (unfold ['go,'go','goM,'goM','reifyMealy]))
+down ; try simplifyAll' ; up
 
-application-of 'reifyEP
+-- any-td reify-prep
 
-down;right;down
+-- application-of 'reifyEP
+-- down;right;down
