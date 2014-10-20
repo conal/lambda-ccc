@@ -15,7 +15,7 @@ Dependencies:
 To try out:
 
 *   `cabal install` circat and lambda-ccc (in that order)
-*   In a shell, `cd` to lambda-ccc/test, and type `./test`.
+*   In a shell, `cd` to lambda-ccc/test, and type `make`.
     If all works, you'll see something like the following output:
 
         bash-3.2$ ./test
@@ -30,4 +30,6 @@ To try out:
         Wrote out/sumSquare-t3.v.txt
 
 The `.v.txt` file is Verilog code. Additionally the PDF will be displayed if the display code figures out how to on your system.
+
+There are many other examples in `test/TreeTest.hs`. At any time, all examples but one are commented out.
 
