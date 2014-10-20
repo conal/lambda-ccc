@@ -68,7 +68,7 @@ import qualified LambdaCCC.Lambda
 import Circat.Classes (IfT)
 import LambdaCCC.Lambda (EP,reifyEP,xor)
 
-import LambdaCCC.Run (run) -- go
+import LambdaCCC.Run (go,go',goM,goM')
 
 -- Experiment for Typeable resolution in reification
 import qualified Data.Typeable
@@ -315,14 +315,6 @@ RT.B         :: Pair (RTree n a) -> RTree (S n)   a
     Run it
 --------------------------------------------------------------------}
 
-go' :: GenBuses a => String -> [Attr] -> (a -> b) -> IO ()
-go' name attrs f = run name attrs (reifyEP f)
-
-go :: GenBuses a => String -> (a -> b) -> IO ()
-go name f = run name [] (reifyEP f)
-
--- TODO: Try using go from Run instead. I was getting inlining failures earlier.
-
 ranksep :: Double -> Attr
 ranksep n = ("ranksep",show n)
 
@@ -386,13 +378,13 @@ main :: IO ()
 
 -- main = go "sumSquare-p" (sumSquare :: Pair Int -> Int)
 
-main = go "sumSquare-t3" (sumSquare :: RTree N3 Int -> Int)
+-- main = go "sumSquare-t3" (sumSquare :: RTree N3 Int -> Int)
 
 -- main = go "sum-v8" (sum :: Vec N8 Int -> Int)
 
 -- main = go "and-v5" (and :: Vec N5 Bool -> Bool)
 
--- main = go "sum-t2" (sum :: RTree N2 Int -> Int)
+-- main = go "sum-t3" (sum :: RTree N3 Int -> Int)
 
 -- main = go "sum-foldl-v5" (foldl (+) 0 :: Vec N5 Int -> Int)
 
@@ -878,4 +870,4 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go "foo" (\ (old,a::Int) -> dup (old+a))
 
--- main = go "foo" (Mealy (\ (old,a::Int) -> dup (old+a)) 0)
+main = goM "foo" (Mealy (\ (old,a::Int) -> dup (old+a)) 0)
