@@ -9,4 +9,5 @@
 
 :set -i../../hermit-extras/src
 -- :set -i../../circat/src
--- :set -package applicative-numbers
+-- To help when switching between circat and lambda-ccc in Emacs.
+:set -package applicative-numbers
