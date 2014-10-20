@@ -146,6 +146,7 @@ reifyR = idR >>= reifyOf
 reifyApp :: ReExpr
 reifyApp = do App u v <- unReify
               Just (a,b) <- constT (return (splitFunTy_maybe (exprType u)))
+              -- guardMsg (not (isDictTy a)) "reifyApp: dictionary argument"
               u' <- reifyOf u
               v' <- reifyOf v
               appsE "appP" [b,a] [u', v'] -- note b,a

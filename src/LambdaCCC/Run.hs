@@ -27,7 +27,8 @@ import LambdaCCC.Lambda (EP,reifyEP)
 -- import LambdaCCC.CCC ((:->),convertC)
 import LambdaCCC.ToCCC (toCCC',toCCC)
 
-import Circat.Circuit (GenBuses,(:>),Attr,mkGraph,unitize,UU,outDotG,MealyC(..),unitizeMealyC)
+import Circat.Circuit
+  (GenBuses,(:>),Attr,mkGraph,unitize,UU,outDotG,MealyC(..),mkMealyC,unitizeMealyC)
 import Circat.Netlist (saveAsVerilog)
 import Circat.Mealy (Mealy(..))
 
@@ -63,7 +64,6 @@ outGV name attrs circ =
 
 -- TODO: Move file-saving code from outD and saveVerilog to here.
 
-
 {--------------------------------------------------------------------
     State machines
 --------------------------------------------------------------------}
@@ -95,7 +95,7 @@ goM' name attrs m = runM name attrs (reifyMealy m)
 -- Despite INLINE pragmas, I still have to explicitly tell HERMIT to unfold
 -- definitions from this module:
 -- 
---   try (any-td (unfold ['go,'go','goM,'goM','reifyMealy]))
+-- try (any-td (unfold ['go,'go','goM,'goM','reifyMealy]))
 
 
 -- TODO: Maybe pull unitizeMealyC into toMealyC, renaming to "toMealyU"

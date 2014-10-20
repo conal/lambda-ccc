@@ -31,13 +31,15 @@
 
 -- TODO: explicit exports
 
-import Prelude hiding (foldl,foldr,sum,product,zipWith,reverse,and,or)
+import Prelude hiding (id,(.),foldl,foldr,sum,product,zipWith,reverse,and,or)
 
 import Data.Monoid (Monoid(..),Sum,Product)
 import Data.Functor ((<$>))
 import Control.Applicative -- (Applicative(..),liftA2,liftA3)
 import Data.Foldable (Foldable(..),sum,product,and,or)
 import Data.Traversable (Traversable(..))
+import Control.Category (id,(.))
+import Control.Arrow (Arrow(..),ArrowLoop(..))
 import Data.Tuple (swap)
 import Data.Maybe (fromMaybe,maybe)
 
@@ -374,7 +376,7 @@ main :: IO ()
 
 -- main = go "foo" (\ (_ :: RTree N3 Bool) -> False)
 
--- main = go "sum-p" (sum :: Pair Int -> Int)
+main = go "sum-p" (sum :: Pair Int -> Int)
 
 -- main = go "sumSquare-p" (sumSquare :: Pair Int -> Int)
 
@@ -870,4 +872,17 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go "foo" (\ (old,a::Int) -> dup (old+a))
 
-main = goM "foo" (Mealy (\ (old,a::Int) -> dup (old+a)) 0)
+-- main = goM "mealy-sum-0" (Mealy (\ (old,a::Int) -> dup (old+a)) 0)
+
+-- We can't yet handle examples built from the Arrow interface.
+
+-- main = goM "mealy-sum-1" (m :: Mealy Int Int)
+--  where
+--    m :: Mealy Int Int
+--    m = loop (arr (\ (a,tot) -> dup (tot+a)) . second (delay 0))
+
+-- serialSum0 :: Mealy Int Int
+-- serialSum0 = Mealy (\ (old,a) -> dup (old+a)) 0
+
+-- serialSum1 :: Mealy Int Int
+-- serialSum1 = loop (arr (\ (a,tot) -> dup (tot+a)) . second (delay 0))
