@@ -15,20 +15,25 @@ Dependencies:
 To try out:
 
 *   `cabal install` circat and lambda-ccc (in that order)
-*   In lambda-ccc/test, follow the directions in the module comment (near the top) in Simple.hs.
+*   In a shell, `cd` to lambda-ccc/test, and type `./test`.
+    If all works, you'll see something like the following output:
 
-If all works, you'll see something like the following output:
+        bash-3.2$ ./test
+        [starting HERMIT v0.5.0.1 on TreeTest.hs]
+        % ghc TreeTest.hs -fforce-recomp -O2 -dcore-lint -fsimple-list-literals -fexpose-all-unfoldings -fplugin=LambdaCCC.Monomorphize -fplugin-opt=LambdaCCC.Monomorphize:-v0 -fplugin-opt=LambdaCCC.Monomorphize:DoTree.hss -fplugin-opt=LambdaCCC.Monomorphize:resume -fplugin-opt=LambdaCCC.Monomorphize:*: -v0
 
-    hermit Simple.hs -v0 -opt=LambdaCCC.Reify +Simple Auto.hss resume && ghc -O2 --make SimpleMain.hs && ./SimpleMain
-    [starting HERMIT v0.4.0.0 on Simple.hs]
-    % ghc Simple.hs -fforce-recomp -O2 -dcore-lint -fsimple-list-literals -fexpose-all-unfoldings -fplugin=LambdaCCC.Reify -fplugin-opt=LambdaCCC.Reify:-v0 -fplugin-opt=LambdaCCC.Reify:Simple: -fplugin-opt=LambdaCCC.Reify:Simple:Auto.hss -fplugin-opt=LambdaCCC.Reify:Simple:resume -v0
-    Linking SimpleMain ...
-    \ (a,b) -> let h = \ f -> f a b in (h (&&),h xor)
-    (apply . (exr &&& curry ((&&) . exr)) &&& apply . (exr &&& curry (xor . exr))) . (id &&& curry (apply . (apply . (exr &&& exl . exr . exl) &&& exr . exr . exl))) . (it &&& id)
+        real	0m6.098s
+        user	0m5.968s
+        sys	0m0.245s
+        let f = \ ds -> abst (repr ds) in let f0 = \ ds -> let (a1,a'1) = repr (repr ds) in abst (repr (f a1) + repr (f a'1)) in let f1 = \ ds -> let (a1,a'1) = repr (repr ds) in abst (repr (f0 a1) + repr (f0 a'1)) in let f2 = \ eta -> let a = repr eta in abst (a * a) in let f3 = \ eta -> abst (let (a1,a'1) = repr (repr eta) in abst (f2 a1,f2 a'1)) in let f4 = \ eta -> abst (let (a1,a'1) = repr (repr eta) in abst (f3 a1,f3 a'1)) in \ x -> let (a1,a'1) = repr (let (a1,a'1) = repr (repr x) in abst (f4 a1,f4 a'1)) in repr (f1 a1) + repr (f1 a'1)
+        Wrote out/sumSquare-t3.pdf
+        Wrote out/sumSquare-t3.v.txt
 
-The output lines (after "Linking SimpleMain ...") are
+The `.v.txt` file is Verilog code. Additionally the PDF will be displayed if the display code figures out how to on your system.
+For instance,
 
-*   A lambda expression corresponding to the body of a reified Haskell definition from Simple.hs, and
-*   A CCC expression constructed by converting that lambda expression.
-
-Additionally, you'll get a PDF with a picture of the program/circuit in out/test.pdf (also displayed in a PDF viewer) and Verilog code in out/test.v.
+<table style="margin:auto;width:60%">
+<td style="text-align: center">
+ <img src="Figures/sumSquare-t3.svg"/>
+</td>
+</table>
