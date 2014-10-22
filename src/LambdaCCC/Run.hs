@@ -4,7 +4,7 @@
 
 {-# OPTIONS_GHC -Wall #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -22,19 +22,24 @@ module LambdaCCC.Run (go,go',run,goM,goM') where
 
 import Prelude
 
-import LambdaCCC.Misc (Unop)
 import LambdaCCC.Lambda (EP,reifyEP)
 -- import LambdaCCC.CCC ((:->),convertC)
 import LambdaCCC.ToCCC (toCCC',toCCC)
 
 import Circat.Circuit
-  (GenBuses,(:>),Attr,mkGraph,unitize,UU,outDotG,MealyC(..),mkMealyC,unitizeMealyC)
+  (GenBuses,Attr,mkGraph,unitize,UU,outDotG,MealyC(..),unitizeMealyC)
 import Circat.Netlist (saveAsVerilog)
 import Circat.Mealy (Mealy(..))
 
 go' :: GenBuses a => String -> [Attr] -> (a -> b) -> IO ()
 go' name attrs f = run name attrs (reifyEP f)
 {-# INLINE go' #-}
+
+-- Alternatively, define go' via goM':
+-- 
+--   go' name attrs f = goM' name attrs (Mealy (first f) ())
+-- 
+-- However, we'd then get extra junk in the circuit
 
 go :: GenBuses a => String -> (a -> b) -> IO ()
 go name = go' name []
@@ -69,7 +74,7 @@ outGV name attrs circ =
 --------------------------------------------------------------------}
 
 data MealyE a b =
-  forall s. GenBuses s => MealyE (EP ((s,a) -> (s,b))) (EP s)
+  forall s. GenBuses s => MealyE (EP ((a,s) -> (b,s))) (EP s)
 
 deriving instance Show (MealyE a b)
 
