@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ExplicitForAll, ConstraintKinds, FlexibleContexts #-}  -- For :< experiment
 {-# LANGUAGE ScopedTypeVariables, TypeOperators #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ViewPatterns, PatternGuards #-}
 {-# LANGUAGE DataKinds, GADTs #-}  -- for TU
 {-# LANGUAGE LambdaCase #-}
 
@@ -868,13 +868,11 @@ polyRT4 = RT.tree4 True False False True True False True False
 --                     Left  n -> n + c
 --                     Right f -> f c )
 
--- main = go "foo" (Mealy (\ (old,a::Int) -> dup (old+a)) 0)
+-- main = go "foo" (\ (a::Int,old) -> dup (old+a))
 
--- main = go "foo" (\ (old,a::Int) -> dup (old+a))
+-- main = goM "foo" (Mealy (\ (a::Int,old) -> dup (old+a)) 0)
 
-main = goM "foo" (Mealy (\ (old,a::Int) -> dup (old+a)) 0)
-
--- main = goM "mealy-sum-0" (Mealy (\ (old,a::Int) -> dup (old+a)) 0)
+-- main = goM "mealy-sum-0" (Mealy (\ (a::Int,old) -> dup (old+a)) 0)
 
 -- We can't yet handle examples built from the Arrow interface.
 
@@ -889,3 +887,16 @@ main = goM "foo" (Mealy (\ (old,a::Int) -> dup (old+a)) 0)
 -- serialSum1 :: Mealy Int Int
 -- serialSum1 = loop (arr (\ (a,tot) -> dup (tot+a)) . second (delay 0))
 
+-- main = go "foo" (sumSquare :: RTree N2 Int -> Int)
+
+-- main = goM "mealy-sum-exclusive-0" (Mealy (\ (a::Int,n) -> (n,n+a)) 0)
+
+-- main = goM "mealy-sum-inclusive-0" (Mealy (\ (a::Int,n) -> dup (n+a)) 0)
+
+-- main = goM "mealy-counter-exclusive-0" (Mealy (\ ((),n::Int) -> (n,n+1)) 0)
+
+main = goM "mealy-counter-inclusive-0" (Mealy (\ ((),n::Int) -> dup (n+1)) 0)
+
+-- -- Square of consecutive numbers
+-- main = goM "mealy-square-counter-0"
+--          (Mealy (\ ((),old::Int) -> let new = old+1 in (square new,new)) 0)
