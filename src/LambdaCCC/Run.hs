@@ -21,6 +21,7 @@
 module LambdaCCC.Run (go,go',run,goM,goM') where
 
 import Prelude
+import Control.Arrow (first)
 
 import LambdaCCC.Lambda (EP,reifyEP)
 -- import LambdaCCC.CCC ((:->),convertC)
@@ -32,14 +33,8 @@ import Circat.Netlist (saveAsVerilog)
 import Circat.Mealy (Mealy(..))
 
 go' :: GenBuses a => String -> [Attr] -> (a -> b) -> IO ()
-go' name attrs f = run name attrs (reifyEP f)
+go' name attrs f = goM' name attrs (Mealy (first f) ())
 {-# INLINE go' #-}
-
--- Alternatively, define go' via goM':
--- 
---   go' name attrs f = goM' name attrs (Mealy (first f) ())
--- 
--- However, we'd then get extra junk in the circuit
 
 go :: GenBuses a => String -> (a -> b) -> IO ()
 go name = go' name []
