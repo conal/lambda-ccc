@@ -887,16 +887,34 @@ polyRT4 = RT.tree4 True False False True True False True False
 -- serialSum1 :: Mealy Int Int
 -- serialSum1 = loop (arr (\ (a,tot) -> dup (tot+a)) . second (delay 0))
 
+-- main = goM "mealy-counter-exclusive" (Mealy (\ ((),n::Int) -> (n,n+1)) 0)
+
+-- main = goM "mealy-counter-inclusive" (Mealy (\ ((),n::Int) -> dup (n+1)) 0)
+
+-- main = goM "mealy-sum-exclusive" (Mealy (\ (a::Int,n) -> (n,n+a)) 0)
+
+-- main = goM "mealy-sum-inclusive" (Mealy (\ (a::Int,n) -> dup (n+a)) 0)
+
+-- -- Square of consecutive numbers, inclusive
+-- main = goM "mealy-square-counter-inclusive"
+--          (Mealy (\ ((),n::Int) -> let n' = n+1 in (square n',n')) 0)
+
+-- -- Prefix sum of square of inputs
+-- main = goM "mealy-square-sum-inclusive"
+--          (Mealy (\ (a::Int,tot) -> dup (tot + square a)) 0)
+
+-- Serial Fibonacci variants:
+
+-- main = goM "serial-fibonacci-a" $
+--          Mealy (\ ((),(a,b)) -> let c = a+b in (a,(b,c))) (0::Int,1)
+
+-- main = goM "serial-fibonacci-b" $
+--          Mealy (\ ((),(a,b)) -> let c = a+b in (b,(b,c))) (0::Int,1)
+
+-- main = goM "serial-fibonacci-c" $
+--          Mealy (\ ((),(a,b)) -> let c = a+b in (c,(b,c))) (0::Int,1)
+
+main = goM "serial-fibonacci-a-11" $
+         Mealy (\ ((),(a,b)) -> let c = a+b in (a,(b,c))) (1::Int,1)
+
 -- main = go "foo" (sumSquare :: RTree N2 Int -> Int)
-
--- main = goM "mealy-sum-exclusive-0" (Mealy (\ (a::Int,n) -> (n,n+a)) 0)
-
--- main = goM "mealy-sum-inclusive-0" (Mealy (\ (a::Int,n) -> dup (n+a)) 0)
-
--- main = goM "mealy-counter-exclusive-0" (Mealy (\ ((),n::Int) -> (n,n+1)) 0)
-
-main = goM "mealy-counter-inclusive-0" (Mealy (\ ((),n::Int) -> dup (n+1)) 0)
-
--- -- Square of consecutive numbers
--- main = goM "mealy-square-counter-0"
---          (Mealy (\ ((),old::Int) -> let new = old+1 in (square new,new)) 0)
