@@ -45,7 +45,7 @@ import Circat.Scan
 import Circat.Pair
 import Circat.Shift (accumL)
 import Circat.Classes (BottomCat(..))
-import Circat.Circuit (GenBuses(..),(:>),genBusesRep',bottomRep,tyRep)
+import Circat.Circuit (GenBuses(..),(:>),genBusesRep',delayCRep,tyRep,bottomRep)
 
 import Circat.Misc (xor)
 
@@ -190,6 +190,7 @@ carryIn cin f = f . (cin,)
 
 instance GenBuses GenProp where
   genBuses' = genBusesRep'
+  delayC = delayCRep
   ty = tyRep
 
 instance BottomCat (:>) GenProp where bottomC = bottomRep
