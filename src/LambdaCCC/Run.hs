@@ -28,9 +28,6 @@ import Control.Arrow (first)
 import LambdaCCC.Lambda (EP,reifyEP)
 -- import LambdaCCC.CCC ((:->),convertC)
 import LambdaCCC.ToCCC (toCCC')
-#ifndef MealyToArrow
-import LambdaCCC.ToCCC (toCCC)
-#endif
 
 import Circat.Circuit
   (GenBuses,Attr,mkGraph,unitize,UU,outDotG,MealyC(..)
@@ -79,12 +76,12 @@ outGV name attrs circ =
     State machines
 --------------------------------------------------------------------}
 
-#ifdef MealyToArrow
-
 data MealyE a b =
   forall s. (GenBuses s, Show s) => MealyE (EP ((a,s) -> (b,s))) s
 
 deriving instance Show (MealyE a b)
+
+#ifdef MealyToArrow
 
 reifyMealy :: Mealy a b -> MealyE a b
 reifyMealy (Mealy f s) = MealyE (reifyEP f) s
@@ -111,17 +108,12 @@ goM' name attrs m = runM name attrs (reifyMealy m)
 
 #else
 
-data MealyE a b =
-  forall s. GenBuses s => MealyE (EP ((a,s) -> (b,s))) (EP s)
-
-deriving instance Show (MealyE a b)
-
 reifyMealy :: Mealy a b -> MealyE a b
-reifyMealy (Mealy f s) = MealyE (reifyEP f) (reifyEP s)
+reifyMealy (Mealy f s) = MealyE (reifyEP f) s
 {-# INLINE reifyMealy #-}
 
 toMealyC :: MealyE a b -> MealyC a b
-toMealyC (MealyE f s) = MealyC (toCCC' f) (toCCC s)
+toMealyC (MealyE f s) = MealyC (toCCC' f) s
 
 runM :: GenBuses a => String -> [Attr] -> MealyE a b -> IO ()
 runM name attrs e = do print e
