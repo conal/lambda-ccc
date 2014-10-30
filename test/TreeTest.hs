@@ -31,9 +31,9 @@
 
 -- TODO: explicit exports
 
-import Prelude hiding ({- id,(.), -}foldl,foldr,sum,product,zipWith,reverse,and,or)
+import Prelude hiding ({- id,(.), -}foldl,foldr,sum,product,zipWith,reverse,and,or,scanl)
 
-import Data.Monoid (Monoid(..),Sum,Product)
+import Data.Monoid (Monoid(..),(<>),Sum(..),Product(..))
 import Data.Functor ((<$>))
 import Control.Applicative -- (Applicative(..),liftA2,liftA3)
 import Data.Foldable (Foldable(..),sum,product,and,or)
@@ -56,13 +56,15 @@ import LambdaCCC.Adder
 import Circat.Misc (Unop,Reversible(..))
 import Circat.Rep (bottom)
 import Circat.Pair (Pair(..))
+import qualified Circat.Pair as P
 import qualified Circat.RTree as RT
 import qualified Circat.LTree as LT
 import qualified Circat.RaggedTree as Ra
 import Circat.RaggedTree (TU(..), R1, R2, R3, R4, R5, R8, R11, R13)
 import Circat.Shift
 import Circat.Scan
-import Circat.Mealy
+import Circat.Mealy hiding (sumS)
+import qualified Circat.Mealy as Mealy
 import Circat.Circuit (GenBuses,Attr,systemSuccess)
 
 -- Strange -- why needed? EP won't resolve otherwise. Bug?
@@ -149,8 +151,10 @@ as `dotap` bs = sum (as * bs)
 dotsp :: (Foldable g, Foldable f, Num (f a), Num a) => g (f a) -> a
 dotsp = sum . product
 
-cdot :: (Foldable f, Num (f a), Num a) => f a -> f a -> a
-u `cdot` v = dotsp (u :# v)
+-- Infix binary dot product
+infixl 7 <.>
+(<.>) :: (Foldable f, Applicative f, Num a) => f a -> f a -> a
+u <.> v = sum (liftA2 (*) u v)
 
 -- | Monoid under lifted multiplication.
 newtype ProductA f a = ProductA { getProductA :: f a }
@@ -323,11 +327,20 @@ ranksep n = ("ranksep",show n)
 goSep :: GenBuses a => String -> Double -> (a -> b) -> IO ()
 goSep name s = go' name [ranksep s]
 
+goMSep :: GenBuses a => String -> Double -> Mealy a b -> IO ()
+goMSep name s = goM' name [ranksep s]
+
 inTest :: String -> IO ()
 inTest cmd = systemSuccess ("cd ../test; " ++ cmd) -- (I run ghci in ../src)
 
 doit :: IO ()
-doit = inTest "make"
+doit = inTest "make doit"
+
+reify :: IO ()
+reify = inTest "make reify"
+
+noReify :: IO ()
+noReify = inTest "make no-reify"
 
 make :: IO ()
 make = systemSuccess "cd ../..; make"
@@ -914,7 +927,148 @@ polyRT4 = RT.tree4 True False False True True False True False
 -- main = goM "serial-fibonacci-c" $
 --          Mealy (\ ((),(a,b)) -> let c = a+b in (c,(b,c))) (0::Int,1)
 
-main = goM "serial-fibonacci-a-11" $
-         Mealy (\ ((),(a,b)) -> let c = a+b in (a,(b,c))) (1::Int,1)
+-- main = goM "serial-fibonacci-a-11" $
+--          Mealy (\ ((),(a,b)) -> let c = a+b in (a,(b,c))) (1::Int,1)
 
 -- main = go "foo" (sumSquare :: RTree N2 Int -> Int)
+
+-- main = goM "foldSP-rt3" (Mealy (\ (as :: RTree N3 (Sum Int),tot) -> dup (fold as <> tot)) mempty)
+
+-- -- Equivalent and more modular, but not yet handled by the compiler:
+-- 
+-- main = goM "foldSP-rt3" (foldSP :: Mealy (RTree N3 (Sum Int)) (Sum Int))
+-- main = goM "sumSP-rt3" (sumSP :: Mealy (RTree N3 Int) Int)
+-- main = goM "sumSP-rt3" (Mealy.lscan (\ (as :: RTree N3 Int) tot -> sum as + tot) 0)
+
+-- Mealy (Pair (RTree N3 Int)) Int
+
+-- -- Not yet.
+-- main = goM "dotSP-rt3p" (dotSP :: Mealy (RTree N3 (Pair Int)) Int)
+
+-- main = goM "dotSP-rt3p" (Mealy (\ (pas :: RTree N3 (Pair Int),tot) -> dup (dot'' pas + tot)) 0)
+
+type GS a = (GenBuses a, Show a)
+
+sumS :: (Num a, GS a) => Mealy a a
+sumS = Mealy (\ (a,tot) -> dup (tot+a)) 0
+-- sumS = Mealy (dup . uncurry (+)) 0
+
+-- main = goMSep "sumS" 0.5 (sumS :: Mealy Int Int)
+
+-- main = goMSep "sumS-rt3" 1.5 (sumS :: Mealy (RTree N3 Int) (RTree N3 Int))
+
+sumPS :: (Foldable f, Num (f a), Num a, GS (f a)) =>
+         Mealy (f a) a
+sumPS = Mealy (\ (t,tot) -> let tot' = tot+t in (sum tot',tot')) 0
+-- sumPS = arr sum . sumS
+
+-- main = goMSep "sumPS-rt3" 1 (m :: Mealy (RTree N3 Int) Int)
+--  where
+--    m = Mealy (\ (t,tot) -> let tot' = tot+t in (sum tot',tot')) 0
+
+-- main = goM "dotPS-rt3p" (m :: Mealy (RTree N3 (Pair Int)) Int)
+--  where
+--    m = Mealy (\ (ts,tot) -> let tot' = tot + fmap product ts in (sum tot',tot')) 0
+
+mac :: (Foldable f, Num a, GS a) =>
+       Mealy (f a) a
+-- mac = sumS . arr product
+mac = Mealy (\ (as,tot) -> dup (tot+product as)) 0
+
+-- main = goMSep "mac-p" 1 (mac :: Mealy (Pair Int) Int)
+
+-- main = goMSep "mac-prt3" 1 (mac :: Mealy (Pair (RTree N3 Int)) (RTree N3 Int))
+
+
+sumMac :: (Foldable o, Foldable i, Num (i a), Num a, GS (i a)) =>
+          Mealy (o (i a)) a
+-- sumMac = arr sum . mac
+sumMac = Mealy (\ (as,tot) -> let tot' = tot+product as in (sum tot',tot')) 0
+
+-- main = goM "sum-mac-prt3" (sumMac :: Mealy (Pair (RTree N3 Int)) Int)
+
+matVecMultSA :: (Foldable f, Applicative f, Num a, GS (f a)) =>
+                Mealy (f a) a
+matVecMultSA =
+  Mealy (\ (row,s@(started,vec)) ->
+           if started then (row <.> vec, s) else (0, (True,row))) (False,pure 0)
+
+-- matVecMultS =
+--   Mealy (\ (row,mbVec) -> case mbVec of
+--                             Nothing -> (bottom,Just row)
+--                             Just v  -> (row <.> v, mbVec)) Nothing
+
+
+matVecMultS :: (Foldable f, Applicative f, Num a, GS (f a)) =>
+               Mealy (f a) a
+matVecMultS =
+  Mealy (\ (row,s@(started,vec)) ->
+           (row <.> vec, if started then s else (True,row))) (False,pure 0)
+
+
+
+-- main = goM "mat-vec-mult-rt1" (matVecMultS :: Mealy (RTree N1 Int) Int)
+
+-- main = goM "mat-vec-mult-rt1" (m :: Mealy (RTree N1 Int) Int)
+--  where
+--    m = Mealy (\ (row,mbVec) -> case mbVec of
+--                                  Nothing -> (0,Just row)
+--                                  Just v  -> (row <.> v, mbVec)) Nothing
+
+-- main = goMSep "mat-vec-mult-a-rt3" 1 (m :: Mealy (RTree N3 Int) Int)
+--  where
+--    m = Mealy (\ (row,s@(started,vec)) ->
+--                 if started then (row <.> vec, s) else (0, (True,row))) (False,pure 0)
+
+-- -- 3:1, 4:1.5, 5:2
+-- main = goMSep "mat-vec-mult-b-rt3" 1 (m :: Mealy (RTree N3 Int) Int)
+--  where
+--   m = Mealy (\ (row,s@(started,vec)) ->
+--                (row <.> vec, if started then s else (True,row))) (False,pure 0)
+
+
+-- -- Same result as -b
+-- main = goMSep "mat-vec-mult-c-rt3" 1 (m :: Mealy (RTree N3 Int) Int)
+--  where
+--   m = Mealy (\ (row,s@(started,vec)) ->
+--                (row <.> vec, if started then s else (not started,row))) (False,pure 0)
+
+
+-- main = goSep "get-p" 1 (uncurry P.get :: Bool :* Pair Int -> Int)
+
+type Bits n = Vec n Bool
+
+-- -- 3:1, 4:2, 5:3
+-- main = goSep "get-rt5" 3 (uncurry RT.get :: Bits N5 :* RTree N5 Int -> Int)
+
+-- -- 3:1, 4:2, 5:3
+-- main = goSep "get-ib-rt3" 1 (uncurry RT.get :: Bits N3 :* RTree N3 (Int,Bool) -> (Int,Bool))
+
+-- -- 3:1, 4:2, 5:3
+-- main = goSep "get-lt4" 2 (uncurry LT.get :: Bits N4 :* LTree N4 Int -> Int)
+
+-- main = go "update-p" (uncurry (flip P.update (+2)) :: Bool :* Pair Int -> Pair Int)
+
+-- main = go "update-plus2-p" (\ (b,p::Pair Int) -> P.update b (+2) p)
+
+-- main = go "update-not-p" (\ (b,p) -> P.update b not p)
+
+-- -- 2:1.5, 3:3, 4:8
+-- main = goSep "update-plus2-rt3" 4 (\ (v,t::RTree N3 Int) -> RT.update v (+2) t)
+
+-- -- 2:1.5, 3:3, 4:4
+-- main = goSep "update-not-rt2" 1.5 (\ (v,t::RTree N2 Bool) -> RT.update v not t)
+
+-- Parallel histogram
+histogramP :: (Foldable f, IsNat n) => f (Bits n) -> RTree n Int
+histogramP = foldl (\ t v -> RT.update v (+1) t) (pure 0)
+
+-- 2-3:1, 3-4:?
+main = goSep "histogramP-2-rt3" 1 (histogramP :: RTree N3 (Bits N2) -> RTree N2 Int)
+
+-- Serial histogram
+histogramS :: (IsNat n, GS (RTree n Int)) => Mealy (Bits n) (RTree n Int)
+histogramS = scanl (\ t v -> RT.update v (+1) t) (pure 0)
+
+-- -- 2:1, 3:3
+-- main = goMSep "histogramS-3" 3 (histogramS :: Mealy (Bits N3) (RTree N3 Int))
