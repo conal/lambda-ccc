@@ -196,14 +196,19 @@ rewriteIf = do Case c _wild ty [(_,[],a'),(_,[],a)] <- id
                dict    <- buildDictionaryT' $* TyConApp hasIfTc [ty]
                apps' (ifName "if_then_else") [ty] [dict,c,a,a']
 #else
-rewriteIf = do Case c _wild ty [(_False,[],a'),(_True,[],a)] <- id
+rewriteIf = do Case c wild ty [(_False,[],a'),(_True,[],a)] <- id
                guardMsg (isBoolTy (exprType c)) "scrutinee not Boolean"
+               guardMsg (isDeadOcc (idOccInfo wild)) "rewriteIf: wild is alive"
                ifCircTc <- findTyConT (lamName "IfCirc")
                dict     <- buildDictionaryT' $* TyConApp ifCircTc [ty]
                apps' (lamName "if'") [ty] [dict,pair c (pair a a')]
  where
    pair p q = mkCoreTup [p,q]
 #endif
+
+-- TODO: Handle used wildcard. How to avoid re-evaluating the scrutinee? Maybe
+-- add a let binding and replace the scrutinee. Or a Case rather than a let, but
+-- having a default pattern (which reification must then handle).
 
 {--------------------------------------------------------------------
     Simplification
