@@ -88,7 +88,8 @@ goM name = goM' name []
 {-# INLINE goM #-}
 
 goM' :: GenBuses a => String -> [Attr] -> Mealy a b -> IO ()
-goM' name attrs m = runM name attrs (reifyMealy m)
+goM' name attrs m = putStrLn ("Compiling " ++ name) >>
+                    runM name attrs (reifyMealy m)
 {-# INLINE goM' #-}
 
 -- TODO: When mealyAsArrow works, rewrite goM' via go' instead of vice versa
