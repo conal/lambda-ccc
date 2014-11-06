@@ -42,10 +42,11 @@ Library
                     LambdaCCC.Lambda
                     LambdaCCC.ToCCC
                     LambdaCCC.Monomorphize
+                    LambdaCCC.ReifySimple
                     LambdaCCC.Run
                     LambdaCCC.StateTrie
                     LambdaCCC.Adder
-                    LambdaCCC.ReifySimple
+                    LambdaCCC.CRC
   Other-Modules:
                     LambdaCCC.Tests
 
