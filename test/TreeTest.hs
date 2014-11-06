@@ -50,7 +50,7 @@ import TypeUnary.TyNat
 import TypeUnary.Nat (IsNat)
 import TypeUnary.Vec hiding (transpose)
 
-import LambdaCCC.Misc (dup,Unop,Binop,transpose,(:*))
+import LambdaCCC.Misc (xor,boolToInt,dup,Unop,Binop,transpose,(:*))
 import LambdaCCC.Adder
 
 import Circat.Misc (Unop,Reversible(..))
@@ -70,7 +70,7 @@ import Circat.Circuit (GenBuses,Attr,systemSuccess)
 -- Strange -- why needed? EP won't resolve otherwise. Bug?
 import qualified LambdaCCC.Lambda
 import Circat.Classes (IfT)
-import LambdaCCC.Lambda (EP,reifyEP,xor)
+import LambdaCCC.Lambda (EP,reifyEP)
 
 import LambdaCCC.Run (go,go',goM,goM')
 
@@ -949,6 +949,17 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 type GS a = (GenBuses a, Show a)
 
+fullAdd :: Pair Bool :* Bool -> Bool :* Bool
+fullAdd = add1' . swap
+{-# INLINE fullAdd #-}
+
+-- main = go "fullAdd" (add1' . swap) -- fullAdd -- fullAdd doesn't inline
+
+adderS :: Bool -> Mealy (Pair Bool) Bool
+adderS = Mealy (add1 . swap)
+
+-- main = goM "adderS" (adderS False)
+
 sumS :: (Num a, GS a) => Mealy a a
 sumS = Mealy (\ (a,tot) -> dup (tot+a)) 0
 -- sumS = Mealy (dup . uncurry (+)) 0
@@ -1005,8 +1016,6 @@ matVecMultS =
   Mealy (\ (row,s@(started,vec)) ->
            (row <.> vec, if started then s else (True,row))) (False,pure 0)
 
-
-
 -- main = goM "mat-vec-mult-rt1" (matVecMultS :: Mealy (RTree N1 Int) Int)
 
 -- main = goM "mat-vec-mult-rt1" (m :: Mealy (RTree N1 Int) Int)
@@ -1053,22 +1062,53 @@ type Bits n = Vec n Bool
 
 -- main = go "update-not-p" (\ (b,p) -> P.update b not p)
 
--- -- 2:1.5, 3:3, 4:8
--- main = goSep "update-plus2-rt3" 4 (\ (v,t::RTree N3 Int) -> RT.update v (+2) t)
+-- -- 1:0.75, 2:1.5, 3:3, 4:8
+-- main = goSep "update-plus2-rt1" 0.75 (\ (v,t::RTree N1 Int) -> RT.update v (+2) t)
 
 -- -- 2:1.5, 3:3, 4:4
 -- main = goSep "update-not-rt2" 1.5 (\ (v,t::RTree N2 Bool) -> RT.update v not t)
 
--- Parallel histogram
-histogramP :: (Foldable f, IsNat n) => f (Bits n) -> RTree n Int
-histogramP = foldl (\ t v -> RT.update v (+1) t) (pure 0)
+histogramStep ::  Num a => RTree n a -> Bits n -> RTree n a
+histogramStep t v = RT.update v (+1) t
 
--- 2-3:1, 3-4:?
-main = goSep "histogramP-2-rt3" 1 (histogramP :: RTree N3 (Bits N2) -> RTree N2 Int)
+-- Combinational histogram
+histogramP :: (Foldable f, IsNat n) => f (Bits n) -> RTree n Int
+histogramP = foldl histogramStep (pure 0)
+-- histogramP = foldl (\ t v -> RT.update v (+1) t) (pure 0)
+
+-- -- 2-3:1, 3-4:?
+-- main = goSep "histogramP-2-rt3" 1 (histogramP :: RTree N3 (Bits N2) -> RTree N2 Int)
+
+oneTree :: (IsNat n, Num a) => Bits n -> RTree n a
+oneTree = histogramStep (pure 0)
+
+-- -- 1:0.5, 2:0.75, 3:1.5
+-- main = goSep "one-c-rt1" 0.5 (oneTree :: Bits N1 -> RTree N1 Int)
+
+oneTree' :: IsNat n => Bits n -> RTree n Bool
+oneTree' v = RT.update v (const True) (pure False)
+
+-- -- 1:0.75, 2:1.5, 3:2
+-- main = goSep "onep-rt3" 2 (oneTree' :: Bits N3 -> RTree N3 Bool)
+
+oneTree'' :: IsNat n => Bits n -> RTree n Int
+oneTree'' v = boolToInt <$> oneTree' v
+
+-- 1:0.5, 2:0.75, 3:1.5
+main = goSep "onepp-rt3" 1.5 (oneTree'' :: Bits N3 -> RTree N3 Int)
+
+-- As I hoped, oneTree'' gives identical results to oneTree.
+
+histogramFold :: (Foldable f, Functor f, IsNat n) => f (Bits n) -> RTree n Int
+histogramFold = sum . fmap oneTree
+
+-- -- 1,2:2; 2,3:4
+-- main = goSep "histogramFold-2-rt3" 4 (histogramFold :: RTree N3 (Bits N2) -> RTree N2 Int)
 
 -- Serial histogram
 histogramS :: (IsNat n, GS (RTree n Int)) => Mealy (Bits n) (RTree n Int)
-histogramS = scanl (\ t v -> RT.update v (+1) t) (pure 0)
+histogramS = scanl histogramStep (pure 0)
+-- histogramS = scanl (\ t v -> RT.update v (+1) t) (pure 0)
 
 -- -- 2:1, 3:3
 -- main = goMSep "histogramS-3" 3 (histogramS :: Mealy (Bits N3) (RTree N3 Int))
