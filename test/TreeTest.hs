@@ -52,6 +52,7 @@ import TypeUnary.Vec hiding (transpose)
 
 import LambdaCCC.Misc (xor,boolToInt,dup,Unop,Binop,transpose,(:*))
 import LambdaCCC.Adder
+import LambdaCCC.CRC
 
 import Circat.Misc (Unop,Reversible(..))
 import Circat.Rep (bottom)
@@ -193,83 +194,6 @@ mat $@ vec = (`dot'` vec) <$> mat
         , Traversable m, Applicative m, Num a ) =>
         o (n a) -> n (m a) -> o (m a)
 no .@ mn = transpose ((no $@) <$> transpose mn)
-
-{--------------------------------------------------------------------
-    CRC
---------------------------------------------------------------------}
-
--- crcStep :: (Traversable t, Zippable t) =>
---            t Bool -> Bool -> Unop (Bool :* t Bool)
-
--- crcStep poly bit (s0,seg) = shiftR (seg',bit)
---  where
---    seg' = if s0 then zipWith xor poly seg else seg
-
--- crcStep poly bit (s0,seg) = shiftR (tweak seg,bit)
---  where
---    tweak = if s0 then zipWith xor poly else id
-
--- crcStep poly bit (s0, seg) =
---   shiftR ((if s0 then zipWith xor poly else id) seg, bit)
-
--- crcStep poly bit (s0, seg) =
---   shiftR (if s0 then zipWith xor poly seg else seg, bit)
-
--- Oops. The state should be just poly. Also, drop Zippable.
-
-crcStep :: (Traversable poly, Applicative poly) =>
-           poly Bool -> poly Bool :* Bool -> poly Bool
-crcStep poly (shiftR -> (b0,seg')) = (if b0 then liftA2 xor poly else id) seg'
-
--- crcStep poly (shiftR -> (b0,seg')) = liftA2 tweak poly seg'
---  where
---    tweak c a = (b0 && c) `xor` a
-
-#if 0
-   tweak c a
-== if b then (c `xor` a) else a
-== if b then (c `xor` a) else (False `xor` a)
-== (if b then c else False) `xor` a
-== (b && c) `xor` a
-#endif
-
--- crcStep poly (shiftR -> (b0,seg')) =
---   liftA2 (\ c a -> (b0 && c) `xor` a) poly seg'
-
--- crcStep poly (shiftR -> (b0,seg')) = liftA2 tweak poly seg'
---  where
---    tweak c a = (b0 && c) `xor` a
-
-crc :: (Traversable poly, Applicative poly, Traversable msg) =>
-       poly Bool -> msg Bool :* poly Bool -> poly Bool
-crc poly = foldlQ (crcStep poly) . shiftRF
-
--- Equivalently,
---
--- crc poly (shiftRF -> (seg',msg')) = foldlQ (crcStep poly) (seg',msg')
---                                   = foldl (curry (crcStep poly)) seg' msg'
-
-crcEncode :: (Traversable poly, Applicative poly, Traversable msg) =>
-             poly Bool -> msg Bool -> poly Bool
-crcEncode poly msg = crc poly (msg, pure False)
-
--- | Uncurried variant of 'foldl'
-foldlQ :: Foldable f => (b :* a -> b) -> (b :* f a -> b)
-foldlQ = uncurry . foldl . curry
-
--- Curried versions (for consideration):
-
-crcStep' :: (Traversable poly, Applicative poly) =>
-            poly Bool -> poly Bool -> Bool -> poly Bool
-crcStep' poly seg b = (if b0 then liftA2 xor poly else id) seg'
- where
-   (b0,seg') = shiftR (seg,b)
-
-crc' :: (Traversable poly, Applicative poly, Traversable msg) =>
-        poly Bool -> msg Bool -> poly Bool -> poly Bool
-crc' poly msg pad = foldl (crcStep' poly) seg0 msg0
- where
-   (seg0,msg0) = shiftRF (msg,pad)
 
 {--------------------------------------------------------------------
     Permutations
@@ -1094,8 +1018,8 @@ oneTree' v = RT.update v (const True) (pure False)
 oneTree'' :: IsNat n => Bits n -> RTree n Int
 oneTree'' v = boolToInt <$> oneTree' v
 
--- 1:0.5, 2:0.75, 3:1.5
-main = goSep "onepp-rt3" 1.5 (oneTree'' :: Bits N3 -> RTree N3 Int)
+-- -- 1:0.5, 2:0.75, 3:1.5
+-- main = goSep "onepp-rt3" 1.5 (oneTree'' :: Bits N3 -> RTree N3 Int)
 
 -- As I hoped, oneTree'' gives identical results to oneTree.
 
@@ -1105,6 +1029,12 @@ histogramFold = sum . fmap oneTree
 -- -- 1,2:2; 2,3:4
 -- main = goSep "histogramFold-2-rt3" 4 (histogramFold :: RTree N3 (Bits N2) -> RTree N2 Int)
 
+histogramFold'' :: (Foldable f, Functor f, IsNat n) => f (Bits n) -> RTree n Int
+histogramFold'' = sum . fmap oneTree''
+
+-- -- 1,2:1, 2,3:1.5
+-- main = goSep "histogramFoldpp-1-rt2" 0.5 (histogramFold'' :: RTree N2 (Bits N1) -> RTree N1 Int)
+
 -- Serial histogram
 histogramS :: (IsNat n, GS (RTree n Int)) => Mealy (Bits n) (RTree n Int)
 histogramS = scanl histogramStep (pure 0)
@@ -1112,3 +1042,10 @@ histogramS = scanl histogramStep (pure 0)
 
 -- -- 2:1, 3:3
 -- main = goMSep "histogramS-3" 3 (histogramS :: Mealy (Bits N3) (RTree N3 Int))
+
+-- main = go "pure-sum-rt3" (\ a -> sum (pure a :: RTree N3 Int))
+
+-- main = go "pure-1-sum-rt3" (\ () -> sum (pure 1 :: RTree N3 Int))
+
+
+-- More CRC
