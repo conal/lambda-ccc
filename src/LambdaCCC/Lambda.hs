@@ -729,6 +729,7 @@ instance Eq1' Prim where
   AbstP   ==== AbstP   = True
   ReprP   ==== ReprP   = True
   BottomP ==== BottomP = True
+  MealyP  ==== MealyP  = True
   _       ==== _       = False
 
 instance Eq1' Lit where
