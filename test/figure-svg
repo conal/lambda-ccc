@@ -1,8 +1,7 @@
-cd out
+#!/bin/sh
+if [ "$#" -ne 1 ]; then
+  echo "Usage: $0 pic-name" >&2
+  exit 1
+fi
 
-monthDay=`date "+%m-%d"`
-dir="/Users/conal/Tabula/Journal/wikidata/2014/Figures"
-svg="$monthDay-$1.svg"
-
-# dot -Tsvg $1.dot -o $dir/$svg && (cd $dir ; ls -l $svg)
-dot -Tsvg $1.dot -o $dir/$svg && ls -l $dir/$svg
+./date-figure-svg `date "+%m-%d"` $1

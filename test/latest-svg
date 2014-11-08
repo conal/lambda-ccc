@@ -1,2 +1,8 @@
+#!/bin/sh
+if [ "$#" -ne 0 ]; then
+  echo "Usage: $0" >&2
+  exit 1
+fi
+
 latest=`cd out; ls -t -1 *.dot | head -1 | sed -e 's/.dot//'`
 ./figure-svg $latest
