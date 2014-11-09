@@ -259,8 +259,7 @@ reifyIf =
 reifyBottom :: ReExpr
 reifyBottom =
   do App (Var (fqVarName -> "Circat.Rep.bottom")) (Type ty) <- unReify
-     botCircTc <- findTyConT (lamName "BottomCirc")
-     dict      <- buildDictionaryT' $* TyConApp botCircTc [ty]
+     dict <- simpleDict (lamName "BottomCirc") $* ty
      appsE "bottomEP" [ty] [dict]
 
 -- TODO: factor out commonalities between reifyIf and reifyBottom.
@@ -331,9 +330,18 @@ reifyLit =
        "isLitT: must have type (), Bool, or Int"
      void callDataConT
      e        <- idR
-     hasLitTc <- findTyConT (primName "HasLit")
-     hasLitD  <- buildDictionaryT' $* TyConApp hasLitTc [ty]
+     hasLitD  <- simpleDict (primName "HasLit") $* ty
      appsE "kLit" [ty] [hasLitD,e]
+
+reifyDelay :: ReExpr
+reifyDelay =
+  unReify >>>
+  do ty <- exprTypeT
+     (Var (fqVarName -> "Circat.Misc.delay"),[Type _,s0]) <- callT
+     showD     <- simpleDict "GHC.Show.Show" $* ty
+     genBusesD <- simpleDict "Circat.Circuit.GenBuses" $* ty
+     primV     <- findIdT "Circat.Prim.DelayP"
+     appsE1 "kPrimEP" [ty] (mkApps (Var primV) [Type ty,genBusesD,showD,s0])
 
 -- Use in a final pass to generate helpful error messages for non-reified
 -- syntax.
@@ -351,6 +359,7 @@ miscL = [ ("reifyEval"        , reifyEval)
         , ("reifyRepMeth"     , reifyRepMeth) -- before reifyApp
         , ("reifyIf"          , reifyIf)      -- ''
         , ("reifyBottom"      , reifyBottom)  -- ''
+        , ("reifyDelay"       , reifyDelay)   -- ''
         , ("reifyLit"         , reifyLit)     -- ''
         , ("reifyApp"         , reifyApp)
         , ("reifyLam"         , reifyLam)
