@@ -190,7 +190,7 @@ carryIn cin f = f . (cin,)
 
 instance GenBuses GenProp where
   genBuses' = genBusesRep'
-  delayC = delayCRep
+  delay = delayCRep
   ty = tyRep
 
 instance BottomCat (:>) GenProp where bottomC = bottomRep
