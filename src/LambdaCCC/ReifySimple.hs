@@ -24,7 +24,8 @@
 module LambdaCCC.ReifySimple
   ( reifyMisc, isPrimitive, lamName, repName --, ifName
   , inReify -- TEMP
-  , reifyEval, reifyIf, reifyBottom, reifyRepMeth, reifyApp, reifyLam, reifyMonoLet
+  , reifyEval, reifyIf, reifyDelay, reifyLoop, reifyBottom
+  , reifyRepMeth, reifyApp, reifyLam, reifyMonoLet
   , reifyTupCase, reifyLit, reifyPrim
   , reifyOops
   ) where
@@ -336,12 +337,20 @@ reifyLit =
 reifyDelay :: ReExpr
 reifyDelay =
   unReify >>>
-  do ty <- exprTypeT
-     (Var (fqVarName -> "Circat.Misc.delay"),[Type _,s0]) <- callT
+  do (Var (fqVarName -> "Circat.Misc.delay"),[Type ty,s0]) <- callT
      showD     <- simpleDict "GHC.Show.Show" $* ty
      genBusesD <- simpleDict "Circat.Circuit.GenBuses" $* ty
      primV     <- findIdT "Circat.Prim.DelayP"
-     appsE1 "kPrimEP" [ty] (mkApps (Var primV) [Type ty,genBusesD,showD,s0])
+     appsE1 "kPrimEP" [ty `FunTy` ty]
+       (mkApps (Var primV) [Type ty,genBusesD,showD,s0])
+
+reifyLoop :: ReExpr
+reifyLoop =
+  unReify >>>
+  do (Var (fqVarName -> "Circat.Misc.loop"),tys@[_a,_b,s],[h]) <- callSplitT
+     dict <- simpleDict (lamName "CircuitLoopKon") $* s
+     h'   <- reifyOf h
+     appsE "loopEP" tys [dict,h']
 
 -- Use in a final pass to generate helpful error messages for non-reified
 -- syntax.
@@ -353,14 +362,17 @@ reifyOops =
      appsE "reifyOopsEP#" [ty] [Lit (mkMachString str)]
 
 miscL :: [(String,ReExpr)]
-miscL = [ ("reifyEval"        , reifyEval)
+miscL = [ ---- Special applications and so must come before reifyApp
+          ("reifyEval"        , reifyEval)
 --      , ("reifyRulesPrefix" , reifyRulesPrefix)
 --      , ("reifyRules"       , reifyRules)
         , ("reifyRepMeth"     , reifyRepMeth) -- before reifyApp
         , ("reifyIf"          , reifyIf)      -- ''
         , ("reifyBottom"      , reifyBottom)  -- ''
         , ("reifyDelay"       , reifyDelay)   -- ''
+        , ("reifyLoop"        , reifyLoop)    -- ''
         , ("reifyLit"         , reifyLit)     -- ''
+        ----
         , ("reifyApp"         , reifyApp)
         , ("reifyLam"         , reifyLam)
         , ("reifyMonoLet"     , reifyMonoLet)
