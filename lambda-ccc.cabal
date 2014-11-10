@@ -34,7 +34,7 @@ Library
                   , ty >= 0.1.5
                   , type-unary >= 0.2.16
                   , circat >= 0.6.1
-                  , hermit-extras >= 0.2
+                  , hermit-extras >= 0.2.1
                   , MemoTrie
 
   Exposed-Modules:  LambdaCCC.Misc
