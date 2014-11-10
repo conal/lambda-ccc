@@ -1091,4 +1091,4 @@ fibM = Mealy (\ ((),(a,b)) -> (a,(b,a+b))) (0::Int,1)
 
 -- main = goM "foo" fibM
 
-main = go "foo" (\ (x :: Int) -> ((x==0,x/=0),(x<0,x>0,x<=0,x>=0)))
+main = go "comparisons" (\ (x::Int,y::Int) -> (x==y || x/=y) && (x<y || x>=y) && (x>y || x<=y))
