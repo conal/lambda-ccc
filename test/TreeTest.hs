@@ -1045,7 +1045,7 @@ histogramS = scanl histogramStep (pure 0)
 -- crcS :: (GS (poly Bool), Applicative poly, Traversable poly) =>
 --         Mealy Bool (poly Bool, Int)
 
-main = goM "crcS-rt0" (crcS :: Mealy Bool (RTree N0 Bool, Int))
+-- main = goM "crcS-rt0" (crcS :: Mealy Bool (RTree N0 Bool, Int))
 
 -- main = goM "adderS" (adderS False)
 
@@ -1090,3 +1090,5 @@ fibM = Mealy (\ ((),(a,b)) -> (a,(b,a+b))) (0::Int,1)
 -- main = goNew "foo" (asFun fibM)
 
 -- main = goM "foo" fibM
+
+main = go "foo" (\ (x :: Int) -> ((x==0,x/=0),(x<0,x>0,x<=0,x>=0)))
