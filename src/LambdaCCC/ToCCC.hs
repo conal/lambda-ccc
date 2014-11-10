@@ -41,20 +41,30 @@ import LambdaCCC.Misc
 import LambdaCCC.Lambda (E(..),V,Pat(..))
 import Circat.Category
 
+-- Sad hack. I don't yet know how to handle Loop generally enough.
+-- See BiCCCC'.
+-- TODO: rethink the whole extensibility thing.
+import Circat.Circuit ((:>))
+import Circat.Prim (Prim)
+
 {--------------------------------------------------------------------
     Conversion
 --------------------------------------------------------------------}
 
 #ifdef PlainConvert
 
+-- type BiCCCC' k p = BiCCCC k p
+-- Sad hack. See above.
+type BiCCCC' k p = (k ~ (:>), p ~ Prim)
+
 -- | Rewrite a lambda expression via CCC combinators
-toCCC :: BiCCCC k p => E p a -> (Unit `k` a)
+toCCC :: BiCCCC' k p => E p a -> (Unit `k` a)
 toCCC e = convert e UnitPat
 
--- toCCC :: forall p a. E p a -> forall k. BiCCCC k p => (Unit `k` a)
+-- toCCC :: forall p a. E p a -> forall k. BiCCCC' k p => (Unit `k` a)
 
 -- | Convert @\ p -> e@ to CCC combinators
-convert :: forall a b prim k. BiCCCC k prim =>
+convert :: forall a b prim k. BiCCCC' k prim =>
            E prim b -> Pat a -> (a `k` b)
 convert (ConstE x)   _ = unitArrow x . it
 convert (Var v)      p = convertVar v p
@@ -64,6 +74,7 @@ convert (Either f g) p = curry ((convert' f ||| convert' g) . distl)
  where
    convert' :: E prim (c :=> d) -> ((a :* c) `k` d)
    convert' h = uncurry (convert h p)
+convert (Loop h)     p = curry (loopC (uncurry (convert h p) . rassocP))
 -- convert (CoerceE a)  p = coerceC . convert a p
 
 #else
@@ -91,7 +102,7 @@ instance HasLambda (E p) where
 
 -- | Generation of CCC terms in a binding context
 newtype MkC prim b =
-  MkC { unMkC :: forall a k. BiCCCC k prim => Pat a -> (a `k` b) }
+  MkC { unMkC :: forall a k. BiCCCC' k prim => Pat a -> (a `k` b) }
 
 instance HasLambda (MkC prim) where
   type PrimT (MkC prim) = prim
@@ -112,7 +123,7 @@ convert (Either f g) = convert f |||| convert g
 convert (CoerceE e)  = coerce (convert e)
 
 -- | Rewrite a lambda expression via CCC combinators
-toCCC :: BiCCCC k p => E p a -> (Unit `k` a)
+toCCC :: BiCCCC' k p => E p a -> (Unit `k` a)
 toCCC e = unMkC (convert e) UnitPat
 
 -- A universal instance of 'HasLambda', with 'PrimT' @p@.
@@ -129,10 +140,10 @@ instance HasLambda (Lambda p) where
 #endif
 
 -- | Variant on 'toCCC'
-toCCC' :: BiCCCC k p => E p (a :=> b) -> (a `k` b)
+toCCC' :: BiCCCC' k p => E p (a :=> b) -> (a `k` b)
 toCCC' = unUnitFun . toCCC
 
--- toCCC' :: forall p a b. E p (a :=> b) -> forall k. BiCCCC k p => (a `k` b)
+-- toCCC' :: forall p a b. E p (a :=> b) -> forall k. BiCCCC' k p => (a `k` b)
 
 -- TODO: Handle constants in a generic manner, so we can drop the constraint that k ~ (:->).
 
