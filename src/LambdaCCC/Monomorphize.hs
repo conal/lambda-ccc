@@ -608,6 +608,7 @@ externals =
     , externC "reifyLoop" reifyLoop "..."
     , externC "reifyBottom" reifyBottom "..."
     , externC "reifyRepMeth" reifyRepMeth "..."
+    , externC "reifyStdMeth" reifyStdMeth "..."
     , externC "reifyApp" reifyApp "..."
     , externC "reifyLam" reifyLam "..."
     , externC "reifyMonoLet" reifyMonoLet "..."
