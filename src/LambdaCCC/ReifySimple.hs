@@ -26,15 +26,18 @@ module LambdaCCC.ReifySimple
   , inReify -- TEMP
   , reifyEval, reifyIf, reifyDelay, reifyLoop, reifyBottom
   , reifyRepMeth, reifyApp, reifyLam, reifyMonoLet
-  , reifyTupCase, reifyLit, reifyPrim
+  , reifyTupCase, reifyLit, reifyPrim, reifyStdMeth
   , reifyOops
   ) where
 
   -- TODO: export externals instead, and use in Monomorphize
 
+import Prelude hiding (id,(.))
+
 import Data.Functor ((<$>),void)
+import Control.Category (Category(..))
 import Control.Monad ((<=<))
-import Control.Arrow ((>>>))
+import Control.Arrow ((>>>),(***))
 import qualified Data.Map as M
 import Data.String (fromString)
 
@@ -260,10 +263,34 @@ reifyIf =
 reifyBottom :: ReExpr
 reifyBottom =
   do App (Var (fqVarName -> "Circat.Rep.bottom")) (Type ty) <- unReify
-     dict <- simpleDict (lamName "BottomCirc") $* ty
+     dict <- simpleDict ("Circat.Prim.CircuitBot") $* ty
      appsE "bottomEP" [ty] [dict]
 
+-- TODO: Combine reifyBottom with reifyStdMeths?
+
 -- TODO: factor out commonalities between reifyIf and reifyBottom.
+
+-- Translate methods to cat class and prim
+stdMeths :: M.Map String (String,String)
+stdMeths =
+  M.fromList $
+  map (("GHC.Classes."++) *** twice ("Circat.Prim."++)) $
+  [ ("==",( "CircuitEq","EqP")), ("/=",( "CircuitEq","NeP"))
+  , ("<" ,("CircuitOrd","LtP")), (">" ,("CircuitOrd","GtP"))
+  , ("<=",("CircuitOrd","LeP")), (">=",("CircuitOrd","GeP"))
+  ]
+ where
+   twice f = f *** f
+
+-- Reify standard methods, given type and dictionary argument.
+reifyStdMeth :: ReExpr
+reifyStdMeth =
+  unReify >>>
+  do ty <- exprTypeT
+     (Var (fqVarName -> flip M.lookup stdMeths -> Just (cls,prim)), [tya], [_dict]) <- callSplitT
+     catDict <- simpleDict (fromString cls) $* tya
+     primV <- findIdT (fromString prim)
+     appsE1 "kPrimEP" [ty] (mkApps (Var primV) [Type tya,catDict])
 
 -- Reify an application of 'repr' or 'abst' to its type, dict, and coercion
 -- args (four in total), leaving the final expression argument for reifyApp.
@@ -366,12 +393,13 @@ miscL = [ ---- Special applications and so must come before reifyApp
           ("reifyEval"        , reifyEval)
 --      , ("reifyRulesPrefix" , reifyRulesPrefix)
 --      , ("reifyRules"       , reifyRules)
-        , ("reifyRepMeth"     , reifyRepMeth) -- before reifyApp
-        , ("reifyIf"          , reifyIf)      -- ''
-        , ("reifyBottom"      , reifyBottom)  -- ''
-        , ("reifyDelay"       , reifyDelay)   -- ''
-        , ("reifyLoop"        , reifyLoop)    -- ''
-        , ("reifyLit"         , reifyLit)     -- ''
+        , ("reifyRepMeth"     , reifyRepMeth)
+        , ("reifyStdMeth"     , reifyStdMeth) 
+        , ("reifyIf"          , reifyIf)
+        , ("reifyBottom"      , reifyBottom)
+        , ("reifyDelay"       , reifyDelay)
+        , ("reifyLoop"        , reifyLoop)
+        , ("reifyLit"         , reifyLit)
         ----
         , ("reifyApp"         , reifyApp)
         , ("reifyLam"         , reifyLam)
@@ -396,22 +424,22 @@ primName = moduledName "Circat.Prim"
 
 -- TODO: generalize primName, lamName, etc
 
+-- Map name to prim name and dictionary constraints
 primMap :: M.Map String String
 primMap = M.fromList
-  [ ("GHC.Num.$fNumInt_$c+","AddP")
-  , ("GHC.Num.$fNumInt_$c*","MulP")
-  , ("GHC.Num.$fNumInt_$cnegate", "NegateP")
-  , ("GHC.Classes.&&","AndP")
-  , ("GHC.Classes.||","OrP")
-  , ("Circat.Misc.xor","XorP")
---   , ("Circat.If.muxBool","CondBP")
---   , ("Circat.If.muxInt","CondIP")
-  , ("GHC.Classes.not","NotP")
-  , ("GHC.Tuple.(,)","PairP")
-  , ("GHC.Tuple.fst","ExlP")
-  , ("GHC.Tuple.snd","ExrP")
-  , ("Data.Either.Left","InlP")
-  , ("Data.Either.Right","InrP")
+  [ ("GHC.Classes.not"           , "NotP")
+  , ("GHC.Classes.&&"            , "AndP")
+  , ("GHC.Classes.||"            , "OrP")
+  , ("Circat.Misc.xor"           , "XorP")
+  , ("GHC.Num.$fNumInt_$cnegate" , "NegateP")
+  , ("GHC.Num.$fNumInt_$c+"      , "AddP")
+  , ("GHC.Num.$fNumInt_$c*"      , "MulP")
+  -- TODO: Use Num methods
+  , ("GHC.Tuple.fst"             , "ExlP")
+  , ("GHC.Tuple.snd"             , "ExrP")
+  , ("Data.Either.Left"          , "InlP")
+  , ("Data.Either.Right"         , "InrP")
+  , ("GHC.Tuple.(,)"             , "PairP")
   ]
 
 -- TODO: make primitives a map to expressions, to use during reification. Or
@@ -419,6 +447,7 @@ primMap = M.fromList
 -- look up IDs.
 
 isPrimitive :: Var -> Bool
-isPrimitive v = name `M.member` primMap || isRepMeth name
- where
-  name = fqVarName v
+isPrimitive (fqVarName -> name) =
+     name `M.member` primMap
+  || name `M.member` stdMeths
+  || isRepMeth name
