@@ -158,7 +158,8 @@ specializeTyDict =
           -- (\ v args -> isGlobalId v && not (isPrimitive v) && all isTyOrDict args)
           (\ v args -> not (isPrimitive v)
                     && all isTyOrDict args
-                    && (isGlobalId v || not (null args)))
+                    -- && (isGlobalId v || not (null args))
+          )
           -- const $ all isTyOrDict
 
 #if 1
@@ -603,6 +604,8 @@ externals =
     , externC "reify-misc" reifyMisc "Simplify 'reify e'"
     , externC "reifyEval" reifyEval "..."
     , externC "reifyIf" reifyIf "..."
+    , externC "reifyDelay" reifyDelay "..."
+    , externC "reifyLoop" reifyLoop "..."
     , externC "reifyBottom" reifyBottom "..."
     , externC "reifyRepMeth" reifyRepMeth "..."
     , externC "reifyApp" reifyApp "..."
