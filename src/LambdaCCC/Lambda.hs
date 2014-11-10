@@ -34,10 +34,10 @@ module LambdaCCC.Lambda
   , xor   -- from Prim  -- TODO: maybe remove
   , intL
   , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP,reifyOopsEP#
-  , reprEP, abstEP, ifEP, bottomEP
+  , reprEP, abstEP, ifEP, bottomEP, loopEP
   -- , coerceEP
   , evalEP, reifyEP, kPrimEP, kLit -- , oops
-  , IfCirc, if', BottomCirc
+  , IfCirc, if', BottomCirc, CircuitLoopKon
   ) where
 
 import Data.Functor ((<$>))
@@ -60,7 +60,7 @@ import Data.Proof.EQ
 import TypeUnary.Nat (IsNat(..),Nat(..))
 import TypeUnary.Vec (Vec(..),Z,S)
 
-import Circat.Category (Rep,HasRep(..),RepCat(..))
+import Circat.Category (Rep,HasRep(..),RepCat(..),LoopCat(..))
 import Circat.Prim
 
 import Circat.Classes (IfT, IfCat(..), BottomCat(..))
@@ -176,6 +176,11 @@ data E :: (* -> *) -> (* -> *) where
   (:^)    :: forall p b a  . E p (a :=> b) -> E p a -> E p b
   Lam     :: forall p a b  . Pat a -> E p b -> E p (a :=> b)
   Either  :: forall p a b c. E p (a -> c) -> E p (b -> c) -> E p (a :+ b -> c)
+  Loop    :: forall p a b s. CircuitLoopKon s =>
+                             E p (a :* s -> b :* s) -> E p (a -> b)
+
+type CircuitLoopKon s = LoopKon (:>) s
+
 --   CoerceE :: forall p a b  . (Typeable a, Typeable b, Coercible a b) =>
 --                              E p a -> E p b
 
@@ -193,6 +198,7 @@ occursVE v@(V name) = occ
    occ (f :^ e)        = occ f || occ e
    occ (Lam p e)       = not (occursVP v p) && occ e
    occ (Either f g)    = occ f || occ g
+   occ (Loop h)        = occ h
 --    occ (CoerceE e)     = occ e
 
 -- | Some variable in a pattern occurs freely in an expression
@@ -355,6 +361,7 @@ instance (HasOpInfo prim, Show' prim, PrimBasics prim, Eq1' prim)
     showParen (p > 0) $
     showString "\\ " . showsPrec 0 q . showString " -> " . showsPrec 0 e
   showsPrec p (Either f g) = showsOp2' "|||" (2,AssocRight) p f g
+  showsPrec p (Loop h) = showsApp1 "loop" p h
 --   showsPrec p (CoerceE e)  = showsApp1 "coerce" p e
 
 -- TODO: Multi-line pretty printer with indentation
@@ -423,6 +430,7 @@ eval' (ConstE p)   _   = evalP p
 eval' (u :^ v)     env = (eval' u env) (eval' v env)
 eval' (Lam p e)    env = \ x -> eval' e (extendEnv p x env)
 eval' (Either f g) env = eval' f env `either` eval' g env
+eval' (Loop h)     env = loop (eval' h env)
 -- eval' (CoerceE e)  env = coerce (eval' e env)
 
 #else
@@ -679,6 +687,9 @@ ifEP = kPrim IfP
 bottomEP :: forall a. BottomCat (:>) a => EP a
 bottomEP = kPrim BottomP @^ ConstE unitP
 
+loopEP :: forall a b s. CircuitLoopKon s => EP (a :* s -> b :* s) -> EP (a -> b)
+loopEP = Loop
+
 evalEP :: EP a -> a
 evalEP = evalE
 {-# NOINLINE evalEP #-}
@@ -729,7 +740,7 @@ instance Eq1' Prim where
   AbstP   ==== AbstP   = True
   ReprP   ==== ReprP   = True
   BottomP ==== BottomP = True
-  MealyP  ==== MealyP  = True
+  -- DelayP a  ==== DelayP a' = a === a'  -- doesn't type-check
   _       ==== _       = False
 
 instance Eq1' Lit where
