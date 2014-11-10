@@ -37,7 +37,7 @@ module LambdaCCC.Lambda
   , reprEP, abstEP, ifEP, bottomEP, loopEP
   -- , coerceEP
   , evalEP, reifyEP, kPrimEP, kLit -- , oops
-  , IfCirc, if', BottomCirc, CircuitLoopKon
+  , IfCirc, if', CircuitLoopKon
   ) where
 
 import Data.Functor ((<$>))
@@ -63,7 +63,7 @@ import TypeUnary.Vec (Vec(..),Z,S)
 import Circat.Category (Rep,HasRep(..),RepCat(..),LoopCat(..))
 import Circat.Prim
 
-import Circat.Classes (IfT, IfCat(..), BottomCat(..))
+import Circat.Classes
 import Circat.Circuit ((:>))
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
@@ -377,8 +377,13 @@ instance HasOpInfo Prim where
   opInfo AndP = Just $ OpInfo "&&"    (3,AssocRight)
   opInfo OrP  = Just $ OpInfo "||"    (2,AssocRight)
   opInfo XorP = Just $ OpInfo "`xor`" (2,AssocRight)
-  -- TODO: more
-  opInfo _   = Nothing
+  opInfo EqP  = Just $ OpInfo "=="    (4,AssocNone )
+  opInfo NeP  = Just $ OpInfo "/="    (4,AssocNone )
+  opInfo LtP  = Just $ OpInfo "<"     (4,AssocNone )
+  opInfo GtP  = Just $ OpInfo ">"     (4,AssocNone )
+  opInfo LeP  = Just $ OpInfo "<="    (4,AssocNone )
+  opInfo GeP  = Just $ OpInfo ">="    (4,AssocNone )
+  opInfo _    = Nothing
 
 -- | Single variable binding
 data Bind = forall a. Bind (V a) a
@@ -719,28 +724,34 @@ reifyOopsEP# = reifyOops#
 -- instance Eq1' Prim where (====) = (===)
 
 instance Eq1' Prim where
-  LitP a ==== LitP b  = a ==== b
-  NotP   ==== NotP    = True
-  AndP   ==== AndP    = True
-  OrP    ==== OrP     = True
-  XorP   ==== XorP    = True
-  AddP   ==== AddP    = True
-  MulP   ==== MulP    = True
-  ExlP   ==== ExlP    = True
-  ExrP   ==== ExrP    = True
-  InlP   ==== InlP    = True
-  InrP   ==== InrP    = True
-  PairP  ==== PairP   = True
+  LitP a  ==== LitP b  = a ==== b
+  NotP    ==== NotP    = True
+  AndP    ==== AndP    = True
+  OrP     ==== OrP     = True
+  XorP    ==== XorP    = True
+  NegateP ==== NegateP = True
+  AddP    ==== AddP    = True
+  MulP    ==== MulP    = True
+  EqP     ==== EqP     = True
+  NeP     ==== NeP     = True
+  LtP     ==== LtP     = True
+  GtP     ==== GtP     = True
+  LeP     ==== LeP     = True
+  GeP     ==== GeP     = True
+  ExlP    ==== ExlP    = True
+  ExrP    ==== ExrP    = True
+  InlP    ==== InlP    = True
+  InrP    ==== InrP    = True
+  PairP   ==== PairP   = True
 #if 0
-  CondBP ==== CondBP  = True
-  CondIP ==== CondIP  = True
+  CondBP  ==== CondBP  = True
+  CondIP  ==== CondIP  = True
 #else
-  IfP    ==== IfP     = True
+  IfP     ==== IfP     = True
 #endif
   AbstP   ==== AbstP   = True
   ReprP   ==== ReprP   = True
   BottomP ==== BottomP = True
-  -- DelayP a  ==== DelayP a' = a === a'  -- doesn't type-check
   _       ==== _       = False
 
 instance Eq1' Lit where
@@ -756,11 +767,9 @@ if' :: forall a. IfCirc a => Bool :* (a :* a) -> a
 if' (i,(t,e)) = if i then t else e
 {-# NOINLINE if' #-}
 
-type BottomCirc = BottomCat (:>)
-
 #if 0
 -- Matches bottom from BottomCat in Circat.Classes
-bottom' :: forall a. BottomCirc a => Bool :* (a :* a) -> a
+bottom' :: forall a. CircuitBot a => Bool :* (a :* a) -> a
 bottom' = error "bottom'"
 {-# NOINLINE bottom' #-}
 #endif
