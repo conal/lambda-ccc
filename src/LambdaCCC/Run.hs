@@ -7,6 +7,8 @@
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
+#define MealyAsFun
+
 ----------------------------------------------------------------------
 -- |
 -- Module      :  Run
@@ -18,32 +20,60 @@
 -- Run a test: reify, CCC, circuit
 ----------------------------------------------------------------------
 
-module LambdaCCC.Run (go,go',run,goM,goM') where
+module LambdaCCC.Run
+  ( go,go',goSep,run,goM,goM',goMSep
+  , goNew, goNew'
+  ) where
 
 import Prelude
-import Control.Arrow (first)
 
 import LambdaCCC.Lambda (EP,reifyEP)
 import LambdaCCC.ToCCC (toCCC')
 
-import Circat.Circuit
-  (GenBuses,Attr,mkGraph,unitize,UU,outDotG,MealyC(..),unitizeMealyC)
+import Circat.Circuit (GenBuses,Attr,mkGraph,unitize,UU,outDotG)
+
 import Circat.Netlist (saveAsVerilog)
 import Circat.Mealy (Mealy(..))
 
+#if defined MealyAsFun
+import Circat.Mealy (asFun)
+#else
+import Circat.Circuit (MealyC(..),unitizeMealyC)
+import Control.Arrow (first)
+#endif
+
+ranksep :: Double -> Attr
+ranksep n = ("ranksep",show n)
+
 go' :: GenBuses a => String -> [Attr] -> (a -> b) -> IO ()
+#if defined MealyAsFun
+go' = goNew'   -- Tidy up later
+#else
 go' name attrs f = goM' name attrs (Mealy (first f) ())
+#endif
+
 {-# INLINE go' #-}
 
 go :: GenBuses a => String -> (a -> b) -> IO ()
 go name = go' name []
 {-# INLINE go #-}
 
+goSep :: GenBuses a => String -> Double -> (a -> b) -> IO ()
+goSep name s = go' name [ranksep s]
+
 -- Run an example: reify, CCC, circuit.
 run :: GenBuses a => String -> [Attr] -> EP (a -> b) -> IO ()
 run name attrs e = do print e
                       outGV name attrs (unitize (toCCC' e))
 {-# NOINLINE run #-}
+
+goNew' :: GenBuses a => String -> [Attr] -> (a -> b) -> IO ()
+goNew' name attrs f = run name attrs (reifyEP f)
+{-# INLINE goNew' #-}
+
+goNew :: GenBuses a => String -> (a -> b) -> IO ()
+goNew name = goNew' name []
+{-# INLINE goNew #-}
 
 -- Diagram and Verilog
 outGV :: String -> [Attr] -> UU -> IO ()
@@ -64,6 +94,24 @@ outGV name attrs circ =
     State machines
 --------------------------------------------------------------------}
 
+goM :: GenBuses a => String -> Mealy a b -> IO ()
+goM name = goM' name []
+{-# INLINE goM #-}
+
+goMSep :: GenBuses a => String -> Double -> Mealy a b -> IO ()
+goMSep name s = goM' name [ranksep s]
+{-# INLINE goMSep #-}
+
+goM' :: GenBuses a => String -> [Attr] -> Mealy a b -> IO ()
+{-# INLINE goM' #-}
+
+#if defined MealyAsFun
+goM' name attrs = go' name attrs . asFun
+#else
+
+goM' name attrs m = putStrLn ("Compiling " ++ name) >>
+                    runM name attrs (reifyMealy m)
+
 -- Reified Mealy machine
 data MealyE a b =
   forall s. (GenBuses s, Show s) => MealyE (EP ((a,s) -> (b,s))) s
@@ -83,15 +131,6 @@ runM :: GenBuses a => String -> [Attr] -> MealyE a b -> IO ()
 runM name attrs e = do print e
                        outGV name attrs (unitizeMealyC (toMealyC e))
 
-goM :: GenBuses a => String -> Mealy a b -> IO ()
-goM name = goM' name []
-{-# INLINE goM #-}
-
-goM' :: GenBuses a => String -> [Attr] -> Mealy a b -> IO ()
-goM' name attrs m = putStrLn ("Compiling " ++ name) >>
-                    runM name attrs (reifyMealy m)
-{-# INLINE goM' #-}
-
 -- TODO: When mealyAsArrow works, rewrite goM' via go' instead of vice versa
 
 -- Despite INLINE pragmas, I still have to explicitly tell HERMIT to unfold
@@ -100,3 +139,5 @@ goM' name attrs m = putStrLn ("Compiling " ++ name) >>
 -- try (any-td (unfold ['go,'go','goM,'goM','reifyMealy]))
 
 -- TODO: Maybe pull unitizeMealyC into toMealyC, renaming to "toMealyU"
+
+#endif
