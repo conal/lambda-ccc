@@ -6,7 +6,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 {-# OPTIONS_GHC -Wall #-}
-{-# OPTIONS_GHC -fcontext-stack=38 #-}
+-- {-# OPTIONS_GHC -fcontext-stack=38 #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -39,9 +39,11 @@ import Control.Applicative -- (Applicative(..),liftA2,liftA3)
 import Data.Foldable (Foldable(..),sum,product,and,or)
 import Data.Traversable (Traversable(..))
 -- import Control.Category (id,(.))
-import Control.Arrow (Arrow(..),ArrowLoop(..))
+import Control.Arrow (Arrow(..))
+import qualified Control.Arrow as Arrow
 import Data.Tuple (swap)
 import Data.Maybe (fromMaybe,maybe)
+import Text.Printf (printf)
 
 -- transformers
 import Data.Functor.Identity
@@ -50,11 +52,11 @@ import TypeUnary.TyNat
 import TypeUnary.Nat (IsNat)
 import TypeUnary.Vec hiding (transpose)
 
-import LambdaCCC.Misc (xor,boolToInt,dup,Unop,Binop,transpose,(:*))
+import LambdaCCC.Misc (xor,boolToInt,dup,Unop,Binop,transpose,(:*),loop,delay)
 import LambdaCCC.Adder
-import LambdaCCC.CRC
+import LambdaCCC.CRC -- hiding (crcS,sizeAF)
 
-import Circat.Misc (Unop,Reversible(..))
+-- import Circat.Misc (Reversible(..))
 import Circat.Rep (bottom)
 import Circat.Pair (Pair(..))
 import qualified Circat.Pair as P
@@ -64,7 +66,7 @@ import qualified Circat.RaggedTree as Ra
 import Circat.RaggedTree (TU(..), R1, R2, R3, R4, R5, R8, R11, R13)
 import Circat.Shift
 import Circat.Scan
-import Circat.Mealy hiding (sumS)
+import Circat.Mealy hiding (ArrowCircuit(..))
 import qualified Circat.Mealy as Mealy
 import Circat.Circuit (GenBuses,Attr,systemSuccess)
 
@@ -73,7 +75,7 @@ import qualified LambdaCCC.Lambda
 import Circat.Classes (IfT)
 import LambdaCCC.Lambda (EP,reifyEP)
 
-import LambdaCCC.Run (go,go',goM,goM')
+import LambdaCCC.Run
 
 -- Experiment for Typeable resolution in reification
 import qualified Data.Typeable
@@ -245,15 +247,6 @@ RT.B         :: Pair (RTree n a) -> RTree (S n)   a
     Run it
 --------------------------------------------------------------------}
 
-ranksep :: Double -> Attr
-ranksep n = ("ranksep",show n)
-
-goSep :: GenBuses a => String -> Double -> (a -> b) -> IO ()
-goSep name s = go' name [ranksep s]
-
-goMSep :: GenBuses a => String -> Double -> Mealy a b -> IO ()
-goMSep name s = goM' name [ranksep s]
-
 inTest :: String -> IO ()
 inTest cmd = systemSuccess ("cd ../test; " ++ cmd) -- (I run ghci in ../src)
 
@@ -268,6 +261,9 @@ noReify = inTest "make no-reify"
 
 make :: IO ()
 make = systemSuccess "cd ../..; make"
+
+dateFigureSvg :: String -> String -> IO ()
+dateFigureSvg date fig = systemSuccess (printf "cd ../test; ./figure-svg %s \"%s\"" date fig)
 
 figureSvg :: String -> IO ()
 figureSvg str = systemSuccess ("cd ../test; ./figure-svg " ++ str)
@@ -843,31 +839,27 @@ polyRT4 = RT.tree4 True False False True True False True False
 -- Serial Fibonacci variants:
 
 -- main = goM "serial-fibonacci-a" $
---          Mealy (\ ((),(a,b)) -> let c = a+b in (a,(b,c))) (0::Int,1)
+--          Mealy (\ ((),(a,b)) -> (a,(b,a+b))) (0::Int,1)
 
 -- main = goM "serial-fibonacci-b" $
---          Mealy (\ ((),(a,b)) -> let c = a+b in (b,(b,c))) (0::Int,1)
+--          Mealy (\ ((),(a,b)) -> (b,(b,a+b))) (0::Int,1)
 
 -- main = goM "serial-fibonacci-c" $
 --          Mealy (\ ((),(a,b)) -> let c = a+b in (c,(b,c))) (0::Int,1)
 
 -- main = goM "serial-fibonacci-a-11" $
---          Mealy (\ ((),(a,b)) -> let c = a+b in (a,(b,c))) (1::Int,1)
+--          Mealy (\ ((),(a,b)) -> (a,(b,a+b))) (1::Int,1)
 
 -- main = go "foo" (sumSquare :: RTree N2 Int -> Int)
 
 -- main = goM "foldSP-rt3" (Mealy (\ (as :: RTree N3 (Sum Int),tot) -> dup (fold as <> tot)) mempty)
 
--- -- Equivalent and more modular, but not yet handled by the compiler:
--- 
--- main = goM "foldSP-rt3" (foldSP :: Mealy (RTree N3 (Sum Int)) (Sum Int))
--- main = goM "sumSP-rt3" (sumSP :: Mealy (RTree N3 Int) Int)
--- main = goM "sumSP-rt3" (Mealy.lscan (\ (as :: RTree N3 Int) tot -> sum as + tot) 0)
+-- main = goM "foldSP-rt1" (foldSP :: Mealy (RTree N1 (Sum Int)) (Sum Int))
 
--- Mealy (Pair (RTree N3 Int)) Int
+-- main = goM "sumSP-rt2" (sumSP :: Mealy (RTree N2 Int) Int)
 
 -- -- Not yet.
--- main = goM "dotSP-rt3p" (dotSP :: Mealy (RTree N3 (Pair Int)) Int)
+-- main = goM "dotSP-rt2p" (dotSP :: Mealy (RTree N2 (Pair Int)) Int)
 
 -- main = goM "dotSP-rt3p" (Mealy (\ (pas :: RTree N3 (Pair Int),tot) -> dup (dot'' pas + tot)) 0)
 
@@ -884,22 +876,21 @@ adderS = Mealy (add1 . swap)
 
 -- main = goM "adderS" (adderS False)
 
-sumS :: (Num a, GS a) => Mealy a a
-sumS = Mealy (\ (a,tot) -> dup (tot+a)) 0
--- sumS = Mealy (dup . uncurry (+)) 0
-
 -- main = goMSep "sumS" 0.5 (sumS :: Mealy Int Int)
 
 -- main = goMSep "sumS-rt3" 1.5 (sumS :: Mealy (RTree N3 Int) (RTree N3 Int))
 
-sumPS :: (Foldable f, Num (f a), Num a, GS (f a)) =>
-         Mealy (f a) a
-sumPS = Mealy (\ (t,tot) -> let tot' = tot+t in (sum tot',tot')) 0
--- sumPS = arr sum . sumS
+-- -- Generates a gnarly type error in Core Lint. To investigate.
+-- main = goMSep "sumPS-rt1" 0.75 (sumPS :: Mealy (RTree N1 Int) Int)
 
--- main = goMSep "sumPS-rt3" 1 (m :: Mealy (RTree N3 Int) Int)
+-- -- Eep! This version does it, too, with or without MealyAsFun in Run
+-- main = goMSep "sumPS-rt2" 1 (m :: Mealy (RTree N2 Int) Int)
 --  where
 --    m = Mealy (\ (t,tot) -> let tot' = tot+t in (sum tot',tot')) 0
+
+-- Argument value doesn't match argument type:
+-- Fun type: EP (RTree (S N0) (Int -> Int)) -> EP (Pair (RTree Z (Int -> Int)))
+-- Arg type: EP (RTree (S Z) Int)
 
 -- main = goM "dotPS-rt3p" (m :: Mealy (RTree N3 (Pair Int)) Int)
 --  where
@@ -954,14 +945,14 @@ matVecMultS =
 --                 if started then (row <.> vec, s) else (0, (True,row))) (False,pure 0)
 
 -- -- 3:1, 4:1.5, 5:2
--- main = goMSep "mat-vec-mult-b-rt3" 1 (m :: Mealy (RTree N3 Int) Int)
+-- main = goMSep "mat-vec-mult-b-rt2" 1 (m :: Mealy (RTree N2 Int) Int)
 --  where
 --   m = Mealy (\ (row,s@(started,vec)) ->
 --                (row <.> vec, if started then s else (True,row))) (False,pure 0)
 
-
+-- -- Type error with MealyAsFun in Run
 -- -- Same result as -b
--- main = goMSep "mat-vec-mult-c-rt3" 1 (m :: Mealy (RTree N3 Int) Int)
+-- main = goMSep "mat-vec-mult-c-rt2" 1 (m :: Mealy (RTree N2 Int) Int)
 --  where
 --   m = Mealy (\ (row,s@(started,vec)) ->
 --                (row <.> vec, if started then s else (not started,row))) (False,pure 0)
@@ -1047,5 +1038,55 @@ histogramS = scanl histogramStep (pure 0)
 
 -- main = go "pure-1-sum-rt3" (\ () -> sum (pure 1 :: RTree N3 Int))
 
+-- main = go "foo" (\ () -> True)
 
 -- More CRC
+
+-- crcS :: (GS (poly Bool), Applicative poly, Traversable poly) =>
+--         Mealy Bool (poly Bool, Int)
+
+main = goM "crcS-rt0" (crcS :: Mealy Bool (RTree N0 Bool, Int))
+
+-- main = goM "adderS" (adderS False)
+
+-- main = goM "mealy-counter-exclusive" (Mealy (\ ((),n::Int) -> (n,n+1)) 0)
+
+-- main = go "sumSquare-rt2" (sumSquare :: RTree N2 Int -> Int)
+
+-- main = goMSep "sumPS-rt3" 1 (m :: Mealy (RTree N3 Int) Int)
+--  where
+--    m = Mealy (\ (t,tot) -> let tot' = tot+t in (sum tot',tot')) 0
+
+-- Explicit delay and loop
+
+-- main = goNew "delay-false" (delay False)
+
+-- main = goNew "delay-01" (delay (0::Int,1::Int))
+
+-- main = goNew "foo" (loop (\ (a::Int,s::Bool) -> (a,s)))
+
+-- -- <<loop>
+-- main = goNew "foo" (loop (\ ((),n::Int) -> dup (n+1)))
+
+-- main = goNew "foo" (loop ((\ ((),(a,b)) -> (a,(b,a+b))) . second (delay (0::Int,1))))
+
+fibS :: () -> Int
+fibS = loop ((\ ((),(a,b)) -> (a,(b,a+b))) . second (delay (0,1)))
+
+-- main = goNew "foo" fibS
+
+fibS' :: Int
+fibS' = loop ((\ ((),(a,b)) -> (a,(b,a+b))) . second (delay (0,1))) ()
+
+-- main = goNew "foo" (\ () -> fibS')
+
+-- main = goNew "foo" (Mealy.asFun (Mealy (\ ((),(a,b)) -> (a,(b,a+b))) (0::Int,1)))
+
+fibM :: Mealy () Int
+fibM = Mealy (\ ((),(a,b)) -> (a,(b,a+b))) (0::Int,1)
+
+-- main = goM "foo" fibM
+
+-- main = goNew "foo" (asFun fibM)
+
+-- main = goM "foo" fibM
