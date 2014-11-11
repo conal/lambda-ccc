@@ -158,7 +158,7 @@ specializeTyDict =
           -- (\ v args -> isGlobalId v && not (isPrimitive v) && all isTyOrDict args)
           (\ v args -> not (isPrimitive v)
                     && all isTyOrDict args
-                    -- && (isGlobalId v || not (null args))
+                    && (isGlobalId v || not (null args))
           )
           -- const $ all isTyOrDict
 
