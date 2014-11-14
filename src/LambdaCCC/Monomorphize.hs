@@ -291,7 +291,8 @@ bashSimplifiers =
   , nowatchR "caseFloatLetR" caseFloatLetR
   , nowatchR "caseFloatCastR" caseFloatCastR  -- Watch this one
   , nowatchR "letFloatAppR" letFloatAppR
-  , nowatchR "letFloatArgR" letFloatArgR
+--   , nowatchR "letFloatArgR" letFloatArgR
+  , nowatchR "letFloatArgNoDelayR" letFloatArgNoDelayR
   , nowatchR "letFloatLamR" letFloatLamR
   , nowatchR "letFloatLetR" letFloatLetR
   , nowatchR "letFloatCaseR" letFloatCaseR
@@ -326,7 +327,21 @@ letFloatCaseAltR' :: ReExpr
 letFloatCaseAltR' = letFloatCaseAltR Nothing
 
 letFloatR :: ReCore
-letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR')
+letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprNoDelayR <+ letFloatCaseAltR')
+
+-- | Tweaked letFloatExprR. Intentionally fails on @delay (let ... in x0)@.
+-- Since x0 won't get reified, any floating bindings wouldn't get the same
+-- interpretation as the non-reified x0.
+letFloatExprNoDelayR :: ReExpr
+letFloatExprNoDelayR = unlessM (isDelayLet <$> id) letFloatExprR
+
+isDelayLet :: CoreExpr -> Bool
+isDelayLet (collectArgs -> ( Var (fqVarName -> "Circat.Misc.delay")
+                           , [Type _,Let {}] )) = True
+isDelayLet _ = False
+
+letFloatArgNoDelayR :: ReExpr
+letFloatArgNoDelayR = unlessM (isDelayLet <$> id) letFloatArgR
 
 -- pruneAltsProg :: ReProg
 -- pruneAltsProg = progRhsAnyR ({-bracketR "pruneAltsR"-} pruneAltsR)
@@ -350,7 +365,7 @@ retypeProgR = progRhsAnyR ({-bracketR "retypeExprR"-} retypeExprR)
 passE :: ReExpr
 passE = id
       . tryR (watchR "simplifyAll" simplifyAll)  -- after let floating
-      . tryR (anybuE (letFloatExprR <+ letFloatCaseAltR'))
+      . tryR (anybuE (letFloatExprNoDelayR <+ letFloatCaseAltR'))
       . tryR (anybuE (letAllR bindUnLetIntroR id))
 --       . tryR (watchR "retypeExprR" retypeExprR) -- Needed?
       . tryR (extractR unshadowR)
@@ -618,7 +633,7 @@ externals =
     , externC "reifyOops" reifyOops "Generate errors for remaining reifyEP call"
     -- 
     , external "let-float'"
-        (promoteR letFloatTopR <+ promoteR (letFloatExprR <+ letFloatCaseAltR')
+        (promoteR letFloatTopR <+ promoteR (letFloatExprNoDelayR <+ letFloatCaseAltR')
          :: RewriteH Core)
         ["let-float with letFloatCaseAltR"]
 --     , externC "pruneAltsR" pruneAltsR "..."
