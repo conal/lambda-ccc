@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# OPTIONS_GHC -Wall #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -21,6 +21,7 @@ module LambdaCCC.Bitonic where
 
 import Data.Functor ((<$>))
 import Data.Foldable (toList)
+import Control.Applicative (liftA2)
 
 import TypeUnary.TyNat (N1,N2,N3,N4)
 import TypeUnary.Nat (IsNat(..),Nat(..))
@@ -32,20 +33,26 @@ import Circat.Misc (Unop,inTranspose)
 
 bsort :: (IsNat n, Ord a) => Bool -> Unop (RTree n a)
 bsort = bsort' nat
+{-# INLINE bsort #-}
 
 bsort' :: Ord a => Nat n -> Bool -> Unop (RTree n a)
 bsort' Zero _       = id
-bsort' (Succ m) up = \ (B (u :# v)) ->
-  merge (Succ m) up (B (bsort' m up u :# bsort' m (not up) v))   -- Applicative
+bsort' (Succ m) up = \ (B ts) ->
+  merge (Succ m) up (B (liftA2 (bsort' m) (up :# not up) ts))
+{-# INLINE bsort' #-}
 
--- bsort' m up :: Unop (RTree m a)
+-- bsort' (Succ m) up = \ (B (u :# v)) ->
+--   merge (Succ m) up (B (bsort' m up u :# bsort' m (not up) v))
 
+-- Bitonic merge
 merge :: Ord a => Nat n -> Bool -> Unop (RTree n a)
 merge Zero     _  = id
 merge (Succ m) up = \ (B ts) -> B (merge m up <$> inTranspose (fmap (cswap up)) ts)
+{-# INLINE merge #-}
 
 cswap :: Ord a => Bool -> Unop (Pair a)
 cswap up (a :# b) = if (a <= b) == up then a :# b else b :# a
+{-# INLINE cswap #-}
 
 test :: (IsNat n, Ord a) => Bool -> RTree n a -> [a]
 test up = toList . bsort up
