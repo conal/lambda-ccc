@@ -9,14 +9,20 @@ reify:
 no-reify:
 	echo "" | make no-reify-continue ; echo
 
+dont:
+	echo "" | make dont-continue ; echo
+
+foo:
+	echo "" | make foo-continue ; echo
+
 reify-continue:
 	$(HERM) DoTree.hss
 
 no-reify-continue:
 	$(HERM) DoTreeNoReify.hss
 
-dont:
+dont-continue:
 	$(HERM) Dont.hss
 
-foo:
+foo-continue:
 	$(HERM) Foo.hss
