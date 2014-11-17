@@ -77,6 +77,32 @@ convert (Either f g) p = curry ((convert' f ||| convert' g) . distl)
 convert (Loop h)     p = curry (loopC (uncurry (convert h p) . rassocP))
 -- convert (CoerceE a)  p = coerceC . convert a p
 
+#if 0
+
+-- For Loop, we have
+
+p :: Pat u
+Loop h :: E p (a -> b)
+h :: E p (a :* s -> b :* s)
+
+convert h p :: u `k` (a :* s :=> b :* s)
+
+loopC :: ((a :* s) `k` (b :* s)) -> (a `k` b)
+
+-- and we need
+
+convert (Loop h) p :: u `k` (a :=> b)
+
+-- One step at a time:
+
+convert h p :: u `k` (a :* s :=> b :* s)
+uncurry (convert h p) :: (u :* (a :* s)) `k` (b :* s)
+uncurry (convert h p) . rassocP :: ((u :* a) :* s) `k` (b :* s)
+loopC (uncurry (convert h p) . rassocP) :: (u :* a) `k` b
+curry (loopC (uncurry (convert h p) . rassocP)) :: u `k` (a :=> b)
+
+#endif
+
 #else
 
 infixl 9 @@
