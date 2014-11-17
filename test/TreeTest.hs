@@ -50,11 +50,13 @@ import Data.Functor.Identity
 
 import TypeUnary.TyNat
 import TypeUnary.Nat (IsNat)
-import TypeUnary.Vec hiding (transpose)
+import TypeUnary.Vec hiding (transpose,iota)
+import qualified TypeUnary.Vec as V
 
 import LambdaCCC.Misc (xor,boolToInt,dup,Unop,Binop,transpose,(:*),loop,delay)
 import LambdaCCC.Adder
-import LambdaCCC.CRC -- hiding (crcS,sizeAF)
+import LambdaCCC.CRC -- hiding (crcS,sizeA)
+import LambdaCCC.Bitonic
 
 -- import Circat.Misc (Reversible(..))
 import Circat.Rep (bottom)
@@ -294,6 +296,8 @@ main :: IO ()
 
 -- main = go "dotsp-pt3" (dotsp :: Pair (RTree N3 Int) -> Int)
 
+-- main = go "dotsp-pv5" (dotsp :: Pair (Vec N5 Int) -> Int)
+
 -- main = go "dotsp-plt3" (dotsp :: Pair (LTree N3 Int) -> Int)
 
 -- main = go "dotap-2" (uncurry (dotap :: RTree N2 Int -> RTree N2 Int -> Int))
@@ -466,7 +470,7 @@ main :: IO ()
 
 -- main = go "foo" (\ a -> not a)
 
--- main = go "foo" not
+-- main = go "not" not
 
 -- main = go "not-pair" (\ a -> (not a, not a))
 
@@ -555,38 +559,11 @@ main :: IO ()
 -- crcStep :: (Traversable poly, Applicative poly) =>
 --            poly Bool -> poly Bool :* Bool -> poly Bool
 
--- main = goSep "crcStep-v4" 1
---         (uncurry (crcStep :: Vec N4 Bool -> Vec N4 Bool :* Bool -> Vec N4 Bool))
+-- main = goSep "crcStep-v1" 1
+--         (uncurry (crcStep :: Vec N1 Bool -> Vec N1 Bool :* Bool -> Vec N1 Bool))
 
 -- -- ranksep: rt2=1, rt3=2, rt4=4.5
 -- main = goSep "crcStep-rt3" 2 (uncurry (crcStep :: RTree N3 Bool -> RTree N3 Bool :* Bool -> RTree N3 Bool))
-
-polyV2 :: Vec N2 Bool
-polyV2 = vec2 True False
-
-polyV3 :: Vec N3 Bool
-polyV3 = vec3 True False True
-
-polyV4 :: Vec N4 Bool
-polyV4 = vec4 True False False True
-
-polyV5 :: Vec N5 Bool
-polyV5 = polyV3 <+> polyV2
-
--- main = go "crcStepK-v4" (crcStep polyV4)
-
-polyRT1 :: RTree N1 Bool
-polyRT1 = RT.tree1 True False
-
-polyRT2 :: RTree N2 Bool
-polyRT2 = RT.tree2 True False False True
-
-polyRT3 :: RTree N3 Bool
-polyRT3 = RT.tree3 True False False True True False True False
-
-polyRT4 :: RTree N4 Bool
-polyRT4 = RT.tree4 True False False True True False True False
-                   False True True False True False True False
 
 -- main = goSep "crcStepK-rt3" 1 (crcStep polyRT3)
 
@@ -852,7 +829,9 @@ polyRT4 = RT.tree4 True False False True True False True False
 
 -- main = go "foo" (sumSquare :: RTree N2 Int -> Int)
 
--- main = goM "foldSP-rt3" (Mealy (\ (as :: RTree N3 (Sum Int),tot) -> dup (fold as <> tot)) mempty)
+-- main = goM "sumSP-rt3" (Mealy (\ (as :: RTree N3 (Sum Int),tot) -> dup (fold as <> tot)) mempty)
+
+-- main = goM "sumSP-rt4" (sumSP :: Mealy (RTree N4 Int) Int)
 
 -- main = goM "foldSP-rt1" (foldSP :: Mealy (RTree N1 (Sum Int)) (Sum Int))
 
@@ -861,7 +840,7 @@ polyRT4 = RT.tree4 True False False True True False True False
 -- -- Not yet.
 -- main = goM "dotSP-rt2p" (dotSP :: Mealy (RTree N2 (Pair Int)) Int)
 
--- main = goM "dotSP-rt3p" (Mealy (\ (pas :: RTree N3 (Pair Int),tot) -> dup (dot'' pas + tot)) 0)
+-- main = goM "dotSP-rt4p" (Mealy (\ (pas :: RTree N4 (Pair Int),tot) -> dup (dot'' pas + tot)) 0)
 
 type GS a = (GenBuses a, Show a)
 
@@ -880,13 +859,21 @@ adderS = Mealy (add1 . swap)
 
 -- main = goMSep "sumS-rt3" 1.5 (sumS :: Mealy (RTree N3 Int) (RTree N3 Int))
 
--- -- Generates a gnarly type error in Core Lint. To investigate.
+-- -- Fail
 -- main = goMSep "sumPS-rt1" 0.75 (sumPS :: Mealy (RTree N1 Int) Int)
 
 -- -- Eep! This version does it, too, with or without MealyAsFun in Run
 -- main = goMSep "sumPS-rt2" 1 (m :: Mealy (RTree N2 Int) Int)
 --  where
 --    m = Mealy (\ (t,tot) -> let tot' = tot+t in (sum tot',tot')) 0
+
+-- Simplifying to diagnose
+
+-- -- Eep! This version does it, too, with or without MealyAsFun in Run
+-- main = goM "foo" (m :: Mealy (Vec N2 Int) Int)
+--  where
+--    m = Mealy (\ (t,tot) -> let tot' = tot+t in (sum tot',tot')) 0
+
 
 -- Argument value doesn't match argument type:
 -- Fun type: EP (RTree (S N0) (Int -> Int)) -> EP (Pair (RTree Z (Int -> Int)))
@@ -1053,7 +1040,7 @@ histogramS = scanl histogramStep (pure 0)
 
 -- main = go "sumSquare-rt2" (sumSquare :: RTree N2 Int -> Int)
 
--- main = goMSep "sumPS-rt3" 1 (m :: Mealy (RTree N3 Int) Int)
+-- main = goMSep "sumPS-rt4" 1 (m :: Mealy (RTree N4 Int) Int)
 --  where
 --    m = Mealy (\ (t,tot) -> let tot' = tot+t in (sum tot',tot')) 0
 
@@ -1070,13 +1057,15 @@ histogramS = scanl histogramStep (pure 0)
 
 -- main = goNew "foo" (loop ((\ ((),(a,b)) -> (a,(b,a+b))) . second (delay (0::Int,1))))
 
-fibS :: () -> Int
+-- main = goNew "fibS" fibS
+--  where
+--   fibS :: () -> Int
+--   fibS = loop ((\ ((),(a,b)) -> (a,(b,a+b))) . second (delay (0,1)))
+
+fibS :: Num a => () -> a
 fibS = loop ((\ ((),(a,b)) -> (a,(b,a+b))) . second (delay (0,1)))
 
--- main = goNew "foo" fibS
-
-fibS' :: Int
-fibS' = loop ((\ ((),(a,b)) -> (a,(b,a+b))) . second (delay (0,1))) ()
+-- main = goNew "fibS" fibS
 
 -- main = goNew "foo" (\ () -> fibS')
 
@@ -1091,4 +1080,142 @@ fibM = Mealy (\ ((),(a,b)) -> (a,(b,a+b))) (0::Int,1)
 
 -- main = goM "foo" fibM
 
-main = go "comparisons" (\ (x::Int,y::Int) -> (x==y || x/=y) && (x<y || x>=y) && (x>y || x<=y))
+-- main = go "comparisons"
+--         (\ (x::Int,y::Int) -> (x==y || x/=y) && (x<y || x>=y) && (x>y || x<=y))
+
+-- main = go "loop-id" (loop (\ (a::Bool,b::Int) -> (a,b)))
+
+-- main = go "loop-const" (loop (\ (a::Bool,_b::Int) -> (a,3)))
+
+-- main = go "loop-free-state-a" (loop (\ (a::Int,b::Int) -> (b > a,3)))
+
+-- main = go "loop-free-state-b" (loop (\ (a::Int,b::Int) -> (b > a,a)))
+
+-- -- "<<loop>"
+-- main = go "loop-oops-a" (loop (\ (a::Int,b::Int) -> (b > a,b+1)))
+
+-- main = goM "foo" (Mealy swap 0 :: Mealy (RTree N3 Int) (RTree N3 Int))
+
+-- Serial
+crcS' :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
+         Mealy Bool (poly Bool)
+crcS' = Mealy h (pure False, pure False,0)
+ where
+   p = sizeA (undefined :: poly ())
+   h :: MealyFun (poly Bool, poly Bool, Int) Bool (poly Bool)
+   h (b,(poly,seg,i)) = (stepped,(poly',seg',i'))
+    where
+      stash q = snd (shiftR (q,b))
+      starting = i < 2*p
+      i' = if starting then i+1 else i
+      stepped = crcStep poly (seg,b)
+      (poly',seg')
+        | i < p     = (stash poly,seg)
+        | starting  = (poly,stash seg)
+        | otherwise = (poly,stepped)
+
+-- Can I use step instead of stash for seg?
+
+-- main = goM "crcS-rt1" (crcS :: Mealy Bool (RTree N1 Bool))
+
+-- main = goM "crcSK-v1" (crcSK poly :: Mealy Bool (Vec N1 Bool))
+--  where
+--    poly = vec1 True
+
+-- Serial with static polynomial
+crcSKa :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
+          poly Bool -> Mealy Bool (poly Bool)
+crcSKa poly = fst <$> scanl h (pure False,0)
+ where
+   p = sizeA (undefined :: poly ())
+   h (seg,i) b | i < p     = (snd (shiftR (seg,b)), i+1)
+               | otherwise = (crcStep poly (seg,b), i)
+
+-- main = goM "crcSKa-v1" (crcSKa polyV1 :: Mealy Bool (Vec N1 Bool))
+
+-- main = goM "crcSKa-rt0" (crcSKa polyRT0 :: Mealy Bool (RTree N0 Bool))
+
+-- main = go "foo" (fmap not :: Unop (RTree N2 Bool))
+
+shiftLS :: (Traversable f, GS (f a)) => f a -> Mealy a a
+shiftLS = Mealy (swap . shiftL)
+
+shiftRS :: (Traversable f, GS (f a)) => f a -> Mealy a a
+shiftRS = Mealy (shiftR . swap)
+
+-- Types:
+-- 
+--   shiftL :: (a, f a) -> (f a, a)
+--   swap . shiftL :: (a, f a) -> (a, f a)
+-- 
+--   shiftR :: (f a, a) -> (a, f a)
+--   shiftR . swap :: (a, f a) -> (a, f a)
+
+-- main = goM "shiftL-v3"  (shiftLS (pure False :: Vec N3 Bool))
+
+-- main = goM "shiftR-v3"  (shiftRS (pure False :: Vec N3 Bool))
+
+-- main = goM "shiftL-iota-v3"  (shiftLS (V.iota :: Vec N3 Int))
+
+-- main = goM "shiftR-iota-v3"  (shiftRS (V.iota :: Vec N3 Int))
+
+-- main = goM "shiftL-iota-rt2"  (shiftLS (iota :: RTree N2 Int))
+
+-- main = goM "shiftR-rt2" (shiftRS (pure False :: RTree N2 Bool))
+
+-- main = goM "shiftR-ib-v3"  (shiftRS (pure (0,False) :: Vec N3 (Int,Bool)))
+
+-- To simplify the circuit, output stepped even when i<p.
+-- We expect the user to ignore this initial output either way.
+crcSKb :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
+           poly Bool -> Mealy Bool (poly Bool)
+crcSKb poly = Mealy h (pure False,0)
+ where
+   p = sizeA (undefined :: poly ())
+   h (b,(seg,i)) = (stepped,next)
+    where
+      stepped = crcStep poly (seg,b)
+      next | i < p     = (snd (shiftR (seg,b)), i+1)
+           | otherwise = (stepped, i)
+
+-- main = goM "crcSKb-rt0" (crcSKb polyRT0 :: Mealy Bool (RTree N0 Bool))
+
+crcSKc :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
+          poly Bool -> Mealy Bool (poly Bool)
+crcSKc poly = Mealy h (pure False,0)
+ where
+   p = sizeA (undefined :: poly ())
+   h (b,(seg,i)) = (stepped,(seg',i+1))
+    where
+      stepped = crcStep poly (seg,b)
+      seg' | i < p     = snd (shiftR (seg,b))
+           | otherwise = stepped
+
+-- main = goM "crcSKc-rt0" (crcSKc polyRT0 :: Mealy Bool (RTree N0 Bool))
+
+foo :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
+       Mealy () (poly Bool)
+foo = Mealy h (pure False,0::Int)
+ where
+   h ((),(seg,i)) = (seg',(seg',i+1))
+    where
+      seg' | i < 3     = seg
+           | otherwise = pure True
+
+-- main = goM "foo" (foo :: Mealy () (RTree N0 Bool))
+
+matMatMultS :: (GS (f a), Foldable f, Applicative f, Num a) => Mealy (Bool, f a) a
+matMatMultS = Mealy h (pure 0)
+ where
+   h ((new,w),row) = (row <.> w, if new then w else row)
+
+--    h ((True ,row),_  ) = (0          , row)
+--    h ((False,col),row) = (row <.> col, row)
+
+-- -- 2:0.75; 3:1.0; 4:1.5, 5:2.5
+-- main = goMSep "matMatMultS-rt4" 1.5 (matMatMultS :: Mealy (Bool, RTree N4 Int) Int)
+
+-- main = go "foo" (\ (a,b::Int,c::Int) -> if not a then b else c)
+
+-- 2:0.75, 3:0.75, 4:0.75
+main = goSep "bitonic-up-4" 0.75 (bsort True :: Unop (RTree N4 Int))
