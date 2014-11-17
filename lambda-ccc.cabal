@@ -47,6 +47,7 @@ Library
                     LambdaCCC.StateTrie
                     LambdaCCC.Adder
                     LambdaCCC.CRC
+                    LambdaCCC.Bitonic
   Other-Modules:
                     LambdaCCC.Tests
 
