@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TypeOperators, ViewPatterns, ConstraintKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -27,14 +28,16 @@ import Control.Applicative -- (Applicative(..),liftA2,liftA3)
 import Data.Foldable (Foldable(..),sum)
 import Data.Traversable (Traversable(..))
 -- import Control.Category (id,(.))
+-- import Control.Arrow ((&&&))
 
 import LambdaCCC.Misc (xor,(:*)) -- ,dup
 import Circat.Shift
-import Circat.Mealy (Mealy(..),scanl)
+import Circat.Mealy (Mealy(..)) -- scanl
 import Circat.Circuit (GenBuses)
 
 -- TEMP
 import TypeUnary.Vec hiding (transpose)
+import Circat.Pair (Pair(..))
 import Circat.RTree
 
 crcStep :: (Traversable poly, Applicative poly) =>
@@ -128,45 +131,54 @@ crcS = Mealy h (pure False, pure False,0)
 sizeA :: forall f a. (Applicative f, Foldable f) => f a -> Int
 sizeA _ = sum (pure 1 :: f Int)
 
--- Consider record update
+type GS a = (GenBuses a, Show a)
 
--- scanl :: C b => (b -> a -> b) -> b -> Mealy a b
+#if 0
 
--- crcStep :: (Traversable poly, Applicative poly) =>
---            poly Bool -> poly Bool :* Bool -> poly Bool
-
--- -- Serial with static polynomial
--- crcSK :: forall poly. ( GenBuses (poly Bool), Show (poly Bool)
---                       , Applicative poly, Traversable poly ) =>
---          poly Bool -> Mealy Bool (poly Bool)
--- crcSK poly = Mealy h (pure False,0)
---  where
---    p = sizeA (undefined :: poly Bool)
---    h :: MealyFun (poly Bool, Int) Bool (poly Bool)
---    h (b,(seg,i)) = (seg',(seg',i'))
---     where
---       -- This version doesn't increment i past p, to prevent overflow.
---       (seg',i') | i < p     = (snd (shiftR (seg,b)), i+1)
---                 | otherwise = (crcStep poly (seg,b), i)
--- {-# INLINE crcSK #-}
-
---       i' = i + 1
---       seg' | i < p     = snd (shiftR (seg,b))
---            | otherwise = crcStep poly (seg,b)
+-- Strangely, the (<) in these definitions gets inlined before I can intercept it.
+-- For now, repeat the definitions in TreeTest.
 
 -- Serial with static polynomial
-crcSK2 :: forall poly. ( GenBuses (poly Bool), Show (poly Bool)
+crcSKa :: forall poly. ( GS (poly Bool)
                        , Applicative poly, Traversable poly ) =>
           poly Bool -> Mealy Bool (poly Bool)
-crcSK2 poly = fst <$> scanl h (pure False,0)
+crcSKa poly = Mealy h (pure False,0)
  where
    p = sizeA (undefined :: poly Bool)
-   -- h :: (poly Bool, Int) -> Bool -> (poly Bool, Int)
-   h (seg,i) b | i < p     = (snd (shiftR (seg,b)), i+1)
-               | otherwise = (crcStep poly (seg,b), i)
-{-# INLINE crcSK2 #-}
+   h :: MealyFun (poly Bool, Int) Bool (poly Bool)
+   h (b,(seg,i)) = (seg',(seg',i'))
+    where
+      -- This version doesn't increment i past p, to prevent overflow.
+      (seg',i') | i < p     = (snd (shiftR (seg,b)), i+1)
+                | otherwise = (crcStep poly (seg,b), i)
+{-# INLINE crcSKa #-}
 
--- scanl :: C b => (b -> a -> b) -> b -> Mealy a b
+-- To simplify the circuit, output stepped even when i<p.
+-- We expect the user to ignore this initial output either way.
+crcSKb :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
+           poly Bool -> Mealy Bool (poly Bool)
+crcSKb poly = Mealy h (pure False,0)
+ where
+   p = sizeA (undefined :: poly ())
+   h (b,(seg,i)) = (stepped,next)
+    where
+      stepped = crcStep poly (seg,b)
+      next | i < p     = (snd (shiftR (seg,b)), i+1)
+           | otherwise = (stepped, i)
+{-# INLINE crcSKb #-}
+
+crcSKc :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
+          poly Bool -> Mealy Bool (poly Bool)
+crcSKc poly = Mealy h (pure False,0)
+ where
+   p = sizeA (undefined :: poly ())
+   h (b,(seg,i)) = (stepped,(seg',i+1))
+    where
+      stepped = crcStep poly (seg,b)
+      seg' | i < p     = snd (shiftR (seg,b))
+           | otherwise = stepped
+{-# INLINE crcSKc #-}
+#endif
 
 #endif
 
@@ -174,36 +186,44 @@ crcSK2 poly = fst <$> scanl h (pure False,0)
     Sample input
 --------------------------------------------------------------------}
 
+#if 0
+
+numBits :: Integral a => a -> [Bool]
+numBits ((`div` 2) &&& odd -> (m,b)) = b : numBits m
+
+numBitsR :: forall n. IsNat n => Int -> RTree n Bool
+numBitsR = fromList . take (2^d) . numBits
+  where
+    d = natToZ (nat :: Nat n) :: Int
+
+numBitsV :: forall n. IsNat n => Int -> Vec n Bool
+numBitsV = elemsV . take n . numBits
+  where
+    n = natToZ (nat :: Nat n) :: Int
+
+-- See "Best CRC Polynomials" by Philip Koopman.
+-- <http://users.ece.cmu.edu/~koopman/crc/>.
+
+#endif
+
 -- I'm putting these definitions here to work around a problem with inlining.
 -- Fix that problem, and move these definitions back to TreeTest.hs.
 
-polyV1 :: Vec N1 Bool
-polyV1 = vec1 True
+class PolyD f where polyD :: f Bool
 
-polyV2 :: Vec N2 Bool
-polyV2 = vec2 True False
+instance PolyD (Vec N1) where polyD = vec1 True
+instance PolyD (Vec N2) where polyD = vec2 True False
+instance PolyD (Vec N3) where polyD = vec3 True False True
+instance PolyD (Vec N4) where polyD = vec4 True False False True
+instance PolyD (Vec N5) where polyD = ((polyD :: Vec N3 Bool) <+> (polyD :: Vec N2 Bool))
 
-polyV3 :: Vec N3 Bool
-polyV3 = vec3 True False True
-
-polyV4 :: Vec N4 Bool
-polyV4 = vec4 True False False True
-
-polyV5 :: Vec N5 Bool
-polyV5 = polyV3 <+> polyV2
-
-polyRT0 :: Tree N0 Bool
-polyRT0 = tree0 True
-
-polyRT1 :: Tree N1 Bool
-polyRT1 = tree1 True False
-
-polyRT2 :: Tree N2 Bool
-polyRT2 = tree2 True False False True
-
-polyRT3 :: Tree N3 Bool
-polyRT3 = tree3 True False False True True False True False
-
-polyRT4 :: Tree N4 Bool
-polyRT4 = tree4 True False False True True False True False
+instance PolyD (Tree N0) where polyD = tree0 True
+instance PolyD (Tree N1) where polyD = tree1 True False
+instance PolyD (Tree N2) where polyD = tree2 True False False True
+instance PolyD (Tree N3) where
+  polyD = tree3 True False False True True False True False
+instance PolyD (Tree N4) where
+  polyD = tree4 True False False True True False True False
                 False True True False True False True False
+instance PolyD (Tree N5) where
+  polyD = B (polyD :# rotateL polyD)
