@@ -19,8 +19,10 @@ module LambdaCCC.Bitonic where
 
 -- TODO: explicit exports
 
+import Prelude hiding (reverse)
+
+import Data.Functor ((<$>))
 import Data.Foldable (toList)
-import Control.Applicative (liftA2)
 
 import TypeUnary.TyNat (N1,N2,N3,N4)
 import TypeUnary.Nat (IsNat(..),Nat(..))
@@ -28,43 +30,34 @@ import TypeUnary.Nat (IsNat(..),Nat(..))
 import Circat.Pair
 import Circat.RTree
 
-import Circat.Misc (Unop)
+import Circat.Misc (Unop,Reversible(..))
 
-bsort :: (IsNat n, Ord a) => Bool -> Unop (RTree n a)
+bsort :: (IsNat n, Ord a) => Unop (RTree n a)
 bsort = bsort' nat
 {-# INLINE bsort #-}
 
-bsort' :: Ord a => Nat n -> Bool -> Unop (RTree n a)
-bsort' Zero _       = id
-bsort' (Succ m) up = \ (B ts) ->
-  merge (Succ m) up (B (liftA2 (bsort' m) (up :# not up) ts))
+bsort' :: Ord a => Nat n -> Unop (RTree n a)
+bsort' Zero       = id
+bsort' (Succ m) = \ (B ts) ->
+  merge (Succ m) (B (secondP reverse (bsort' m <$> ts)))
 {-# INLINE bsort' #-}
 
--- bsort' (Succ m) up = \ (B (u :# v)) ->
---   merge (Succ m) up (B (bsort' m up u :# bsort' m (not up) v))
+-- Equivalently,
+
+-- bsort' (Succ m) = \ (B (u :# v)) ->
+--   merge (Succ m) (B (bsort' m u :# reverse (bsort' m v)))
 
 -- Bitonic merge
-merge :: Ord a => Nat n -> Bool -> Unop (RTree n a)
-merge n up = butterfly' n (cswap up)
-
--- merge Zero     _  = id
--- merge (Succ m) up = \ (B ts) -> B (merge m up <$> inTranspose (fmap (cswap up)) ts)
+merge :: Ord a => Nat n -> Unop (RTree n a)
+merge n = butterfly' n sortP
 {-# INLINE merge #-}
-
-cswap :: Ord a => Bool -> Unop (Pair a)
-cswap up (a :# b) = if (a <= b) == up then a :# b else b :# a
-{-# INLINE cswap #-}
 
 {--------------------------------------------------------------------
     Tests
 --------------------------------------------------------------------}
 
-test :: (IsNat n, Ord a) => Bool -> RTree n a -> [a]
-test up = toList . bsort up
-
-testUp, testDown :: (IsNat n, Ord a) => RTree n a -> [a]
-testUp   = test True
-testDown = test False
+test :: (IsNat n, Ord a) => RTree n a -> [a]
+test = toList . bsort
 
 _t1 :: RTree N1 Int
 _t1 = tree1 4 3
