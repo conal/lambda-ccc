@@ -77,6 +77,9 @@ convert (Either f g) p = curry ((convert' f ||| convert' g) . distl)
 convert (Loop h)     p = curry (loopC (uncurry (convert h p) . rassocP))
 -- convert (CoerceE a)  p = coerceC . convert a p
 
+-- TODO: Rewrite convert to share convert' and use for Either and Loop.
+-- Maybe swap arguments for better partial application.
+
 #if 0
 
 -- For Loop, we have
