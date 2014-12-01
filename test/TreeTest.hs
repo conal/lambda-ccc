@@ -31,13 +31,13 @@
 
 -- TODO: explicit exports
 
-import Prelude hiding ({- id,(.), -}foldl,foldr,sum,product,zipWith,reverse,and,or,scanl)
+import Prelude hiding ({- id,(.), -}foldl,foldr,sum,product,zipWith,reverse,and,or,scanl,minimum,maximum)
 
 import Data.Monoid (Monoid(..),(<>),Sum(..),Product(..))
 import Data.Functor ((<$>))
 import Control.Applicative -- (Applicative(..),liftA2,liftA3)
-import Data.Foldable (Foldable(..),sum,product,and,or)
-import Data.Traversable (Traversable(..))
+import Data.Foldable (Foldable(..),sum,product,and,or,toList,minimum,maximum)
+import Data.Traversable (Traversable(..),mapAccumL)
 -- import Control.Category (id,(.))
 import Control.Arrow (Arrow(..))
 import qualified Control.Arrow as Arrow
@@ -45,15 +45,18 @@ import Data.Tuple (swap)
 import Data.Maybe (fromMaybe,maybe)
 import Text.Printf (printf)
 
+import Test.QuickCheck (arbitrary,Gen,generate,vectorOf)
+
 -- transformers
 import Data.Functor.Identity
 
 import TypeUnary.TyNat
-import TypeUnary.Nat (IsNat)
+import TypeUnary.Nat (IsNat,natToZ)
 import TypeUnary.Vec hiding (transpose,iota)
 import qualified TypeUnary.Vec as V
 
-import LambdaCCC.Misc (xor,boolToInt,dup,Unop,Binop,transpose,(:*),loop,delay)
+import LambdaCCC.Misc
+  (xor,boolToInt,dup,Unop,Binop,transpose,(:*),loop,delay,Reversible(..))
 import LambdaCCC.Adder
 import LambdaCCC.CRC -- hiding (crcS,sizeA)
 import LambdaCCC.Bitonic
@@ -197,6 +200,7 @@ mat $@ vec = (`dot'` vec) <$> mat
 (.@) :: ( Applicative o, Traversable n, Applicative n
         , Traversable m, Applicative m, Num a ) =>
         o (n a) -> n (m a) -> o (m a)
+-- no .@ mn = (\ n -> (n <.>) <$> transpose mn) <$> no
 no .@ mn = transpose ((no $@) <$> transpose mn)
 
 {--------------------------------------------------------------------
@@ -265,7 +269,7 @@ make :: IO ()
 make = systemSuccess "cd ../..; make"
 
 dateFigureSvg :: String -> String -> IO ()
-dateFigureSvg date fig = systemSuccess (printf "cd ../test; ./figure-svg %s \"%s\"" date fig)
+dateFigureSvg date fig = systemSuccess (printf "cd ../test; ./date-figure-svg %s \"%s\"" date fig)
 
 figureSvg :: String -> IO ()
 figureSvg str = systemSuccess ("cd ../test; ./figure-svg " ++ str)
@@ -565,7 +569,7 @@ main :: IO ()
 -- -- ranksep: rt2=1, rt3=2, rt4=4.5
 -- main = goSep "crcStep-rt3" 2 (uncurry (crcStep :: RTree N3 Bool -> RTree N3 Bool :* Bool -> RTree N3 Bool))
 
--- main = goSep "crcStepK-rt3" 1 (crcStep polyRT3)
+-- main = go "crcStepK-rt0" (crcStep (polyD :: RTree N0 Bool))
 
 -- main = goSep "crcStepK-g5" 1
 --         (crcStep (ra5 True False False True False))
@@ -575,15 +579,15 @@ main :: IO ()
 
 -- main = go "crc-v3v5" (uncurry (crc :: Vec N3 Bool -> Vec N5 Bool :* Vec N3 Bool -> Vec N3 Bool))
 
--- main = go "crcK-v3v5" (crc polyV3 :: Vec N5 Bool :* Vec N3 Bool -> Vec N3 Bool)
+-- main = go "crcK-v3v5" (crc polyD :: Vec N5 Bool :* Vec N3 Bool -> Vec N3 Bool)
 
 -- main = go "crc-v4rt3" (uncurry (crc :: Vec N4 Bool -> RTree N3 Bool :* Vec N4 Bool -> Vec N4 Bool))
 
 -- main = go "crc-rt3rt5" (uncurry (crc :: RTree N3 Bool -> RTree N5 Bool :* RTree N3 Bool -> RTree N3 Bool))
 
--- main = go "crcK-rt2rt4" (crc polyRT2 :: RTree N4 Bool :* RTree N2 Bool -> RTree N2 Bool)
+-- main = go "crcK-rt2rt4" (crc polyD :: RTree N4 Bool :* RTree N2 Bool -> RTree N2 Bool)
 
--- main = go "crcK-v5rt4" (crc polyV5 :: RTree N4 Bool :* Vec N5 Bool -> Vec N5 Bool)
+-- main = go "crcK-v5rt4" (crc polyD :: RTree N4 Bool :* Vec N5 Bool -> Vec N5 Bool)
 
 -- main = go "crc-encode-v3v5" (uncurry (crcEncode :: Vec N3 Bool -> Vec N5 Bool -> Vec N3 Bool))
 
@@ -842,7 +846,7 @@ main :: IO ()
 
 -- main = goM "dotSP-rt4p" (Mealy (\ (pas :: RTree N4 (Pair Int),tot) -> dup (dot'' pas + tot)) 0)
 
-type GS a = (GenBuses a, Show a)
+-- type GS a = (GenBuses a, Show a)
 
 fullAdd :: Pair Bool :* Bool -> Bool :* Bool
 fullAdd = add1' . swap
@@ -859,58 +863,23 @@ adderS = Mealy (add1 . swap)
 
 -- main = goMSep "sumS-rt3" 1.5 (sumS :: Mealy (RTree N3 Int) (RTree N3 Int))
 
--- -- Fail
 -- main = goMSep "sumPS-rt1" 0.75 (sumPS :: Mealy (RTree N1 Int) Int)
-
--- -- Eep! This version does it, too, with or without MealyAsFun in Run
--- main = goMSep "sumPS-rt2" 1 (m :: Mealy (RTree N2 Int) Int)
---  where
---    m = Mealy (\ (t,tot) -> let tot' = tot+t in (sum tot',tot')) 0
-
--- Simplifying to diagnose
-
--- -- Eep! This version does it, too, with or without MealyAsFun in Run
--- main = goM "foo" (m :: Mealy (Vec N2 Int) Int)
---  where
---    m = Mealy (\ (t,tot) -> let tot' = tot+t in (sum tot',tot')) 0
-
-
--- Argument value doesn't match argument type:
--- Fun type: EP (RTree (S N0) (Int -> Int)) -> EP (Pair (RTree Z (Int -> Int)))
--- Arg type: EP (RTree (S Z) Int)
 
 -- main = goM "dotPS-rt3p" (m :: Mealy (RTree N3 (Pair Int)) Int)
 --  where
 --    m = Mealy (\ (ts,tot) -> let tot' = tot + fmap product ts in (sum tot',tot')) 0
 
-mac :: (Foldable f, Num a, GS a) =>
-       Mealy (f a) a
--- mac = sumS . arr product
-mac = Mealy (\ (as,tot) -> dup (tot+product as)) 0
-
 -- main = goMSep "mac-p" 1 (mac :: Mealy (Pair Int) Int)
 
--- main = goMSep "mac-prt3" 1 (mac :: Mealy (Pair (RTree N3 Int)) (RTree N3 Int))
+-- main = goMSep "mac-prt2" 1 (mac :: Mealy (Pair (RTree N2 Int)) (RTree N2 Int))
 
-
-sumMac :: (Foldable o, Foldable i, Num (i a), Num a, GS (i a)) =>
-          Mealy (o (i a)) a
--- sumMac = arr sum . mac
-sumMac = Mealy (\ (as,tot) -> let tot' = tot+product as in (sum tot',tot')) 0
-
--- main = goM "sum-mac-prt3" (sumMac :: Mealy (Pair (RTree N3 Int)) Int)
+-- main = goM "sum-mac-prt1" (sumMac :: Mealy (Pair (RTree N1 Int)) Int)
 
 matVecMultSA :: (Foldable f, Applicative f, Num a, GS (f a)) =>
                 Mealy (f a) a
 matVecMultSA =
   Mealy (\ (row,s@(started,vec)) ->
            if started then (row <.> vec, s) else (0, (True,row))) (False,pure 0)
-
--- matVecMultS =
---   Mealy (\ (row,mbVec) -> case mbVec of
---                             Nothing -> (bottom,Just row)
---                             Just v  -> (row <.> v, mbVec)) Nothing
-
 
 matVecMultS :: (Foldable f, Applicative f, Num a, GS (f a)) =>
                Mealy (f a) a
@@ -1062,12 +1031,10 @@ histogramS = scanl histogramStep (pure 0)
 --   fibS :: () -> Int
 --   fibS = loop ((\ ((),(a,b)) -> (a,(b,a+b))) . second (delay (0,1)))
 
+-- main = goNew "foo" (loop (\ ((),((),())) -> ((),((),()))))
+
 fibS :: Num a => () -> a
 fibS = loop ((\ ((),(a,b)) -> (a,(b,a+b))) . second (delay (0,1)))
-
--- main = goNew "fibS" fibS
-
--- main = goNew "foo" (\ () -> fibS')
 
 -- main = goNew "foo" (Mealy.asFun (Mealy (\ ((),(a,b)) -> (a,(b,a+b))) (0::Int,1)))
 
@@ -1131,9 +1098,9 @@ crcSKa poly = fst <$> scanl h (pure False,0)
    h (seg,i) b | i < p     = (snd (shiftR (seg,b)), i+1)
                | otherwise = (crcStep poly (seg,b), i)
 
--- main = goM "crcSKa-v1" (crcSKa polyV1 :: Mealy Bool (Vec N1 Bool))
+-- main = goM "crcSKa-v1" (crcSKa polyD :: Mealy Bool (Vec N1 Bool))
 
--- main = goM "crcSKa-rt0" (crcSKa polyRT0 :: Mealy Bool (RTree N0 Bool))
+-- main = goM "crcSKa-rt0" (crcSKa polyD :: Mealy Bool (RTree N0 Bool))
 
 -- main = go "foo" (fmap not :: Unop (RTree N2 Bool))
 
@@ -1168,7 +1135,7 @@ shiftRS = Mealy (shiftR . swap)
 -- To simplify the circuit, output stepped even when i<p.
 -- We expect the user to ignore this initial output either way.
 crcSKb :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
-           poly Bool -> Mealy Bool (poly Bool)
+          poly Bool -> Mealy Bool (poly Bool)
 crcSKb poly = Mealy h (pure False,0)
  where
    p = sizeA (undefined :: poly ())
@@ -1178,8 +1145,50 @@ crcSKb poly = Mealy h (pure False,0)
       next | i < p     = (snd (shiftR (seg,b)), i+1)
            | otherwise = (stepped, i)
 
--- main = goM "crcSKb-rt0" (crcSKb polyRT0 :: Mealy Bool (RTree N0 Bool))
+-- main = goM "crcSKb-rt2" (crcSKb polyD :: Mealy Bool (RTree N2 Bool))
 
+boolToChar :: Bool -> Char
+boolToChar False = '0'
+boolToChar True  = '1'
+
+writeFile' :: FilePath -> String -> IO ()
+writeFile' fname str = writeFile fname str >> putStrLn ("Wrote " ++ fname)
+
+crcFileName :: String -> Int -> Int -> String
+crcFileName = printf "../test/out/crc-bits-%s-%d-%d.txt"
+
+genCrcIn :: Nat d -> Int -> IO ()
+genCrcIn nd n =
+  do ins <- ( ++ replicate d False) <$>
+            generate (vectorOf (n - d) (arbitrary :: Gen Bool))
+     writeFile' (crcFileName "ina" d n) (show ins)
+     writeFile' (crcFileName "inb" d n) (unlines $ (pure . boolToChar) <$> ins)
+ where
+   d = natToZ nd
+
+genCrcOut :: forall d. (IsNat d, GenBuses (RTree d Bool), PolyD (RTree d)) =>
+             Nat d -> Int -> IO ()
+genCrcOut nd n =
+  do ins <- read <$> readFile (crcFileName "ina" d n)
+     let outs = reverse <$> runMealy (crcSKb (polyD :: RTree d Bool)) ins
+     writeFile' (crcFileName "outa-b" d n) (show outs)
+     writeFile' (crcFileName "outb-b" d n)
+       (unlines $ (map boolToChar . toList) <$> outs)
+ where
+   d = natToZ nd
+
+-- main = genCrcIn d n
+--  where
+--    d = nat :: Nat N4
+--    n = 4096
+
+-- main = genCrcOut d n
+--  where
+--    d = nat :: Nat N4
+--    n = 4096
+
+-- In this version, advance i even when i>=p, to shorten critical path.
+-- WARNING: don't use for messages of length >= 2^32.
 crcSKc :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
           poly Bool -> Mealy Bool (poly Bool)
 crcSKc poly = Mealy h (pure False,0)
@@ -1191,7 +1200,7 @@ crcSKc poly = Mealy h (pure False,0)
       seg' | i < p     = snd (shiftR (seg,b))
            | otherwise = stepped
 
--- main = goM "crcSKc-rt0" (crcSKc polyRT0 :: Mealy Bool (RTree N0 Bool))
+-- main = goM "crcSKc-rt4" (crcSKc polyD :: Mealy Bool (RTree N4 Bool))
 
 foo :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
        Mealy () (poly Bool)
@@ -1209,13 +1218,28 @@ matMatMultS = Mealy h (pure 0)
  where
    h ((new,w),row) = (row <.> w, if new then w else row)
 
---    h ((True ,row),_  ) = (0          , row)
---    h ((False,col),row) = (row <.> col, row)
-
 -- -- 2:0.75; 3:1.0; 4:1.5, 5:2.5
 -- main = goMSep "matMatMultS-rt4" 1.5 (matMatMultS :: Mealy (Bool, RTree N4 Int) Int)
 
 -- main = go "foo" (\ (a,b::Int,c::Int) -> if not a then b else c)
 
--- 2:0.75, 3:0.75, 4:0.75
-main = goSep "bitonic-up-4" 0.75 (bsort True :: Unop (RTree N4 Int))
+revRT :: (IsNat n, Ord a) => Unop (RT.Tree n a)
+revRT = RT.butterfly reverse
+
+-- -- Butterfly swap, i.e., reversal
+-- -- 1:0.5,2:1,3:2
+-- main = goSep "butterfly-swap-rt2" 1 (revRT :: Unop (RTree N2 Bool))
+
+-- 2,3,4:0.75
+main = goSep "bitonic-3" 0.75 (bsort :: Unop (RTree N3 Int))
+
+-- mapAccumL :: Traversable t => (a -> b -> (a, c)) -> a -> t b -> (a, t c)
+
+iotaT :: (Traversable t, Applicative t, Num a) => t a
+iotaT = snd (mapAccumL (\ n () -> dup (n+1)) 0 (pure ()))
+
+iotaT4 :: RTree N4 Int
+iotaT4 = iotaT
+
+-- -- Evokes unboxed Int, which the reifier can't handle.
+-- main = go "foo" (min 3 :: Int -> Int)
