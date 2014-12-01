@@ -19,7 +19,6 @@ module LambdaCCC.Bitonic where
 
 -- TODO: explicit exports
 
-import Data.Functor ((<$>))
 import Data.Foldable (toList)
 import Control.Applicative (liftA2)
 
@@ -29,7 +28,7 @@ import TypeUnary.Nat (IsNat(..),Nat(..))
 import Circat.Pair
 import Circat.RTree
 
-import Circat.Misc (Unop,inTranspose)
+import Circat.Misc (Unop)
 
 bsort :: (IsNat n, Ord a) => Bool -> Unop (RTree n a)
 bsort = bsort' nat
@@ -46,13 +45,19 @@ bsort' (Succ m) up = \ (B ts) ->
 
 -- Bitonic merge
 merge :: Ord a => Nat n -> Bool -> Unop (RTree n a)
-merge Zero     _  = id
-merge (Succ m) up = \ (B ts) -> B (merge m up <$> inTranspose (fmap (cswap up)) ts)
+merge n up = butterfly' n (cswap up)
+
+-- merge Zero     _  = id
+-- merge (Succ m) up = \ (B ts) -> B (merge m up <$> inTranspose (fmap (cswap up)) ts)
 {-# INLINE merge #-}
 
 cswap :: Ord a => Bool -> Unop (Pair a)
 cswap up (a :# b) = if (a <= b) == up then a :# b else b :# a
 {-# INLINE cswap #-}
+
+{--------------------------------------------------------------------
+    Tests
+--------------------------------------------------------------------}
 
 test :: (IsNat n, Ord a) => Bool -> RTree n a -> [a]
 test up = toList . bsort up
@@ -60,10 +65,6 @@ test up = toList . bsort up
 testUp, testDown :: (IsNat n, Ord a) => RTree n a -> [a]
 testUp   = test True
 testDown = test False
-
-{--------------------------------------------------------------------
-    Tests
---------------------------------------------------------------------}
 
 _t1 :: RTree N1 Int
 _t1 = tree1 4 3
