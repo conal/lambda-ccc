@@ -37,7 +37,7 @@ bsort = bsort' nat
 {-# INLINE bsort #-}
 
 bsort' :: Ord a => Nat n -> Unop (RTree n a)
-bsort' Zero       = id
+bsort' Zero     = id
 bsort' (Succ m) = \ (B ts) ->
   merge (Succ m) (B (secondP reverse (bsort' m <$> ts)))
 {-# INLINE bsort' #-}
