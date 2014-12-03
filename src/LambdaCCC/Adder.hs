@@ -200,7 +200,7 @@ instance BottomCat (:>) GenProp where bottomC = bottomRep
 
 instance IfCat (:>) (Rep GenProp) => IfCat (:>) GenProp where ifC = repIf 
 
-instance OkayArr k a GenProp => Uncurriable k a GenProp a GenProp where uncurries = id
+instance OkayArr k a GenProp => Uncurriable k a GenProp where uncurries = id
 
 --     Illegal constraint ‘OkayArr
 --                           k a GenProp’ in a superclass/instance context
