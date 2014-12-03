@@ -46,7 +46,9 @@ import Control.Arrow (first)
 ranksep :: Double -> Attr
 ranksep n = ("ranksep",show n)
 
-go' :: Uncurriable (:>) () a u v => String -> [Attr] -> a -> IO ()
+type UncurriableCU = Uncurriable (:>) ()
+
+go' :: UncurriableCU a u v => String -> [Attr] -> a -> IO ()
 #if defined MealyAsFun
 go' = goNew'   -- Tidy up later
 #else
@@ -54,26 +56,24 @@ go' name attrs f = goM' name attrs (Mealy (first f) ())
 #endif
 {-# INLINE go' #-}
 
--- TODO: name Uncurriable (:>) ()
-
-go :: Uncurriable (:>) () a u v => String -> a -> IO ()
+go :: UncurriableCU a u v => String -> a -> IO ()
 go name = go' name []
 {-# INLINE go #-}
 
-goSep :: Uncurriable (:>) () a u v => String -> Double -> a -> IO ()
+goSep :: UncurriableCU a u v => String -> Double -> a -> IO ()
 goSep name s = go' name [ranksep s]
 
 -- Run an example: reify, CCC, circuit.
-run :: Uncurriable (:>) () a u v => String -> [Attr] -> EP a -> IO ()
+run :: UncurriableCU a u v => String -> [Attr] -> EP a -> IO ()
 run name attrs e = do print e
                       outGV name attrs (unitize' (toCCC e))
 {-# NOINLINE run #-}
 
-goNew' :: Uncurriable (:>) () a u v => String -> [Attr] -> a -> IO ()
+goNew' :: UncurriableCU a u v => String -> [Attr] -> a -> IO ()
 goNew' name attrs f = run name attrs (reifyEP f)
 {-# INLINE goNew' #-}
 
-goNew :: Uncurriable (:>) () a u v => String -> a -> IO ()
+goNew :: UncurriableCU a u v => String -> a -> IO ()
 goNew name = goNew' name []
 {-# INLINE goNew #-}
 
@@ -96,15 +96,15 @@ outGV name attrs circ =
     State machines
 --------------------------------------------------------------------}
 
-goM :: Uncurriable (:>) () (a -> b) u v => String -> Mealy a b -> IO ()
+goM :: UncurriableCU (a -> b) u v => String -> Mealy a b -> IO ()
 goM name = goM' name []
 {-# INLINE goM #-}
 
-goMSep :: Uncurriable (:>) () (a -> b) u v => String -> Double -> Mealy a b -> IO ()
+goMSep :: UncurriableCU (a -> b) u v => String -> Double -> Mealy a b -> IO ()
 goMSep name s = goM' name [ranksep s]
 {-# INLINE goMSep #-}
 
-goM' :: Uncurriable (:>) () (a -> b) u v => String -> [Attr] -> Mealy a b -> IO ()
+goM' :: UncurriableCU (a -> b) u v => String -> [Attr] -> Mealy a b -> IO ()
 {-# INLINE goM' #-}
 
 #if defined MealyAsFun
@@ -129,7 +129,7 @@ reifyMealy (Mealy f s) = MealyE (reifyEP f) s
 toMealyC :: MealyE a b -> MealyC a b
 toMealyC (MealyE f s) = MealyC (toCCC' f) s
 
-runM :: Uncurriable (:>) () a u v => String -> [Attr] -> MealyE a b -> IO ()
+runM :: UncurriableCU a u v => String -> [Attr] -> MealyE a b -> IO ()
 runM name attrs e = do print e
                        outGV name attrs (unitizeMealyC (toMealyC e))
 
