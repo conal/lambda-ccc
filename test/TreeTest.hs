@@ -6,7 +6,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 {-# OPTIONS_GHC -Wall #-}
--- {-# OPTIONS_GHC -fcontext-stack=38 #-}
+{-# OPTIONS_GHC -fcontext-stack=30 #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -304,7 +304,7 @@ main :: IO ()
 
 -- main = go "dotsp-plt3" (dotsp :: Pair (LTree N3 Int) -> Int)
 
--- main = go "dotap-2" (uncurry (dotap :: RTree N2 Int -> RTree N2 Int -> Int))
+-- main = go "dotap-2" (dotap :: RTree N2 Int -> RTree N2 Int -> Int)
 
 -- main = go "tdot-2" (dot'' :: RTree N2 (Pair Int) -> Int)
 
@@ -402,38 +402,39 @@ main :: IO ()
 -- -- Not working yet: the (^) is problematic.
 -- main = go "squaresp-rt0" (squares' :: Unop (RTree N0 Int))
 
--- main = goSep "applyLin-v23" 1 (uncurry (($@) :: Matrix N2 N3 Int -> Vec N2 Int -> Vec N3 Int))
+-- main = goSep "applyLin-v23" 1 (($@) :: Matrix N2 N3 Int -> Vec N2 Int -> Vec N3 Int)
 
--- main = goSep "applyLin-v42" 1 (uncurry (($@) :: Matrix N4 N2 Int -> Vec N4 Int -> Vec N2 Int))
+-- main = goSep "applyLin-v42" 1 (($@) :: Matrix N4 N2 Int -> Vec N4 Int -> Vec N2 Int)
 
--- main = goSep "applyLin-v45" 1 (uncurry (($@) :: Matrix N4 N5 Int -> Vec N4 Int -> Vec N5 Int))
+-- main = goSep "applyLin-v45" 1 (($@) :: Matrix N4 N5 Int -> Vec N4 Int -> Vec N5 Int)
 
--- main = goSep [ranksep 2] -t21 (uncurry (($@) :: MatrixT N2 N1 Int -> RTree N2 Int -> RTree N1 Int))
+-- main = goSep [ranksep 2] -t21 (($@) :: MatrixT N2 N1 Int -> RTree N2 Int -> RTree N1 Int)
 
--- main = go "applyLin-t22" (uncurry (($@) :: MatrixT N2 N2 Int -> RTree N2 Int -> RTree N2 Int))
+-- main = go "applyLin-t22" (($@) :: MatrixT N2 N2 Int -> RTree N2 Int -> RTree N2 Int)
 
--- main = go "applyLin-t23" (uncurry (($@) :: MatrixT N2 N3 Int -> RTree N2 Int -> RTree N3 Int))
+-- main = go "applyLin-t23" (($@) :: MatrixT N2 N3 Int -> RTree N2 Int -> RTree N3 Int)
 
--- main = go "applyLin-t32" (uncurry (($@) :: MatrixT N3 N2 Int -> RTree N3 Int -> RTree N2 Int))
+-- main = go "applyLin-t32" (($@) :: MatrixT N3 N2 Int -> RTree N3 Int -> RTree N2 Int)
 
--- main = go "applyLin-t34" (uncurry (($@) :: MatrixT N3 N4 Int -> RTree N3 Int -> RTree N4 Int))
+-- main = go "applyLin-t34" (($@) :: MatrixT N3 N4 Int -> RTree N3 Int -> RTree N4 Int)
 
--- main = go "applyLin-t45" (uncurry (($@) :: MatrixT N4 N5 Int -> RTree N4 Int -> RTree N5 Int))
+-- main = go "applyLin-t45" (($@) :: MatrixT N4 N5 Int -> RTree N4 Int -> RTree N5 Int)
 
--- main = go "applyLin-v3t2" (uncurry (($@) :: RTree N2 (Vec N3 Int) -> Vec N3 Int -> RTree N2 Int))
+-- main = go "applyLin-v3t2" (($@) :: RTree N2 (Vec N3 Int) -> Vec N3 Int -> RTree N2 Int)
 
--- main = go "applyLin-t2v3" (uncurry (($@) :: Vec N3 (RTree N2 Int) -> RTree N2 Int -> Vec N3 Int))
+-- main = go "applyLin-t2v3" (($@) :: Vec N3 (RTree N2 Int) -> RTree N2 Int -> Vec N3 Int)
 
--- main = go "composeLin-v234" (uncurry ((.@) :: Matrix N3 N4 Int -> Matrix N2 N3 Int -> Matrix N2 N4 Int))
+-- main = go "composeLin-v234" ((.@) :: Matrix N3 N4 Int -> Matrix N2 N3 Int -> Matrix N2 N4 Int)
 
--- main = go "composeLin-t234" (uncurry ((.@) :: MatrixT N3 N4 Int -> MatrixT N2 N3 Int -> MatrixT N2 N4 Int))
+-- main = go "composeLin-t234" ((.@) :: MatrixT N3 N4 Int -> MatrixT N2 N3 Int -> MatrixT N2 N4 Int)
 
--- Takes a very long time. I haven't seen it through yet.
--- main = go "composeLin-t324" (uncurry ((.@) :: MatrixT N2 N4 Int -> MatrixT N3 N2 Int -> MatrixT N3 N4 Int))
+-- -- Takes a very long time. I haven't seen it through yet.
 
--- main = go "composeLin-t222" (uncurry ((.@) :: MatrixT N2 N2 Int -> MatrixT N2 N2 Int -> MatrixT N2 N2 Int))
+-- main = go "composeLin-t324" ((.@) :: MatrixT N2 N4 Int -> MatrixT N3 N2 Int -> MatrixT N3 N4 Int)
 
--- main = go "composeLin-t232" (uncurry ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int))
+-- main = go "composeLin-t222" ((.@) :: MatrixT N2 N2 Int -> MatrixT N2 N2 Int -> MatrixT N2 N2 Int)
+
+-- main = go "composeLin-t232" ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int)
 
 -- -- Shift examples are identities on bit representations
 -- main = go "shiftR-v4" (shiftR :: Vec N4 Bool :* Bool -> Bool :* Vec N4 Bool)
@@ -504,16 +505,16 @@ main :: IO ()
 
 -- main = go "dotsp-gt8" (dotsp :: Pair (Ragged R8 Int) -> Int)
 
--- main = go "applyLin-gt45" (uncurry (($@) :: MatrixG R4 R5 Int -> Ragged R4 Int -> Ragged R5 Int))
+-- main = go "applyLin-gt45" (($@) :: MatrixG R4 R5 Int -> Ragged R4 Int -> Ragged R5 Int)
 
--- main = go "composeLin-gt234" (uncurry ((.@) :: MatrixG R3 R4 Int -> MatrixG R2 R3 Int -> MatrixG R2 R4 Int))
+-- main = go "composeLin-gt234" ((.@) :: MatrixG R3 R4 Int -> MatrixG R2 R3 Int -> MatrixG R2 R4 Int)
 
 -- -- Linear map composition mixing ragged trees, top-down perfect trees, and vectors.
 -- main = go "composeLin-gt3rt2v2"
---           (uncurry ((.@) :: Vec N2 (RTree N2 Int) -> RTree N2 (Ragged R3 Int) -> Vec N2 (Ragged R3 Int)))
+--           ((.@) :: Vec N2 (RTree N2 Int) -> RTree N2 (Ragged R3 Int) -> Vec N2 (Ragged R3 Int))
 
 -- main = go "composeLin-gt1rt0v1"
---           (uncurry ((.@) :: Vec N1 (RTree N0 Int) -> RTree N0 (Ragged R1 Int) -> Vec N1 (Ragged R1 Int)))
+--           ((.@) :: Vec N1 (RTree N0 Int) -> RTree N0 (Ragged R1 Int) -> Vec N1 (Ragged R1 Int))
 
 -- Note: some of the scan examples redundantly compute some additions.
 -- I suspect that they're only the same *after* the zero simplifications.
@@ -564,10 +565,10 @@ main :: IO ()
 --            poly Bool -> poly Bool :* Bool -> poly Bool
 
 -- main = goSep "crcStep-v1" 1
---         (uncurry (crcStep :: Vec N1 Bool -> Vec N1 Bool :* Bool -> Vec N1 Bool))
+--         (crcStep :: Vec N1 Bool -> Vec N1 Bool :* Bool -> Vec N1 Bool)
 
 -- -- ranksep: rt2=1, rt3=2, rt4=4.5
--- main = goSep "crcStep-rt3" 2 (uncurry (crcStep :: RTree N3 Bool -> RTree N3 Bool :* Bool -> RTree N3 Bool))
+-- main = goSep "crcStep-rt3" 2 (crcStep :: RTree N3 Bool -> RTree N3 Bool :* Bool -> RTree N3 Bool)
 
 -- main = go "crcStepK-rt0" (crcStep (polyD :: RTree N0 Bool))
 
@@ -577,23 +578,23 @@ main :: IO ()
 -- crc :: (Traversable poly, Applicative poly, Traversable msg) =>
 --        poly Bool -> msg Bool :* poly Bool -> poly Bool
 
--- main = go "crc-v3v5" (uncurry (crc :: Vec N3 Bool -> Vec N5 Bool :* Vec N3 Bool -> Vec N3 Bool))
+-- main = go "crc-v3v5" (crc :: Vec N3 Bool -> Vec N5 Bool :* Vec N3 Bool -> Vec N3 Bool)
 
 -- main = go "crcK-v3v5" (crc polyD :: Vec N5 Bool :* Vec N3 Bool -> Vec N3 Bool)
 
--- main = go "crc-v4rt3" (uncurry (crc :: Vec N4 Bool -> RTree N3 Bool :* Vec N4 Bool -> Vec N4 Bool))
+-- main = go "crc-v4rt3" (crc :: Vec N4 Bool -> RTree N3 Bool :* Vec N4 Bool -> Vec N4 Bool)
 
--- main = go "crc-rt3rt5" (uncurry (crc :: RTree N3 Bool -> RTree N5 Bool :* RTree N3 Bool -> RTree N3 Bool))
+-- main = go "crc-rt3rt5" (crc :: RTree N3 Bool -> RTree N5 Bool :* RTree N3 Bool -> RTree N3 Bool)
 
 -- main = go "crcK-rt2rt4" (crc polyD :: RTree N4 Bool :* RTree N2 Bool -> RTree N2 Bool)
 
 -- main = go "crcK-v5rt4" (crc polyD :: RTree N4 Bool :* Vec N5 Bool -> Vec N5 Bool)
 
--- main = go "crc-encode-v3v5" (uncurry (crcEncode :: Vec N3 Bool -> Vec N5 Bool -> Vec N3 Bool))
+-- main = go "crc-encode-v3v5" (crcEncode :: Vec N3 Bool -> Vec N5 Bool -> Vec N3 Bool)
 
--- main = go "crc-encode-v3rt2" (uncurry (crcEncode :: Vec N3 Bool -> RTree N2 Bool -> Vec N3 Bool))
+-- main = go "crc-encode-v3rt2" (crcEncode :: Vec N3 Bool -> RTree N2 Bool -> Vec N3 Bool)
 
--- main = go "crc-encode-rt2rt4" (uncurry (crcEncode :: RTree N2 Bool -> RTree N4 Bool -> RTree N2 Bool))
+-- main = go "crc-encode-rt2rt4" (crcEncode :: RTree N2 Bool -> RTree N4 Bool -> RTree N2 Bool)
 
 -- Simple carry-propagate adder
 
@@ -622,9 +623,9 @@ main :: IO ()
 
 -- Monoidal scan adders
 
--- main = go "gpCarry" (uncurry gpCarry)
+-- main = go "gpCarry" gpCarry
 
--- main = go "mappend-gpr" (uncurry (mappend :: Binop GenProp))
+-- main = go "mappend-gpr" (mappend :: Binop GenProp)
 
 -- main = go "gprs-pair" (fmap genProp :: Pair (Pair Bool) -> Pair GenProp)
 
@@ -684,9 +685,9 @@ main :: IO ()
 
 -- main = go "foo" (\ (a,b) -> if b then (not a,True) else (bottom,False))
 
--- main = go "fromMaybe-bool" (uncurry (fromMaybe :: Bool -> Maybe Bool -> Bool))
+-- main = go "fromMaybe-bool" (fromMaybe :: Bool -> Maybe Bool -> Bool)
 
--- main = goSep "fromMaybe-v3" 1.5 (uncurry (fromMaybe :: Vec N3 Bool -> Maybe (Vec N3 Bool) -> Vec N3 Bool))
+-- main = goSep "fromMaybe-v3" 1.5 (fromMaybe :: Vec N3 Bool -> Maybe (Vec N3 Bool) -> Vec N3 Bool)
 
 -- main = goSep "liftA2-maybe" 0.8 (\ (a,b) -> liftA2 (*) a b :: Maybe Int)
 
@@ -913,21 +914,20 @@ matVecMultS =
 --   m = Mealy (\ (row,s@(started,vec)) ->
 --                (row <.> vec, if started then s else (not started,row))) (False,pure 0)
 
-
--- main = goSep "get-p" 1 (uncurry P.get :: Bool :* Pair Int -> Int)
+-- main = goSep "get-p" 1 (P.get :: Bool -> Pair Int -> Int)
 
 type Bits n = Vec n Bool
 
 -- -- 3:1, 4:2, 5:3
--- main = goSep "get-rt5" 3 (uncurry RT.get :: Bits N5 :* RTree N5 Int -> Int)
+-- main = goSep "get-rt5" 3 (RT.get :: Bits N5 -> RTree N5 Int -> Int)
 
 -- -- 3:1, 4:2, 5:3
--- main = goSep "get-ib-rt3" 1 (uncurry RT.get :: Bits N3 :* RTree N3 (Int,Bool) -> (Int,Bool))
+-- main = goSep "get-ib-rt3" 1 (RT.get :: Bits N3 -> RTree N3 (Int,Bool) -> (Int,Bool))
 
 -- -- 3:1, 4:2, 5:3
--- main = goSep "get-lt4" 2 (uncurry LT.get :: Bits N4 :* LTree N4 Int -> Int)
+-- main = goSep "get-lt4" 2 (LT.get :: Bits N4 -> LTree N4 Int -> Int)
 
--- main = go "update-p" (uncurry (flip P.update (+2)) :: Bool :* Pair Int -> Pair Int)
+-- main = go "update-p" (flip P.update (+2) :: Bool -> Pair Int -> Pair Int)
 
 -- main = go "update-plus2-p" (\ (b,p::Pair Int) -> P.update b (+2) p)
 
@@ -1147,6 +1147,50 @@ crcSKb poly = Mealy h (pure False,0)
 
 -- main = goM "crcSKb-rt2" (crcSKb polyD :: Mealy Bool (RTree N2 Bool))
 
+-- In this version, advance i even when i>=p, to shorten critical path.
+-- WARNING: don't use for messages of length >= 2^32.
+crcSKc :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
+          poly Bool -> Mealy Bool (poly Bool)
+crcSKc poly = Mealy h (pure False,0)
+ where
+   p = sizeA (undefined :: poly ())
+   h (b,(seg,i)) = (stepped,(seg',i+1))
+    where
+      stepped = crcStep poly (seg,b)
+      seg' | i < p     = snd (shiftR (seg,b))
+           | otherwise = stepped
+
+-- main = goM "crcSKc-rt0" (crcSKc polyD :: Mealy Bool (RTree N0 Bool))
+
+crcSKd :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
+          poly Bool -> Mealy Bool (poly Bool)
+crcSKd poly = Mealy h (pure False)
+ where
+   p = sizeA (undefined :: poly ())
+   h (b,seg) = dup stepped
+    where
+      stepped = crcStep poly (seg,b)
+
+-- Rewrite via Mealy scanl
+
+crcSKe :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
+          poly Bool -> Mealy Bool (poly Bool)
+crcSKe poly = scanl (curry (crcStep poly)) (pure False)
+
+-- main = goM "crcSKe-rt4" (crcSKe polyD :: Mealy Bool (RTree N4 Bool))
+
+-- Local curried version of crcStep
+
+crcSKf :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
+          poly Bool -> Mealy Bool (poly Bool)
+crcSKf poly = scanl step (pure False)
+ where
+   step seg b0 = if b0' then liftA2 xor poly seg' else seg'
+    where
+      (b0',seg') = shiftR (seg,b0)
+
+-- main = goM "crcSKf-rt7" (crcSKf polyD :: Mealy Bool (RTree N7 Bool))
+
 boolToChar :: Bool -> Char
 boolToChar False = '0'
 boolToChar True  = '1'
@@ -1170,46 +1214,22 @@ genCrcOut :: forall d. (IsNat d, GenBuses (RTree d Bool), PolyD (RTree d)) =>
              Nat d -> Int -> IO ()
 genCrcOut nd n =
   do ins <- read <$> readFile (crcFileName "ina" d n)
-     let outs = reverse <$> runMealy (crcSKb (polyD :: RTree d Bool)) ins
-     writeFile' (crcFileName "outa-b" d n) (show outs)
-     writeFile' (crcFileName "outb-b" d n)
+     let outs = reverse <$> runMealy (crcSKf (polyD :: RTree d Bool)) ins
+     writeFile' (crcFileName "outa-f" d n) (show outs)
+     writeFile' (crcFileName "outb-f" d n)
        (unlines $ (map boolToChar . toList) <$> outs)
  where
    d = natToZ nd
 
 -- main = genCrcIn d n
 --  where
---    d = nat :: Nat N4
+--    d = nat :: Nat N5
 --    n = 4096
 
 -- main = genCrcOut d n
 --  where
---    d = nat :: Nat N4
+--    d = nat :: Nat N5
 --    n = 4096
-
--- In this version, advance i even when i>=p, to shorten critical path.
--- WARNING: don't use for messages of length >= 2^32.
-crcSKc :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
-          poly Bool -> Mealy Bool (poly Bool)
-crcSKc poly = Mealy h (pure False,0)
- where
-   p = sizeA (undefined :: poly ())
-   h (b,(seg,i)) = (stepped,(seg',i+1))
-    where
-      stepped = crcStep poly (seg,b)
-      seg' | i < p     = snd (shiftR (seg,b))
-           | otherwise = stepped
-
--- main = goM "crcSKc-rt4" (crcSKc polyD :: Mealy Bool (RTree N4 Bool))
-
-foo :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
-       Mealy () (poly Bool)
-foo = Mealy h (pure False,0::Int)
- where
-   h ((),(seg,i)) = (seg',(seg',i+1))
-    where
-      seg' | i < 3     = seg
-           | otherwise = pure True
 
 -- main = goM "foo" (foo :: Mealy () (RTree N0 Bool))
 
@@ -1230,8 +1250,8 @@ revRT = RT.butterfly reverse
 -- -- 1:0.5,2:1,3:2
 -- main = goSep "butterfly-swap-rt2" 1 (revRT :: Unop (RTree N2 Bool))
 
--- 2,3,4:0.75
-main = goSep "bitonic-3" 0.75 (bsort :: Unop (RTree N3 Int))
+-- -- 2,3,4:0.75
+-- main = goSep "bitonic-3" 0.75 (bsort :: Unop (RTree N3 Int))
 
 -- mapAccumL :: Traversable t => (a -> b -> (a, c)) -> a -> t b -> (a, t c)
 
@@ -1241,5 +1261,13 @@ iotaT = snd (mapAccumL (\ n () -> dup (n+1)) 0 (pure ()))
 iotaT4 :: RTree N4 Int
 iotaT4 = iotaT
 
+-- main = go "foo" (True,3 :: Int)
+
+-- main = go "foo" (True,iotaT :: RTree N1 Int)
+
 -- -- Evokes unboxed Int, which the reifier can't handle.
 -- main = go "foo" (min 3 :: Int -> Int)
+
+-- main = go "foo" (||)
+
+main = go "foo" (\ a b c -> a || b && c)
