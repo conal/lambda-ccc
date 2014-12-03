@@ -1,5 +1,7 @@
 {-# LANGUAGE TypeOperators, TypeFamilies, ViewPatterns, TupleSections, CPP #-}
 {-# LANGUAGE FlexibleContexts, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances, ConstraintKinds, UndecidableInstances #-} -- for Uncurriable
+
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -44,7 +46,8 @@ import Circat.Rep
 import Circat.Scan
 import Circat.Pair
 import Circat.Shift (accumL)
-import Circat.Classes (BottomCat(..))
+import Circat.Category (OkayArr,Uncurriable(..))
+import Circat.Classes (BottomCat(..),IfCat(..),repIf)
 import Circat.Circuit (GenBuses(..),(:>),genBusesRep',delayCRep,tyRep,bottomRep)
 
 import Circat.Misc (xor)
@@ -194,6 +197,14 @@ instance GenBuses GenProp where
   ty = tyRep
 
 instance BottomCat (:>) GenProp where bottomC = bottomRep
+
+instance IfCat (:>) (Rep GenProp) => IfCat (:>) GenProp where ifC = repIf 
+
+instance OkayArr k a GenProp => Uncurriable k a GenProp a GenProp where uncurries = id
+
+--     Illegal constraint ‘OkayArr
+--                           k a GenProp’ in a superclass/instance context
+--       (Use UndecidableInstances to permit this)
 
 -- Handy operations
 
