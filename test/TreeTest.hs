@@ -56,7 +56,7 @@ import TypeUnary.Vec hiding (transpose,iota)
 import qualified TypeUnary.Vec as V
 
 import LambdaCCC.Misc
-  (xor,boolToInt,dup,Unop,Binop,transpose,(:*),loop,delay,Reversible(..))
+  (xor,boolToInt,dup,Unop,Binop,Ternop,transpose,(:*),loop,delay,Reversible(..))
 import LambdaCCC.Adder
 import LambdaCCC.CRC -- hiding (crcS,sizeA)
 import LambdaCCC.Bitonic
@@ -534,29 +534,29 @@ main :: IO ()
 -- -- Equivalently: a `xor` not b
 -- main = go "foo" (\ (a,b) -> if a then b else not b)
 
--- main = go "foo" (\ (a, (b :: Int :* Int)) -> (if a then id else swap) b)
+-- main = go "foo" (\ a  (b :: Int :* Int) -> (if a then id else swap) b)
 
 -- main = goSep "foo" 2.5 (\ (a, b::Int, c::Int, d::Int) -> if a then (b,c,d) else (c,d,b))
 
--- main = go "foo" (\ (a,b) -> ( if a then b else False --     a && b
---                             , if a then True  else b --     a || b
---                             , if a then False else b -- not a && b
---                             , if a then b else True  -- not a || b
---                             ))
+-- main = go "foo" (\ a b -> ( if a then b else False --     a && b
+--                           , if a then True  else b --     a || b
+--                           , if a then False else b -- not a && b
+--                           , if a then b else True  -- not a || b
+--                           ))
 
 -- -- Equivalently, (&& not a) <$> b
--- main = goSep "foo" 2 (\ (a, b :: Vec N4 Bool) -> if a then pure False else b)
+-- main = goSep "foo" 2 (\ a (b :: Vec N4 Bool) -> if a then pure False else b)
 
 -- -- Equivalently, (|| a) <$> b
--- main = goSep "foo" 2 (\ (a, b :: Vec N4 Bool) -> if a then pure True  else b)
+-- main = goSep "foo" 2 (\ a (b :: Vec N4 Bool) -> if a then pure True  else b)
 
 -- -- Equivalently, (&& not a) <$> b
--- main = goSep "foo" 2 (\ (a, b :: RTree N3 Bool) -> if a then pure False else b)
+-- main = goSep "foo" 2 (\ a (b :: RTree N3 Bool) -> if a then pure False else b)
 
 -- -- Equivalently, (a `xor`) <$> b
--- main = go "foo" (\ (a, b :: Vec N3 Bool) -> (if a then not else id) <$> b)
+-- main = go "foo" (\ a (b :: Vec N3 Bool) -> (if a then not else id) <$> b)
 
--- main = goSep "foo" 2 (\ (a, b :: RTree N2 Bool) -> (if a then reverse else id) b)
+-- main = goSep "foo" 2 (\ a (b :: RTree N2 Bool) -> (if a then reverse else id) b)
 
 -- -- Equivalent to \ a -> (a,not a)
 -- main = go "foo" (\ a -> if a then (True,False) else (False,True))
@@ -627,6 +627,11 @@ main :: IO ()
 
 -- main = go "mappend-gpr" (mappend :: Binop GenProp)
 
+ifF :: Bool -> Binop a
+ifF c a b = if c then a else b
+
+-- main = go "if-gpr" (ifF :: Bool -> Binop GenProp)
+
 -- main = go "gprs-pair" (fmap genProp :: Pair (Pair Bool) -> Pair GenProp)
 
 -- main = go "scan-gpr-pair" (scanGPs :: Pair (Pair Bool) -> Pair GenProp :* GenProp)
@@ -663,35 +668,35 @@ main :: IO ()
 -- main = go "or-with-swap" (\ (a,b) -> (a || b, b || a))
 
 -- -- not (a && b)
--- main = go "foo" (\ (b,a) -> not a || not b)
+-- main = go "foo" (\ b a -> not a || not b)
 
 -- main = go "foo" (\ (a::Int,x::Bool) -> if x then (square a,True) else (bottom,False))
 
 -- main = go "foo" (\ x -> if x then True else bottom)
 
--- main = go "foo" (\ () -> bottom :: Bool)
+-- main = go "foo" (bottom :: Bool)
 
--- main = go "foo" (\ () -> (bottom::Int,False))
+-- main = go "foo" (bottom::Int,False)
 
--- main = go "foo" (\ () -> (bottom::Bool, bottom::Int, bottom::Bool))
+-- main = go "foo" (bottom::Bool, bottom::Int, bottom::Bool)
 
 -- main = go "foo" (\ x -> if x then bottom else bottom :: Bool)
 
--- main = goSep "if-maybe" 0.75 (\ (a,b :: Maybe Bool,c) -> if a then b else c)
+-- main = goSep "if-maybe" 0.75 (\ a (b :: Maybe Bool) c -> if a then b else c)
 
 -- main = go "fmap-maybe-square" (fmap square :: Unop (Maybe Int))
 
 -- main = go "fmap-maybe-not" (fmap not :: Unop (Maybe Bool))
 
--- main = go "foo" (\ (a,b) -> if b then (not a,True) else (bottom,False))
+-- main = go "foo" (\ a b -> if b then (not a,True) else (bottom,False))
 
 -- main = go "fromMaybe-bool" (fromMaybe :: Bool -> Maybe Bool -> Bool)
 
 -- main = goSep "fromMaybe-v3" 1.5 (fromMaybe :: Vec N3 Bool -> Maybe (Vec N3 Bool) -> Vec N3 Bool)
 
--- main = goSep "liftA2-maybe" 0.8 (\ (a,b) -> liftA2 (*) a b :: Maybe Int)
+-- main = goSep "liftA2-maybe" 0.8 (liftA2 (*) :: Binop (Maybe Int))
 
--- main = goSep "liftA3-maybe" 0.8 (\ (a,b,c) -> liftA3 f a b c :: Maybe Int)
+-- main = goSep "liftA3-maybe" 0.8 (liftA3 f :: Ternop (Maybe Int))
 --  where
 --    f x y z = x * (y + z)
 
@@ -992,9 +997,9 @@ histogramS = scanl histogramStep (pure 0)
 
 -- main = go "pure-sum-rt3" (\ a -> sum (pure a :: RTree N3 Int))
 
--- main = go "pure-1-sum-rt3" (\ () -> sum (pure 1 :: RTree N3 Int))
+-- main = go "pure-1-sum-rt3" (sum (pure 1 :: RTree N3 Int))
 
--- main = go "foo" (\ () -> True)
+-- main = go "foo" True
 
 -- More CRC
 
