@@ -30,14 +30,14 @@ import Data.Traversable (Traversable(..))
 -- import Control.Category (id,(.))
 -- import Control.Arrow ((&&&))
 
-import LambdaCCC.Misc (xor,(:*)) -- ,dup
+import LambdaCCC.Misc (Unop,xor,(:*)) -- ,dup
+import Circat.Pair (Pair(..))
 import Circat.Shift
 import Circat.Mealy (Mealy(..)) -- scanl
 import Circat.Circuit (GenBuses)
 
 -- TEMP
 import TypeUnary.Vec hiding (transpose)
-import Circat.Pair (Pair(..))
 import Circat.RTree
 
 crcStep :: (Traversable poly, Applicative poly) =>
@@ -71,8 +71,6 @@ crc poly = foldlQ (crcStep poly) . shiftRF
 foldlQ :: Foldable f => (b :* a -> b) -> (b :* f a -> b)
 foldlQ = uncurry . foldl . curry
 
-#if 0
-
 -- Equivalently,
 --
 -- crc poly (shiftRF -> (seg',msg')) = foldlQ (crcStep poly) (seg',msg')
@@ -81,6 +79,8 @@ foldlQ = uncurry . foldl . curry
 crcEncode :: (Traversable poly, Applicative poly, Traversable msg) =>
              poly Bool -> msg Bool -> poly Bool
 crcEncode poly msg = crc poly (msg, pure False)
+
+#if 0
 
 -- Curried versions (for consideration):
 
@@ -209,21 +209,45 @@ numBitsV = elemsV . take n . numBits
 -- I'm putting these definitions here to work around a problem with inlining.
 -- Fix that problem, and move these definitions back to TreeTest.hs.
 
-class PolyD f where polyD :: f Bool
+class PolyD f where
+  polyD :: f Bool
+  -- My standard regrettable hack to help reify otherwise-single-method
+  -- dictionaries.
+  regrettable_hack_PolyD :: f () -> ()
+  regrettable_hack_PolyD = const ()
 
 instance PolyD (Vec N1) where polyD = vec1 True
 instance PolyD (Vec N2) where polyD = vec2 True False
 instance PolyD (Vec N3) where polyD = vec3 True False True
-instance PolyD (Vec N4) where polyD = vec4 True False False True
-instance PolyD (Vec N5) where polyD = ((polyD :: Vec N3 Bool) <+> (polyD :: Vec N2 Bool))
+instance PolyD (Vec N4) where
+  polyD = vec4 True False False True
+  {-# INLINE polyD #-}
+instance PolyD (Vec N5) where
+  polyD = ((polyD :: Vec N3 Bool) <+> (polyD :: Vec N2 Bool))
+  {-# INLINE polyD #-}
 
 instance PolyD (Tree N0) where polyD = tree0 True
 instance PolyD (Tree N1) where polyD = tree1 True False
 instance PolyD (Tree N2) where polyD = tree2 True False False True
 instance PolyD (Tree N3) where
   polyD = tree3 True False False True True False True False
+  {-# INLINE polyD #-}
 instance PolyD (Tree N4) where
   polyD = tree4 True False False True True False True False
                 False True True False True False True False
+  {-# INLINE polyD #-}
 instance PolyD (Tree N5) where
-  polyD = B (polyD :# rotateL polyD)
+  polyD = tree5 True False False True True False True False
+                False True True False True False True False
+                False False True True False True False False
+                True True False True False True False True
+  {-# INLINE polyD #-}
+instance PolyD (Tree N6) where
+  polyD = B (polyD :# bumpR True polyD)
+  {-# INLINE polyD #-}
+instance PolyD (Tree N7) where
+  polyD = B (polyD :# bumpR True polyD)
+  {-# INLINE polyD #-}
+
+bumpR :: Traversable f => a -> Unop (f a)
+bumpR a as = snd (shiftR (as,a))
