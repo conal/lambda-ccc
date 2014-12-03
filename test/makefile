@@ -3,26 +3,26 @@ HERM = hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize
 doit:
 	time $(HERM) DoTree.hss resume && ./TreeTest
 
+reify-done:
+	echo "" | make reify ; echo
+
+no-reify-done:
+	echo "" | make no-reify ; echo
+
+dont-done:
+	echo "" | make dont ; echo
+
+foo-done:
+	echo "" | make foo ; echo
+
 reify:
-	echo "" | make reify-continue ; echo
-
-no-reify:
-	echo "" | make no-reify-continue ; echo
-
-dont:
-	echo "" | make dont-continue ; echo
-
-foo:
-	echo "" | make foo-continue ; echo
-
-reify-continue:
 	$(HERM) DoTree.hss
 
-no-reify-continue:
+no-reify:
 	$(HERM) DoTreeNoReify.hss
 
-dont-continue:
+dont:
 	$(HERM) Dont.hss
 
-foo-continue:
+foo:
 	$(HERM) Foo.hss
