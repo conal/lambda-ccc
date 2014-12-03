@@ -1,6 +1,6 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE TypeOperators, ExistentialQuantification, FlexibleContexts #-}
 {-# LANGUAGE ConstraintKinds, StandaloneDeriving #-}
-{-# LANGUAGE CPP #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -28,9 +28,10 @@ module LambdaCCC.Run
 import Prelude
 
 import LambdaCCC.Lambda (EP,reifyEP)
-import LambdaCCC.ToCCC (toCCC')
+import LambdaCCC.ToCCC (toCCC)
 
-import Circat.Circuit (GenBuses,Attr,mkGraph,unitize,UU,outDotG)
+import Circat.Category (Uncurriable)
+import Circat.Circuit (Attr,mkGraph,UU,outDotG,unitize',(:>))
 
 import Circat.Netlist (saveAsVerilog)
 import Circat.Mealy (Mealy(..))
@@ -45,43 +46,44 @@ import Control.Arrow (first)
 ranksep :: Double -> Attr
 ranksep n = ("ranksep",show n)
 
-go' :: GenBuses a => String -> [Attr] -> (a -> b) -> IO ()
+go' :: Uncurriable (:>) () a u v => String -> [Attr] -> a -> IO ()
 #if defined MealyAsFun
 go' = goNew'   -- Tidy up later
 #else
 go' name attrs f = goM' name attrs (Mealy (first f) ())
 #endif
-
 {-# INLINE go' #-}
 
-go :: GenBuses a => String -> (a -> b) -> IO ()
+-- TODO: name Uncurriable (:>) ()
+
+go :: Uncurriable (:>) () a u v => String -> a -> IO ()
 go name = go' name []
 {-# INLINE go #-}
 
-goSep :: GenBuses a => String -> Double -> (a -> b) -> IO ()
+goSep :: Uncurriable (:>) () a u v => String -> Double -> a -> IO ()
 goSep name s = go' name [ranksep s]
 
 -- Run an example: reify, CCC, circuit.
-run :: GenBuses a => String -> [Attr] -> EP (a -> b) -> IO ()
+run :: Uncurriable (:>) () a u v => String -> [Attr] -> EP a -> IO ()
 run name attrs e = do print e
-                      outGV name attrs (unitize (toCCC' e))
+                      outGV name attrs (unitize' (toCCC e))
 {-# NOINLINE run #-}
 
-goNew' :: GenBuses a => String -> [Attr] -> (a -> b) -> IO ()
+goNew' :: Uncurriable (:>) () a u v => String -> [Attr] -> a -> IO ()
 goNew' name attrs f = run name attrs (reifyEP f)
 {-# INLINE goNew' #-}
 
-goNew :: GenBuses a => String -> (a -> b) -> IO ()
+goNew :: Uncurriable (:>) () a u v => String -> a -> IO ()
 goNew name = goNew' name []
 {-# INLINE goNew #-}
 
 -- Diagram and Verilog
 outGV :: String -> [Attr] -> UU -> IO ()
 outGV name attrs circ =
-  do outD ("pdf","")
+  do outV
+     outD ("pdf","")
      -- outD ("svg","") 
      -- outD ("png","-Gdpi=200")
-     outV
  where
    g       = mkGraph name circ
    outD ss = outDotG ss attrs g
@@ -94,15 +96,15 @@ outGV name attrs circ =
     State machines
 --------------------------------------------------------------------}
 
-goM :: GenBuses a => String -> Mealy a b -> IO ()
+goM :: Uncurriable (:>) () (a -> b) u v => String -> Mealy a b -> IO ()
 goM name = goM' name []
 {-# INLINE goM #-}
 
-goMSep :: GenBuses a => String -> Double -> Mealy a b -> IO ()
+goMSep :: Uncurriable (:>) () (a -> b) u v => String -> Double -> Mealy a b -> IO ()
 goMSep name s = goM' name [ranksep s]
 {-# INLINE goMSep #-}
 
-goM' :: GenBuses a => String -> [Attr] -> Mealy a b -> IO ()
+goM' :: Uncurriable (:>) () (a -> b) u v => String -> [Attr] -> Mealy a b -> IO ()
 {-# INLINE goM' #-}
 
 #if defined MealyAsFun
@@ -127,7 +129,7 @@ reifyMealy (Mealy f s) = MealyE (reifyEP f) s
 toMealyC :: MealyE a b -> MealyC a b
 toMealyC (MealyE f s) = MealyC (toCCC' f) s
 
-runM :: GenBuses a => String -> [Attr] -> MealyE a b -> IO ()
+runM :: Uncurriable (:>) () a u v => String -> [Attr] -> MealyE a b -> IO ()
 runM name attrs e = do print e
                        outGV name attrs (unitizeMealyC (toMealyC e))
 
@@ -141,3 +143,4 @@ runM name attrs e = do print e
 -- TODO: Maybe pull unitizeMealyC into toMealyC, renaming to "toMealyU"
 
 #endif
+
