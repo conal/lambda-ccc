@@ -947,6 +947,9 @@ type Bits n = Vec n Bool
 histogramStep ::  Num a => RTree n a -> Bits n -> RTree n a
 histogramStep t v = RT.update v (+1) t
 
+-- -- 1:2, 2:2, 3:2
+-- main = goSep "histogramStep-3" 2 (histogramStep :: RTree N3 Int -> Bits N3 -> RTree N3 Int)
+
 -- Combinational histogram
 histogramP :: (Foldable f, IsNat n) => f (Bits n) -> RTree n Int
 histogramP = foldl histogramStep (pure 0)
@@ -992,14 +995,28 @@ histogramS :: (IsNat n, GS (RTree n Int)) => Mealy (Bits n) (RTree n Int)
 histogramS = scanl histogramStep (pure 0)
 -- histogramS = scanl (\ t v -> RT.update v (+1) t) (pure 0)
 
--- -- 2:1, 3:3
--- main = goMSep "histogramS-3" 3 (histogramS :: Mealy (Bits N3) (RTree N3 Int))
+-- -- 1:0.5, 2:1, 3:3
+-- main = goMSep "histogramS-1" 0.75 (histogramS :: Mealy (Bits N1) (RTree N1 Int))
 
 -- main = go "pure-sum-rt3" (\ a -> sum (pure a :: RTree N3 Int))
 
 -- main = go "pure-1-sum-rt3" (sum (pure 1 :: RTree N3 Int))
 
 -- main = go "foo" True
+
+-- Step via oneTree''
+histogramStepO ::  IsNat n => RTree n Int -> Bits n -> RTree n Int
+histogramStepO t v = t + oneTree'' v
+
+-- -- 1:0.5;2:0.75;3:1
+-- main = goSep "histogramStepO-3" 1 (histogramStepO :: RTree N3 Int -> Bits N3 -> RTree N3 Int)
+
+-- Serial histogram
+histogramSO :: (IsNat n, GS (RTree n Int)) => Mealy (Bits n) (RTree n Int)
+histogramSO = scanl histogramStepO (pure 0)
+
+-- -- 1:0.5, 2:0.75, 3:1
+-- main = goMSep "histogramSO-2" 0.5 (histogramSO :: Mealy (Bits N2) (RTree N2 Int))
 
 -- More CRC
 
