@@ -37,7 +37,7 @@ import Data.Monoid (Monoid(..),(<>),Sum(..),Product(..))
 import Data.Functor ((<$>))
 import Control.Applicative -- (Applicative(..),liftA2,liftA3)
 import Data.Foldable (Foldable(..),sum,product,and,or,toList,minimum,maximum)
-import Data.Traversable (Traversable(..),mapAccumL)
+import Data.Traversable (Traversable(..))
 -- import Control.Category (id,(.))
 import Control.Arrow (Arrow(..))
 import qualified Control.Arrow as Arrow
@@ -60,6 +60,7 @@ import LambdaCCC.Misc
 import LambdaCCC.Adder
 import LambdaCCC.CRC -- hiding (crcS,sizeA)
 import LambdaCCC.Bitonic
+import qualified LambdaCCC.RadixSort as RS
 
 -- import Circat.Misc (Reversible(..))
 import Circat.Rep (bottom)
@@ -523,8 +524,6 @@ main :: IO ()
 -- ranksep: 8=1.5, 11=2.5
 -- main = goSep "lsumsp-gt3" =1.5 (lsums' :: Unop (Ragged Ra.R3 Int))
 
--- main = go "foo" (lsums' :: Unop (Ragged Ra.R3 Int))
-
 -- main = go "add3" (\ (x :: Int) -> x + 3)
 
 -- main = go "foo" (not . not)
@@ -570,7 +569,7 @@ main :: IO ()
 -- -- ranksep: rt2=1, rt3=2, rt4=4.5
 -- main = goSep "crcStep-rt3" 2 (crcStep :: RTree N3 Bool -> RTree N3 Bool :* Bool -> RTree N3 Bool)
 
--- main = go "crcStepK-rt0" (crcStep (polyD :: RTree N0 Bool))
+-- main = go "crcStepK-rt2" (crcStep (polyD :: RTree N2 Bool))
 
 -- main = goSep "crcStepK-g5" 1
 --         (crcStep (ra5 True False False True False))
@@ -981,8 +980,10 @@ oneTree'' v = boolToInt <$> oneTree' v
 histogramFold :: (Foldable f, Functor f, IsNat n) => f (Bits n) -> RTree n Int
 histogramFold = sum . fmap oneTree
 
--- -- 1,2:2; 2,3:4
--- main = goSep "histogramFold-2-rt3" 4 (histogramFold :: RTree N3 (Bits N2) -> RTree N2 Int)
+-- main = goSep "histogramFold-1-v5" 1 (histogramFold :: Vec N5 (Bits N1) -> RTree N1 Int)
+
+-- -- 1,2:0.75; 2,3:1.5
+-- main = goSep "histogramFold-1-rt2" 0.75 (histogramFold :: RTree N2 (Bits N1) -> RTree N1 Int)
 
 histogramFold'' :: (Foldable f, Functor f, IsNat n) => f (Bits n) -> RTree n Int
 histogramFold'' = sum . fmap oneTree''
@@ -1085,6 +1086,11 @@ fibM = Mealy (\ ((),(a,b)) -> (a,(b,a+b))) (0::Int,1)
 
 -- main = goM "foo" (Mealy swap 0 :: Mealy (RTree N3 Int) (RTree N3 Int))
 
+-- Like 'shiftR' but drop the value pushed out the left, and uncurry.
+shiftR' :: Traversable t => t a -> a -> t a
+shiftR' = curry (snd . shiftR)
+-- shiftR' as a = snd (shiftR (as,a))
+
 -- Serial
 crcS' :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
          Mealy Bool (poly Bool)
@@ -1094,7 +1100,7 @@ crcS' = Mealy h (pure False, pure False,0)
    h :: MealyFun (poly Bool, poly Bool, Int) Bool (poly Bool)
    h (b,(poly,seg,i)) = (stepped,(poly',seg',i'))
     where
-      stash q = snd (shiftR (q,b))
+      stash q = shiftR' q b
       starting = i < 2*p
       i' = if starting then i+1 else i
       stepped = crcStep poly (seg,b)
@@ -1117,7 +1123,7 @@ crcSKa :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
 crcSKa poly = fst <$> scanl h (pure False,0)
  where
    p = sizeA (undefined :: poly ())
-   h (seg,i) b | i < p     = (snd (shiftR (seg,b)), i+1)
+   h (seg,i) b | i < p     = (shiftR' seg b, i+1)
                | otherwise = (crcStep poly (seg,b), i)
 
 -- main = goM "crcSKa-v1" (crcSKa polyD :: Mealy Bool (Vec N1 Bool))
@@ -1164,7 +1170,7 @@ crcSKb poly = Mealy h (pure False,0)
    h (b,(seg,i)) = (stepped,next)
     where
       stepped = crcStep poly (seg,b)
-      next | i < p     = (snd (shiftR (seg,b)), i+1)
+      next | i < p     = (shiftR' seg b, i+1)
            | otherwise = (stepped, i)
 
 -- main = goM "crcSKb-rt2" (crcSKb polyD :: Mealy Bool (RTree N2 Bool))
@@ -1179,7 +1185,7 @@ crcSKc poly = Mealy h (pure False,0)
    h (b,(seg,i)) = (stepped,(seg',i+1))
     where
       stepped = crcStep poly (seg,b)
-      seg' | i < p     = snd (shiftR (seg,b))
+      seg' | i < p     = shiftR' seg b
            | otherwise = stepped
 
 -- main = goM "crcSKc-rt0" (crcSKc polyD :: Mealy Bool (RTree N0 Bool))
@@ -1188,7 +1194,6 @@ crcSKd :: forall poly. (GS (poly Bool), Applicative poly, Traversable poly) =>
           poly Bool -> Mealy Bool (poly Bool)
 crcSKd poly = Mealy h (pure False)
  where
-   p = sizeA (undefined :: poly ())
    h (b,seg) = dup stepped
     where
       stepped = crcStep poly (seg,b)
@@ -1211,7 +1216,7 @@ crcSKf poly = scanl step (pure False)
     where
       (b0',seg') = shiftR (seg,b0)
 
--- main = goM "crcSKf-rt7" (crcSKf polyD :: Mealy Bool (RTree N7 Bool))
+-- main = goM "crcSKf-rt8" (crcSKf polyD :: Mealy Bool (RTree N8 Bool))
 
 boolToChar :: Bool -> Char
 boolToChar False = '0'
@@ -1255,6 +1260,28 @@ genCrcOut nd n =
 
 -- main = goM "foo" (foo :: Mealy () (RTree N0 Bool))
 
+-- Sequential-of-parallel
+crcSPK :: (GS (poly Bool), Applicative poly, Traversable poly, Foldable chunk) =>
+          poly Bool -> Mealy (chunk Bool) (poly Bool)
+crcSPK poly = scanl (foldl step) (pure False)
+ where
+   step seg b0 = if b0' then liftA2 xor poly seg' else seg'
+    where
+      (b0',seg') = shiftR (seg,b0)
+
+-- main = goM "crcSPK-rt3-rt2" (crcSPK polyD :: Mealy (RTree N3 Bool) (RTree N2 Bool))
+
+crcP :: (Applicative poly, Traversable poly, Foldable msg) =>
+        poly Bool -> msg Bool -> poly Bool
+crcP poly = foldl step (pure False)
+ where
+   step seg b0 = if b0' then liftA2 xor poly seg' else seg'
+    where
+      (b0',seg') = shiftR (seg,b0)
+
+-- -- 1,2: 0.5; 2,2: 0.75; 3,2: 1;
+-- main = goSep "crcPK-rt3-rt2" 1 (crcP polyD :: RTree N3 Bool -> RTree N2 Bool)
+
 matMatMultS :: (GS (f a), Foldable f, Applicative f, Num a) => Mealy (Bool, f a) a
 matMatMultS = Mealy h (pure 0)
  where
@@ -1292,4 +1319,178 @@ iotaT4 = iotaT
 
 -- main = go "foo" (||)
 
-main = go "foo" (\ a b c -> a || b && c)
+-- main = go "foo" (\ a b c -> a || b && c)
+
+-- main = goM "foo" (scanl (\ b () -> not b) True)
+
+-- main = goM "foo" (scanl (\ (a,b) () -> (b,a)) (True,False))
+
+-- main = goM "iterate-not" (iterateU not False)
+
+-- main = goM "foo" (iterateU swap (True,False))
+
+-- main = goM "foo" (snd <$> iterateU swap (True,False))
+
+-- Recursive.
+-- main = goM "foo" (iterateU rotateR iotaT4)
+-- main = goM "foo" (iterateU rotateR (vec1 True))
+-- main = go "foo" (rotateR :: Unop (Vec N1 Bool))
+
+-- main = goM "sumS" (sumS :: Mealy Int Int)
+
+-- main = goM "double-sumS" (double (sumS :: Mealy Int Int))
+
+-- main = goM "double-2-sumS" (double (double (sumS :: Mealy Int Int)))
+
+-- main = goM "countS" (iterateU (+1) (0 :: Int))
+
+-- main = go "foo" (RS.oneTree :: Bits N2 -> RTree N2 Int)
+
+-- -- 1,2:0.75; 2,3:1.5; 1,4:0.75
+-- main = goSep "histogramFold-1-4" 1.5 (RS.histogramFold :: RTree N4 (Bits N1) -> RTree N1 Int)
+
+-- -- 1,2:0.75; 2,3:1.5; 1,4:1.5
+-- main = goSep "histogramScan-1-4" 1.5 (RS.histogramScan :: RTree N4 (Bits N1) -> (RTree N4 (RTree N1 Int), RTree N1 Int))
+
+-- -- 1,2:0.5; 2,3:2; 1,4:1.5
+-- main = goSep "countSortPermutation-1-4" 1.5 (RS.positions :: RTree N4 (Bits N1) -> RTree N4 Int)
+
+-- -- 1,2:0.5; 2,3:2; 1,4:1.5
+-- main = goSep "countSortPermutationp-1-2" 0.5 (RS.positions :: RTree N2 (Bits N1) -> RTree N2 Int)
+
+
+{--------------------------------------------------------------------
+    Polynomial evaluation
+--------------------------------------------------------------------}
+
+powers :: (LScan f, Applicative f, Num a) => a -> f a
+powers = fst . lproducts . pure
+
+-- -- 1,2:0.5,3:1; 4:1.5; 5:2;
+-- main = goSep "powers-rt2" 0.5 (powers :: Int -> RTree N2 Int)
+
+-- -- 1,2:0.5,3:1; 4:1.5; 5:2;
+-- main = goSep "powers-lt5" 2 (powers :: Int -> LTree N5 Int)
+
+evalPoly :: (LScan f, Applicative f, Foldable f, Num a) => f a -> a -> a
+evalPoly coeffs x = coeffs <.> powers x
+
+-- -- -- 1,2:0.5,3:1; 4:2; 5:3;
+-- main = goSep "evalPoly-rt4" 2 (evalPoly :: RTree N4 Int -> Int -> Int)
+
+-- -- -- 1,2:0.5,3:1; 4:2; 5:3;
+-- main = goSep "evalPoly-lt5" 3 (evalPoly :: LTree N5 Int -> Int -> Int)
+
+-- Linear versions for comparison
+
+lproductsl :: (Traversable f, Num a) => f a -> f a :* a
+lproductsl = (fmap getProduct *** getProduct) . lscanl . fmap Product
+
+powersl :: (Traversable f, Applicative f, Num a) => a -> f a
+powersl = fst . lproductsl . pure
+
+-- main = go "powersl-rt3" (powersl :: Int -> RTree N3 Int)
+
+evalPolyl :: (Traversable f, Applicative f, Foldable f, Num a) => f a -> a -> a
+evalPolyl coeffs x = coeffs <.> powersl x
+
+-- To do: switch `evalPolyl` to use a linear dot product, and retry.
+
+-- main = go "evalPolyl-rt3" (evalPolyl :: RTree N3 Int -> Int -> Int)
+
+-- Infix binary dot product, foldl version
+infixl 7 `dotL`
+dotL :: (Foldable f, Applicative f, Num a) => f a -> f a -> a
+u `dotL` v = foldl (+) 0 (liftA2 (*) u v)
+
+-- Infix binary dot product, foldr version
+infixl 7 `dotR`
+dotR :: (Foldable f, Applicative f, Num a) => f a -> f a -> a
+u `dotR` v = foldr (+) 0 (liftA2 (*) u v)
+
+-- main = go "dotl-rt3" (dotL :: RTree N3 Int -> RTree N3 Int -> Int)
+
+-- main = go "dotr-rt3" (dotR :: RTree N3 Int -> RTree N3 Int -> Int)
+
+evalPolyAddL :: (Traversable f, Applicative f, Foldable f, Num a) => f a -> a -> a
+evalPolyAddL coeffs x = coeffs `dotL` powersl x
+
+-- main = go "evalPolyAddL-rt2" (evalPolyAddL :: RTree N2 Int -> Int -> Int)
+
+-- Serial version
+
+-- First argument is a dummy, to allow inferring f.
+-- Ignore the first p outputs, while the polynomial is loading.
+evalPolyS :: forall f a. (GS (f a), LScan f, Traversable f, Applicative f, Num a) =>
+             f () -> Mealy a a
+evalPolyS _ = Mealy h (pure 0 :: f a,0)
+ where
+   p = sizeA (undefined :: f ())
+   h (a,(poly,i)) = (evalPoly poly a,(poly',i+1))
+    where
+      poly' | i < p     = shiftR' poly a
+            | otherwise = poly
+
+-- main = goM "evalPolyS-rt5" (evalPolyS (undefined :: RTree N5 ()) :: Mealy Int Int)
+
+-- Linear version
+evalPolyAddLS :: forall f a. (GS (f a), LScan f, Traversable f, Applicative f, Num a) =>
+               f () -> Mealy a a
+evalPolyAddLS _ = Mealy h (pure 0 :: f a,0)
+ where
+   p = sizeA (undefined :: f ())
+   h (a,(poly,i)) = (evalPolyAddL poly a,(poly',i+1))
+    where
+      poly' | i < p     = shiftR' poly a
+            | otherwise = poly
+
+-- main = goM "evalPolyAddLS-rt4" (evalPolyAddLS (undefined :: RTree N4 ()) :: Mealy Int Int)
+
+evalPolyAddR :: (Traversable f, Applicative f, Foldable f, Num a) => f a -> a -> a
+evalPolyAddR coeffs x = coeffs `dotR` powersl x
+
+-- main = go "evalPolyAddR-rt3" (evalPolyAddR :: RTree N3 Int -> Int -> Int)
+
+-- Linear version
+evalPolyAddRS :: forall f a. (GS (f a), LScan f, Traversable f, Applicative f, Num a) =>
+               f () -> Mealy a a
+evalPolyAddRS _ = Mealy h (pure 0 :: f a,0)
+ where
+   p = sizeA (undefined :: f ())
+   h (a,(poly,i)) = (evalPolyAddR poly a,(poly',i+1))
+    where
+      poly' | i < p     = shiftR' poly a
+            | otherwise = poly
+
+-- main = goM "evalPolyAddRS-rt3" (evalPolyAddRS (undefined :: RTree N3 ()) :: Mealy Int Int)
+
+{--------------------------------------------------------------------
+    Counters
+--------------------------------------------------------------------}
+
+-- main = go "lAlls-rt2" (lAlls :: RTree N2 Bool -> (RTree N2 Bool, Bool))
+
+-- Increment a little-endian binary natural number:
+
+upF, downF :: (Applicative f, LScan f) => f Bool -> (f Bool, Bool)
+
+upF bs = (liftA2 h alls bs, all')
+ where
+   (alls,all') = lAlls bs
+   h a = if a then not else id
+
+downF bs = (liftA2 h anys bs, any')
+ where
+   (anys,any') = lAnys bs
+   h a = if a then id else not
+
+-- 2:1, 3:2, 4:3
+
+-- main = goSep "upF-rt2" (2-1) (upF :: RTree N2 Bool -> (RTree N2 Bool, Bool))
+
+-- Now make counters by iterating `upF` or 'downF'
+upCounter, downCounter :: (GS (f Bool), Applicative f, LScan f) => Mealy () (f Bool)
+upCounter   = iterateU (fst .   upF) (pure False)
+downCounter = iterateU (fst . downF) (pure True )
+
+main = goM "upCounter-rt4" (upCounter :: Mealy () (RTree N4 Bool))
