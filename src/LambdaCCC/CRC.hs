@@ -131,8 +131,6 @@ crcS = Mealy h (pure False, pure False,0)
 sizeA :: forall f a. (Applicative f, Foldable f) => f a -> Int
 sizeA _ = sum (pure 1 :: f Int)
 
-type GS a = (GenBuses a, Show a)
-
 #if 0
 
 -- Strangely, the (<) in these definitions gets inlined before I can intercept it.
@@ -247,6 +245,9 @@ instance PolyD (Tree N6) where
   {-# INLINE polyD #-}
 instance PolyD (Tree N7) where
   polyD = B (polyD :# bumpR True polyD)
+  {-# INLINE polyD #-}
+instance PolyD (Tree N8) where
+  polyD = B (polyD :# bumpR False polyD)
   {-# INLINE polyD #-}
 
 bumpR :: Traversable f => a -> Unop (f a)
