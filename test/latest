@@ -1,0 +1,3 @@
+#!/bin/sh
+
+cd out; ls -t -1 *.dot | head -1 | sed -e 's/.dot//'
