@@ -60,6 +60,7 @@ import LambdaCCC.Misc
 import LambdaCCC.Adder
 import LambdaCCC.CRC -- hiding (crcS,sizeA)
 import LambdaCCC.Bitonic
+import LambdaCCC.Counters
 import qualified LambdaCCC.RadixSort as RS
 
 -- import Circat.Misc (Reversible(..))
@@ -74,7 +75,7 @@ import Circat.Shift
 import Circat.Scan
 import Circat.Mealy hiding (ArrowCircuit(..))
 import qualified Circat.Mealy as Mealy
-import Circat.Circuit (GenBuses,Attr,systemSuccess)
+import Circat.Circuit (GenBuses,GS,Attr,systemSuccess)
 
 -- Strange -- why needed? EP won't resolve otherwise. Bug?
 import qualified LambdaCCC.Lambda
@@ -473,6 +474,8 @@ main :: IO ()
 -- main = go "lsums-rt5" (lsums :: RTree N5 Int -> (RTree N5 Int, Int))
 
 -- main = go "lsums-lt2" (lsums :: LTree N2 Int -> (LTree N2 Int, Int))
+
+-- main = go "lParities-rt2" (lParities :: RTree N2 Bool -> (RTree N2 Bool, Bool))
 
 -- main = go "foo" (\ a -> not a)
 
@@ -1383,8 +1386,17 @@ evalPoly coeffs x = coeffs <.> powers x
 
 -- Linear versions for comparison
 
-lproductsl :: (Traversable f, Num a) => f a -> f a :* a
-lproductsl = (fmap getProduct *** getProduct) . lscanl . fmap Product
+#if 0
+op :: b -> a -> b
+e :: b
+mapAccumL :: Traversable t => (b -> a -> (b, c)) -> b -> t a -> (b, t c)
+(fmap.fmap) dup op :: b -> a -> (b,b)
+mapAccumL ((fmap.fmap) dup op) e :: t a -> (b, t b)
+swap . mapAccumL ((fmap.fmap) dup op) e :: t a -> (b, t b)
+#endif
+
+lproductsl :: (Traversable f, Num a) => f a -> (f a, a)
+lproductsl = scanlT (*) 1
 
 powersl :: (Traversable f, Applicative f, Num a) => a -> f a
 powersl = fst . lproductsl . pure
@@ -1470,27 +1482,19 @@ evalPolyAddRS _ = Mealy h (pure 0 :: f a,0)
 
 -- main = go "lAlls-rt2" (lAlls :: RTree N2 Bool -> (RTree N2 Bool, Bool))
 
--- Increment a little-endian binary natural number:
+-- main = goSep "upL-rt3" 1 (upL :: RTree N3 Bool -> (RTree N3 Bool, Bool))
 
-upF, downF :: (Applicative f, LScan f) => f Bool -> (f Bool, Bool)
+-- main = goM "upCounterL-rt1" (upCounterL :: Mealy () (RTree N1 Bool))
 
-upF bs = (liftA2 h alls bs, all')
- where
-   (alls,all') = lAlls bs
-   h a = if a then not else id
-
-downF bs = (liftA2 h anys bs, any')
- where
-   (anys,any') = lAnys bs
-   h a = if a then id else not
-
--- 2:1, 3:2, 4:3
-
+-- -- 2:1, 3:2, 4:3
 -- main = goSep "upF-rt2" (2-1) (upF :: RTree N2 Bool -> (RTree N2 Bool, Bool))
 
--- Now make counters by iterating `upF` or 'downF'
-upCounter, downCounter :: (GS (f Bool), Applicative f, LScan f) => Mealy () (f Bool)
-upCounter   = iterateU (fst .   upF) (pure False)
-downCounter = iterateU (fst . downF) (pure True )
+-- main = goM "upCounter-rt3" (upCounter :: Mealy () (RTree N3 Bool))
 
-main = goM "upCounter-rt4" (upCounter :: Mealy () (RTree N4 Bool))
+----
+
+-- main = goM "foo" (scanl (\ _ () -> False) False)
+
+-- main = goM "foo" (iterateU (const False) False)
+
+-- main = go "foo" (delay False False)

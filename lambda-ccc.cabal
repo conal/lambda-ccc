@@ -48,6 +48,8 @@ Library
                     LambdaCCC.Adder
                     LambdaCCC.CRC
                     LambdaCCC.Bitonic
+                    LambdaCCC.RadixSort
+                    LambdaCCC.Counters
   Other-Modules:
                     LambdaCCC.Tests
 
