@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables, TypeOperators #-}
 {-# LANGUAGE ViewPatterns, PatternGuards #-}
 {-# LANGUAGE DataKinds, GADTs #-}  -- for TU
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, TupleSections #-}
 
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_GHC -fcontext-stack=30 #-}
@@ -276,6 +276,9 @@ dateFigureSvg date fig = systemSuccess (printf "cd ../test; ./date-figure-svg %s
 figureSvg :: String -> IO ()
 figureSvg str = systemSuccess ("cd ../test; ./figure-svg " ++ str)
 
+dateLatestSvg :: String -> IO ()
+dateLatestSvg date = systemSuccess (printf "cd ../test; ./date-latest-svg \"%s\"" date)
+
 latestSvg :: IO ()
 latestSvg = systemSuccess "cd ../test; ./latest-svg"
 
@@ -475,7 +478,8 @@ main :: IO ()
 
 -- main = go "lsums-lt2" (lsums :: LTree N2 Int -> (LTree N2 Int, Int))
 
--- main = go "lParities-rt2" (lParities :: RTree N2 Bool -> (RTree N2 Bool, Bool))
+-- -- 2:1; 3:1.5; 4:2; 5:2.5
+-- main = goSep "lParities-rt5" (5/2) (lParities :: RTree N5 Bool -> (RTree N5 Bool, Bool))
 
 -- main = go "foo" (\ a -> not a)
 
@@ -1427,7 +1431,7 @@ u `dotR` v = foldr (+) 0 (liftA2 (*) u v)
 evalPolyAddL :: (Traversable f, Applicative f, Foldable f, Num a) => f a -> a -> a
 evalPolyAddL coeffs x = coeffs `dotL` powersl x
 
--- main = go "evalPolyAddL-rt2" (evalPolyAddL :: RTree N2 Int -> Int -> Int)
+-- main = go "evalPolyAddL-rt3" (evalPolyAddL :: RTree N3 Int -> Int -> Int)
 
 -- Serial version
 
@@ -1456,7 +1460,7 @@ evalPolyAddLS _ = Mealy h (pure 0 :: f a,0)
       poly' | i < p     = shiftR' poly a
             | otherwise = poly
 
--- main = goM "evalPolyAddLS-rt4" (evalPolyAddLS (undefined :: RTree N4 ()) :: Mealy Int Int)
+-- main = goM "evalPolyAddLS-rt3" (evalPolyAddLS (undefined :: RTree N3 ()) :: Mealy Int Int)
 
 evalPolyAddR :: (Traversable f, Applicative f, Foldable f, Num a) => f a -> a -> a
 evalPolyAddR coeffs x = coeffs `dotR` powersl x
@@ -1484,12 +1488,12 @@ evalPolyAddRS _ = Mealy h (pure 0 :: f a,0)
 
 -- main = goSep "upL-rt3" 1 (upL :: RTree N3 Bool -> (RTree N3 Bool, Bool))
 
--- main = goM "upCounterL-rt1" (upCounterL :: Mealy () (RTree N1 Bool))
+-- main = goM "upCounterL-rt3" (upCounterL :: Mealy () (RTree N3 Bool))
 
 -- -- 2:1, 3:2, 4:3
 -- main = goSep "upF-rt2" (2-1) (upF :: RTree N2 Bool -> (RTree N2 Bool, Bool))
 
--- main = goM "upCounter-rt3" (upCounter :: Mealy () (RTree N3 Bool))
+-- main = goM "upCounter-rt1" (upCounter :: Mealy () (RTree N3 Bool))
 
 ----
 
@@ -1497,4 +1501,31 @@ evalPolyAddRS _ = Mealy h (pure 0 :: f a,0)
 
 -- main = goM "foo" (iterateU (const False) False)
 
--- main = go "foo" (delay False False)
+-- main = go "delay-False-False" (delay False False)
+
+-- main = go "delay-False-False" (delay False False)
+
+-- main = go "foo" (scanlT (&&) True :: RTree N1 Bool -> (RTree N1 Bool, Bool))
+
+-- upL bs = (liftA2 toggleIf alls bs, all')
+--  where
+--    (alls,all') = scanlT (&&) True bs
+
+-- Question: Suppose I use adders, partially applied to 1.
+-- Do I get the same circuits as with the up-counters?
+-- Yes, as shown below.
+
+-- type Adder f = f (Pair Bool) -> f Bool :* Bool
+-- type Adder' f = Bool :* f (Pair Bool) -> f Bool :* Bool
+
+adder'1 :: Functor f => Adder' f -> Counter f
+adder'1 h bs = h (True, (False :#) <$> bs)
+
+-- main = goSep "adder-state-c0-rt3" 1 (adder'1 adderState :: Counter (RTree N3))
+
+-- -- GHC panic.
+-- main = goSep "adder-state-trie-c0-rt3" 1 (adder'1 adderStateTrie :: Counter (RTree N3))
+
+-- 2:1, 3:2, 4:3
+main = goSep "scan-adder-c0-rt4" (4-1) (adder'1 scanAdd' :: Counter (RTree N4))
+
