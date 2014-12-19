@@ -472,7 +472,11 @@ main :: IO ()
 
 -- main = go "lsumsp-rt2" (lsums' :: Unop (RTree N2 Int))
 
+-- main = go "lsumsp-rt2" (lsums' :: Unop (RTree N2 Int))
+
 -- main = go "lsumsp-lt3" (lsums' :: Unop (LTree N3 Int))
+
+-- main = go "lsums-v5" (lsums :: Vec N5 Int -> (Vec N5 Int, Int))
 
 -- main = go "lsums-rt5" (lsums :: RTree N5 Int -> (RTree N5 Int, Int))
 
