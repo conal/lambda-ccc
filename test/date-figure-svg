@@ -12,7 +12,7 @@ if ! [ -e "$2.dot" ]; then
   exit 1
 fi
 
-dir="/Users/conal/Tabula/Journal/wikidata/2014/Figures"
+dir="/Users/conal/Tabula/Journal/wikidata/`date +%Y`/Figures"
 svg="$1-$2.svg"
 
 # dot -Tsvg $2.dot -o $dir/$svg && (cd $dir ; ls -l $svg)
