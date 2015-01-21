@@ -485,6 +485,15 @@ main :: IO ()
 -- -- 2:1; 3:1.5; 4:2; 5:2.5
 -- main = goSep "lParities-rt5" (5/2) (lParities :: RTree N5 Bool -> (RTree N5 Bool, Bool))
 
+-- -- 2:1; 3:1.5; 4:2; 5:2.5
+-- main = goSep "lParities-lt4" (4/2) (lParities :: LTree N4 Bool -> (LTree N4 Bool, Bool))
+
+-- -- 2:1; 3:1.5; 4:2; 5:2.5
+-- main = goSep "lParities-ex-rt3" (3/2) (fst . lParities :: Unop (RTree N3 Bool))
+
+-- -- 2:1; 3:1.5; 4:2; 5:2.5
+-- main = goSep "lParities-ex-lt3" (3/2) (fst . lParities :: Unop (LTree N3 Bool))
+
 -- main = go "foo" (\ a -> not a)
 
 -- main = go "not" not
@@ -1072,7 +1081,7 @@ fibS = loop ((\ ((),(a,b)) -> (a,(b,a+b))) . second (delay (0,1)))
 
 -- main = goNew "foo" (Mealy.asFun (Mealy (\ ((),(a,b)) -> (a,(b,a+b))) (0::Int,1)))
 
-fibM :: Mealy () Int
+fibM :: MStream Int
 fibM = Mealy (\ ((),(a,b)) -> (a,(b,a+b))) (0::Int,1)
 
 -- main = goM "foo" fibM
@@ -1080,6 +1089,8 @@ fibM = Mealy (\ ((),(a,b)) -> (a,(b,a+b))) (0::Int,1)
 -- main = goNew "foo" (asFun fibM)
 
 -- main = goM "foo" fibM
+
+-- main = goM "fib-iteratep" (fst <$> iterateU' (\ (a,b) -> (b,a+b)) (0::Int,1))
 
 -- main = go "comparisons"
 --         (\ (x::Int,y::Int) -> (x==y || x/=y) && (x<y || x>=y) && (x>y || x<=y))
@@ -1269,7 +1280,7 @@ genCrcOut nd n =
 --    d = nat :: Nat N5
 --    n = 4096
 
--- main = goM "foo" (foo :: Mealy () (RTree N0 Bool))
+-- main = goM "foo" (foo :: MStream (RTree N0 Bool))
 
 -- Sequential-of-parallel
 crcSPK :: (GS (poly Bool), Applicative poly, Traversable poly, Foldable chunk) =>
@@ -1378,10 +1389,23 @@ powers :: (LScan f, Applicative f, Num a) => a -> f a
 powers = fst . lproducts . pure
 
 -- -- 1,2:0.5,3:1; 4:1.5; 5:2;
--- main = goSep "powers-rt2" 0.5 (powers :: Int -> RTree N2 Int)
+-- main = goSep "powers-rt4" 1.5 (powers :: Int -> RTree N4 Int)
 
 -- -- 1,2:0.5,3:1; 4:1.5; 5:2;
--- main = goSep "powers-lt5" 2 (powers :: Int -> LTree N5 Int)
+-- main = goSep "powers-lt4" 1.5 (powers :: Int -> LTree N4 Int)
+
+-- -- 2:1; 3:1.5; 4:2; 5:2.5
+-- main = goSep "foo-rt3" (3/2) (fst . lproducts :: Unop (RTree N3 Int))
+
+-- -- 2:1; 3:1.5; 4:2; 5:2.5
+-- main = goSep "foo-lt3" (3/2) (fst . lproducts :: Unop (LTree N3 Int))
+
+-- -- 2:1; 3:1.5; 4:2; 5:2.5
+-- main = goSep "bar-rt3" (3/2) (fst . lproducts . pure :: Int -> RTree N3 Int)
+
+-- -- 2:1; 3:1.5; 4:2; 5:2.5
+-- main = goSep "bar-lt3" (3/2) (fst . lproducts . pure :: Int -> LTree N3 Int)
+
 
 evalPoly :: (LScan f, Applicative f, Foldable f, Num a) => f a -> a -> a
 evalPoly coeffs x = coeffs <.> powers x
@@ -1389,7 +1413,8 @@ evalPoly coeffs x = coeffs <.> powers x
 -- -- -- 1,2:0.5,3:1; 4:2; 5:3;
 -- main = goSep "evalPoly-rt4" 2 (evalPoly :: RTree N4 Int -> Int -> Int)
 
--- -- -- 1,2:0.5,3:1; 4:2; 5:3;
+-- -- 1,2:0.5,3:1; 4:2; 5:3;
+
 -- main = goSep "evalPoly-lt5" 3 (evalPoly :: LTree N5 Int -> Int -> Int)
 
 -- Linear versions for comparison
@@ -1488,24 +1513,38 @@ evalPolyAddRS _ = Mealy h (pure 0 :: f a,0)
     Counters
 --------------------------------------------------------------------}
 
--- main = go "lAlls-rt2" (lAlls :: RTree N2 Bool -> (RTree N2 Bool, Bool))
+-- main = go "lAlls-rt2" (lAlls :: Counter (RTree N2 Bool))
 
--- main = goSep "upL-rt3" 1 (upL :: RTree N3 Bool -> (RTree N3 Bool, Bool))
+-- main = goSep "upL-rt3" 1 (upL :: Counter (RTree N3 Bool))
 
--- main = goM "upCounterL-rt3" (upCounterL :: Mealy () (RTree N3 Bool))
+upL' :: (Applicative f, Traversable f) => Unop (f Bool)
+upL' = fst . upL
+
+-- main = goSep "upLp-rt3" 1 (upL' :: Unop (RTree N3 Bool))
+
+-- main = goSep "upLp-2-rt2" 1 (upL' . upL' :: Unop (RTree N2 Bool))
+
+main = goSep "nax-a" 1 (\ (a,b) -> not a && (a `xor` b))
+
+upF' :: (Applicative f, LScan f) => Unop (f Bool)
+upF' = fst . upF
+
+-- main = goSep "upFp-rt3" 1 (upF' :: Unop (RTree N3 Bool))
+
+-- main = goSep "upFp-2-rt1" 1 (upF' . upF' :: Unop (RTree N1 Bool))
+
+-- main = goM "upCounterL-rt3" (upCounterL :: MStream (RTree N3 Bool))
 
 -- -- 2:1, 3:2, 4:3
--- main = goSep "upF-rt2" (2-1) (upF :: RTree N2 Bool -> (RTree N2 Bool, Bool))
+-- main = goSep "upF-rt2" (2-1) (upF :: Counter (RTree N2 Bool))
 
--- main = goM "upCounter-rt1" (upCounter :: Mealy () (RTree N3 Bool))
+-- main = goM "upCounter-rt1" (upCounter :: MStream (RTree N3 Bool))
 
 ----
 
 -- main = goM "foo" (scanl (\ _ () -> False) False)
 
 -- main = goM "foo" (iterateU (const False) False)
-
--- main = go "delay-False-False" (delay False False)
 
 -- main = go "delay-False-False" (delay False False)
 
@@ -1519,9 +1558,10 @@ evalPolyAddRS _ = Mealy h (pure 0 :: f a,0)
 -- Do I get the same circuits as with the up-counters?
 -- Yes, as shown below.
 
--- type Adder f = f (Pair Bool) -> f Bool :* Bool
+-- type Adder  f =         f (Pair Bool) -> f Bool :* Bool
 -- type Adder' f = Bool :* f (Pair Bool) -> f Bool :* Bool
 
+-- Apply an Adder' to carry-in of 1 and a zero summand
 adder'1 :: Functor f => Adder' f -> Counter f
 adder'1 h bs = h (True, (False :#) <$> bs)
 
@@ -1530,6 +1570,21 @@ adder'1 h bs = h (True, (False :#) <$> bs)
 -- -- GHC panic.
 -- main = goSep "adder-state-trie-c0-rt3" 1 (adder'1 adderStateTrie :: Counter (RTree N3))
 
--- 2:1, 3:2, 4:3
-main = goSep "scan-adder-c0-rt4" (4-1) (adder'1 scanAdd' :: Counter (RTree N4))
+-- -- 2:1, 3:2, 4:3
+-- main = goSep "scan-adder-c0-rt4" (4-1) (adder'1 scanAdd' :: Counter (RTree N4))
 
+foldMap' :: (Foldable t, Monoid m) => (a -> m) -> t a -> m
+foldMap' f = foldl (\ m a -> mappend (f a) m) mempty
+
+-- foldMap' f = foldr (mappend . f) mempty
+
+-- f :: a -> m
+-- mappend . f :: a -> m -> m
+
+-- \ a -> mappend (f a)
+-- \ a m -> mappend (f a) m
+
+-- \ m -> mappend m . f
+
+
+-- foldMap' f = foldr (mappend . f) mempty
