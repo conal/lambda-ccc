@@ -125,9 +125,18 @@ memoFloatR lab r = do findDefT bragMemo lab
    lab' = tweak lab
    tweak = -- fst . break (== '$')
            -- ("s:" ++) . fst . break (== '_')
-           fst . break (== '_')
+           asMemoName . fst . break (== '_')
            -- const "x"
            -- id
+
+memoPrefix :: String
+memoPrefix = "m:"
+
+asMemoName :: Unop String
+asMemoName = (memoPrefix++)
+
+isMemoName :: String -> Bool
+isMemoName = isPrefixOf memoPrefix
 
 -- TODO: Refactor
 
