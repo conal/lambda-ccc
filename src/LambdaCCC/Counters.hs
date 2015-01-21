@@ -31,13 +31,15 @@ import Circat.Mealy
 toggleIf :: Bool -> Unop Bool
 toggleIf a = if a then not else id
 
+type Counter f = f Bool -> (f Bool, Bool) 
+
 {--------------------------------------------------------------------
     Linear versions
 --------------------------------------------------------------------}
 
 -- Increment/decrement a little-endian binary natural number:
 
-upL, downL :: (Applicative f, Traversable f) => f Bool -> (f Bool, Bool)
+upL, downL :: (Applicative f, Traversable f) => Counter f
 
 upL bs = (liftA2 toggleIf alls bs, all')
  where
