@@ -1,8 +1,10 @@
 Convert lambda expressions to CCC combinators and then to circuits.
 
-See the [project notes](doc/notes.md).
+Additional info:
 
-See instructions in test/Tests.hs.
+*   [Project notes](doc/notes.md).
+*   The talk [From Haskell to Hardware via CCCs](https://github.com/conal/talk-2015-haskell-to-hardware).
+*   Instructions in test/Tests.hs.
 
 Dependencies:
 
