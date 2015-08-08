@@ -65,7 +65,7 @@ import qualified LambdaCCC.RadixSort as RS
 
 -- import Circat.Misc (Reversible(..))
 import Circat.Rep (bottom)
-import Circat.Pair (Pair(..))
+import Circat.Pair (Pair(..),sortP)
 import qualified Circat.Pair as P
 import qualified Circat.RTree as RT
 import qualified Circat.LTree as LT
@@ -326,13 +326,15 @@ main :: IO ()
 
 -- main = go "sumSquare-p" (sumSquare :: Pair Int -> Int)
 
--- main = go "sumSquare-t3" (sumSquare :: RTree N3 Int -> Int)
+-- main = goSep "sumSquare-rt2" 0.75 (sumSquare :: RTree N2 Int -> Int)
 
 -- main = go "sum-v8" (sum :: Vec N8 Int -> Int)
 
 -- main = go "and-v5" (and :: Vec N5 Bool -> Bool)
 
--- main = go "sum-t3" (sum :: RTree N3 Int -> Int)
+main = go "sum-t3" (sum :: RTree N3 Int -> Int)
+
+-- main = go "sum-lt3" (sum :: LTree N3 Int -> Int)
 
 -- main = go "sum-foldl-v5" (foldl (+) 0 :: Vec N5 Int -> Int)
 
@@ -380,6 +382,8 @@ main :: IO ()
 -- main = go "rev4" (\ (a,b,c,d) -> (d,c,b,a) :: (Bool,Bool,Bool,Bool))
 
 -- main = go "sum-2" (\ (a,b) -> a+b :: Int)
+
+-- main = go "sum-3" (\ (a,b,c) -> a+b+c :: Int)
 
 -- main = go "sum-4a" ((\ (a,b,c,d) -> a+b+c+d) :: (Int,Int,Int,Int) -> Int)
 
@@ -442,7 +446,10 @@ main :: IO ()
 -- main = go "composeLin-t232" ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int)
 
 -- -- Shift examples are identities on bit representations
--- main = go "shiftR-v4" (shiftR :: Vec N4 Bool :* Bool -> Bool :* Vec N4 Bool)
+-- main = go "shiftR-v3" (shiftR :: Vec N3 Bool :* Bool -> Bool :* Vec N3 Bool)
+
+-- -- Shift examples are identities on bit representations
+-- main = go "shiftR-swap-v3" (shiftR . swap :: Unop (Bool :* Vec N3 Bool))
 
 -- main = go "shiftR-rt2" (shiftR :: RTree N2 Bool :* Bool -> Bool :* RTree N2 Bool)
 
@@ -478,7 +485,7 @@ main :: IO ()
 
 -- main = go "lsums-v5" (lsums :: Vec N5 Int -> (Vec N5 Int, Int))
 
--- main = go "lsums-rt5" (lsums :: RTree N5 Int -> (RTree N5 Int, Int))
+-- main = go "lsums-rt2" (lsums :: RTree N2 Int -> (RTree N2 Int, Int))
 
 -- main = go "lsums-lt2" (lsums :: LTree N2 Int -> (LTree N2 Int, Int))
 
@@ -1178,7 +1185,7 @@ shiftRS = Mealy (shiftR . swap)
 
 -- main = goM "shiftL-iota-rt2"  (shiftLS (iota :: RTree N2 Int))
 
--- main = goM "shiftR-rt2" (shiftRS (pure False :: RTree N2 Bool))
+-- main = goM "shiftRS-rt3" (shiftRS (pure False :: RTree N3 Bool))
 
 -- main = goM "shiftR-ib-v3"  (shiftRS (pure (0,False) :: Vec N3 (Int,Bool)))
 
@@ -1238,7 +1245,7 @@ crcSKf poly = scanl step (pure False)
     where
       (b0',seg') = shiftR (seg,b0)
 
--- main = goM "crcSKf-rt8" (crcSKf polyD :: Mealy Bool (RTree N8 Bool))
+-- main = goM "crcSKf-rt2" (crcSKf polyD :: Mealy Bool (RTree N2 Bool))
 
 boolToChar :: Bool -> Char
 boolToChar False = '0'
@@ -1320,6 +1327,8 @@ revRT = RT.butterfly reverse
 -- -- Butterfly swap, i.e., reversal
 -- -- 1:0.5,2:1,3:2
 -- main = goSep "butterfly-swap-rt2" 1 (revRT :: Unop (RTree N2 Bool))
+
+-- main = goSep "sortP" 0.75 (sortP :: Unop (Pair Int))
 
 -- -- 2,3,4:0.75
 -- main = goSep "bitonic-3" 0.75 (bsort :: Unop (RTree N3 Int))
@@ -1524,7 +1533,7 @@ upL' = fst . upL
 
 -- main = goSep "upLp-2-rt2" 1 (upL' . upL' :: Unop (RTree N2 Bool))
 
-main = goSep "nax-a" 1 (\ (a,b) -> not a && (a `xor` b))
+-- main = goSep "nax-a" 1 (\ (a,b) -> not a && (a `xor` b))
 
 upF' :: (Applicative f, LScan f) => Unop (f Bool)
 upF' = fst . upF

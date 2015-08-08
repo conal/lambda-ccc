@@ -9,8 +9,8 @@ Additional info:
 Dependencies:
 
 *   GHC 7.8.2 or better
-*   [kure](https://github.com/ku-fpg/kure) (from GitHub, not Hackage)
-*   [hermit](https://github.com/ku-fpg/hermit/) (from GitHub, not Hackage)
+*   [KURE](https://github.com/conal/kure) (old clone)
+*   [HERMIT](https://github.com/conal/hermit) (old clone)
 *   [hermit-extras](http://github.com/conal/hermit-extras)
 *   [circat](https://github.com/conal/circat), for circuit specification, display, and conversion to netlists.
 
