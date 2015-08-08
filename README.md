@@ -14,7 +14,7 @@ Dependencies:
 *   [hermit-extras](http://github.com/conal/hermit-extras)
 *   [circat](https://github.com/conal/circat), for circuit specification, display, and conversion to netlists.
 
-To use these versions of KURE and HERMIT, clone the repos (or pull if already cloned), and use "git checkout <commit-id>".
+To use these versions of KURE and HERMIT, clone the repos (or pull if already cloned), and use "git checkout [commit-id]".
 
 To try out:
 
