@@ -10,7 +10,7 @@ Dependencies:
 
 *   GHC 7.8.2 or better
 *   [KURE](https://github.com/ku-fpg/kure), commit `7ce26aa`
-*   [HERMIT](https://github.com/ku-fpg/hermit), commit `543ccb8`
+*   [HERMIT](https://github.com/ku-fpg/hermit), commit `5557609`
 *   [hermit-extras](http://github.com/conal/hermit-extras)
 *   [circat](https://github.com/conal/circat), for circuit specification, display, and conversion to netlists.
 
