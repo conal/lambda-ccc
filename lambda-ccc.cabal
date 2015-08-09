@@ -36,6 +36,7 @@ Library
                   , circat >= 0.6.1
                   , hermit-extras >= 0.2.1
                   , MemoTrie
+                  , QuickCheck >= 2.7.3
 
   Exposed-Modules:  LambdaCCC.Misc
                     LambdaCCC.ShowUtils
