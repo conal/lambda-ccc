@@ -20,9 +20,12 @@ module LambdaCCC.ShowUtils
   ( showsApp1, showsApp, showSpaced
   , Prec, Assoc(..), Fixity
   , showsOp2, showsOp2', showsPair
+  , module Circat.ShowUtils
   ) where
 
 import Data.List (intersperse)
+
+import Circat.ShowUtils
 
 import LambdaCCC.Misc (compose)
 

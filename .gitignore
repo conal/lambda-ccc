@@ -9,6 +9,9 @@ tarballs
 out/
 
 test/Tests
+test/Simple
+test/Translate
+test/TreeTest
 
 # Mac OS generates
 .DS_Store
@@ -23,3 +26,7 @@ test/Tests
 
 *.hi
 *.o
+# iverilog result
+a.out
+
+test/Foo.hss

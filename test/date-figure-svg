@@ -1,0 +1,19 @@
+#!/bin/sh
+
+if [ "$#" -ne 2 ]; then
+  echo "Usage: $0 mm-dd pic-name" >&2
+  exit 1
+fi
+
+cd out
+
+if ! [ -e "$2.dot" ]; then
+  echo "$2.dot not found" >&2
+  exit 1
+fi
+
+dir="/Users/conal/Tabula/Journal/wikidata/`date +%Y`/Figures"
+svg="$1-$2.svg"
+
+# dot -Tsvg $2.dot -o $dir/$svg && (cd $dir ; ls -l $svg)
+dot -Tsvg $2.dot -o $dir/$svg && ls -l $dir/$svg

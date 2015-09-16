@@ -22,6 +22,7 @@ module LambdaCCC.Ty
   ( Ty(..),HasTy(..), tyEq', tyEq2'
   , HasTy2,HasTy3,HasTy4
   , HasTyJt(..), tyHasTy, tyHasTy2
+  , pairTyHasTy, sumTyHasTy, funTyHasTy
   , splitFunTy, domTy, ranTy
   ) where
 
@@ -55,13 +56,22 @@ instance Show (Ty a) where
   showsPrec p (a :=> b) = showsOp2' ":=>" (1,AssocRight) p a b
 
 instance IsTy Ty where
-  Unit     `tyEq` Unit         = Just Refl
-  Int      `tyEq` Int          = Just Refl
-  Bool     `tyEq` Bool         = Just Refl
-  (a :*  b) `tyEq` (a' :*  b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
-  (a :+  b) `tyEq` (a' :+  b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
-  (a :=> b) `tyEq` (a' :=> b') = liftA2 liftEq2 (tyEq a a') (tyEq b b')
+  Unit      `tyEq` Unit        = Just Refl
+  Int       `tyEq` Int         = Just Refl
+  Bool      `tyEq` Bool        = Just Refl
+  (a :*  b) `tyEq` (a' :*  b') = tyEqOp2 a b a' b'
+  (a :+  b) `tyEq` (a' :+  b') = tyEqOp2 a b a' b'
+  (a :=> b) `tyEq` (a' :=> b') = tyEqOp2 a b a' b'
   _         `tyEq` _           = Nothing
+
+tyEqOp2 :: Ty a -> Ty b -> Ty a' -> Ty b' -> Maybe (op a b :=: op a' b')
+tyEqOp2 a b a' b' = liftA2 liftEq2 (a `tyEq` a') (b `tyEq` b')
+
+-- Inferred type:
+-- 
+--   (IsTyConstraint f1 a, IsTyConstraint f1 a', IsTyConstraint f2 b,
+--    IsTyConstraint f2 b', IsTy f1, IsTy f2) =>
+--   f1 a -> f1 a' -> f2 b -> f2 b' -> Maybe (f a b :=: f a' b')
 
 -- | Variant of 'tyEq' from the 'ty' package. This one assumes 'HasTy'.
 tyEq' :: forall a b f. (HasTy a, HasTy b, Eq (f a)) =>
@@ -123,6 +133,16 @@ tyHasTy (a :=> b) | (HasTy,HasTy) <- tyHasTy2 a b = HasTy
 
 tyHasTy2 :: Ty a -> Ty b -> (HasTyJt a,HasTyJt b)
 tyHasTy2 a b = (tyHasTy a,tyHasTy b)
+
+pairTyHasTy :: Ty (a :* b) -> (HasTyJt a,HasTyJt b)
+pairTyHasTy (a :* b) = tyHasTy2 a b
+
+sumTyHasTy :: Ty (a :+ b) -> (HasTyJt a,HasTyJt b)
+sumTyHasTy (a :+ b) = tyHasTy2 a b
+
+funTyHasTy :: Ty (a :=> b) -> (HasTyJt a,HasTyJt b)
+funTyHasTy (a :=> b) = tyHasTy2 a b
+
 
 {--------------------------------------------------------------------
     Utilities

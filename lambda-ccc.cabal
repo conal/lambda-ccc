@@ -1,13 +1,15 @@
 Name:               lambda-ccc
-Version:            0.1
-Cabal-Version:      >= 1.6
+Version:            0.5
+Cabal-Version:      >= 1.8
 Synopsis:           Convert lambda expressions to CCC combinators
-Category:           categories
+Category:           language
 Description:        Convert lambda expressions to CCC combinators
 Author:             Conal Elliott
-Maintainer:         conal@tabula.com
-Copyright:          (c) 2013 by Tabula, Inc
+Maintainer:         conal@conal.net
+Homepage:           http://github.com/conal/lambda-ccc
+Copyright:          (c) 2013-2014 by Tabula, Inc
 License:            BSD3
+License-File:       COPYING
 Stability:          experimental
 build-type:         Simple
 
@@ -17,31 +19,44 @@ Extra-Source-Files:
 
 source-repository head
   type:             git
-  location:         git://github.com/ku-fpg/lambda-ccc
+  location:         git://github.com/conal/lambda-ccc
 
 Library
-  hs-Source-Dirs:   src
-  Include-Dirs:     src
+  hs-Source-Dirs:   src/
   Build-Depends:    base < 5
                   , ghc >= 7.6
                   , ghc-prim
-                  , hermit >= 0.2.0.0
-                  , template-haskell
+                  , transformers
+                  , mtl
                   , containers
-                  , ty >= 0.1.4
-                  , circat >= 0.2.0
+                  , kure >= 2.16.0
+                  , hermit >= 0.5.0.1
+                  , ty >= 0.1.5
+                  , type-unary >= 0.2.16
+                  , circat >= 0.6.1
+                  , hermit-extras >= 0.2.1
+                  , MemoTrie
+                  , QuickCheck >= 2.7.3
+
   Exposed-Modules:  LambdaCCC.Misc
                     LambdaCCC.ShowUtils
-                    LambdaCCC.Ty
-                    LambdaCCC.Prim
                     LambdaCCC.Lambda
-                    LambdaCCC.CCC
                     LambdaCCC.ToCCC
-                    LambdaCCC.MkStringExpr
-                    LambdaCCC.ReifyLambda
-                    LambdaCCC.ToCircuit
-
--- TODO: trim
-
+                    LambdaCCC.Monomorphize
+                    LambdaCCC.ReifySimple
+                    LambdaCCC.Run
+                    LambdaCCC.StateTrie
+                    LambdaCCC.Adder
+                    LambdaCCC.CRC
+                    LambdaCCC.Bitonic
+                    LambdaCCC.RadixSort
+                    LambdaCCC.Counters
   Other-Modules:
                     LambdaCCC.Tests
+
+-- Test-Suite test1
+--     hs-Source-Dirs:   test
+--     type:       exitcode-stdio-1.0
+--     main-is:    SimpleMain.hs
+--     build-depends: base, circat, lambda-ccc
+
