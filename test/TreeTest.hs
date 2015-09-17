@@ -75,7 +75,7 @@ import Circat.Shift
 import Circat.Scan
 import Circat.Mealy hiding (ArrowCircuit(..))
 import qualified Circat.Mealy as Mealy
-import Circat.Circuit (GenBuses,GS,Attr,systemSuccess)
+import Circat.Circuit (GenBuses(..), GS, Attr, systemSuccess, Complex(..))
 
 -- Strange -- why needed? EP won't resolve otherwise. Bug?
 import qualified LambdaCCC.Lambda
@@ -86,6 +86,10 @@ import LambdaCCC.Run
 
 -- Experiment for Typeable resolution in reification
 import qualified Data.Typeable
+
+-- To support Dave's FFT stuff, below.
+-- import Data.Complex
+import Circat.Misc (inTranspose)
 
 {--------------------------------------------------------------------
     Misc
@@ -291,6 +295,72 @@ do2 = inTest "hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize DoTree.hss"
 -- Only works when compiled with HERMIT
 main :: IO ()
 
+-------- Dave's FFT stuff -------------------------------------------------
+-- Types, for reference:
+-- transpose :: RTree n (Pair a) -> Pair (RTree n a)
+
+-- A 2-element FFT.
+fft_2 :: Num a => Pair a -> Pair a
+fft_2 p = P.toP (sum p, sum p')
+    where p' = P.toP (x, -y)
+          x  = P.fstP p
+          y  = P.sndP p
+-- fft_2 p = P.toP (sum p', sum (secondP (-) p'))
+--   where p' = secondP addPhasors p
+
+-- Phasors generation.
+-- phasors :: (IsNat n) => Vec n a -> Vec n a  -- Last a is, actually, fixed type, but this seems to break the flow.
+-- phasors = phasors' nat
+-- 
+-- phasors' :: Nat n -> Vec n a -> Vec n a
+-- phasors' Zero     = 
+-- phasors' (Succ n) = 
+
+cis :: Float -> Complex Int
+cis p = round (cos p * 100) :+ round (sin p * 100)
+
+addPhase :: IsNat n => RTree n (Complex Int) -> RTree n (Complex Int)
+addPhase = addPhase' nat
+
+addPhase' :: Nat n -> RTree n (Complex Int) -> RTree n (Complex Int)
+addPhase' Zero = id
+addPhase' n    = fmap ( (fmap (`div` 100)) . (* (cis ((-pi) / (natToZ n)))) )
+
+-- butterfly2 :: (IsNat n, Ord a) => Unop (Pair (Complex a)) -> Unop (RTree n (Complex a))
+-- butterfly2 = butterfly2' nat
+-- 
+-- butterfly2' :: Ord a => Nat n -> Unop (Pair (Complex a)) -> Unop (RTree n (Complex a))
+-- butterfly2' Zero     _ = id
+-- butterfly2' (Succ m) f = RT.inB (fmap (butterfly2' m g) . (inTranspose.fmap) g)
+--   where g = f . (P.secondP addPhase)
+
+-- Generalized radix-2 DIT FFT.
+-- fftP :: (Num a, IsNat n) => Pair (RTree n a) -> Pair (RTree n a)
+-- fftP = sum . secondP (-) 
+-- fftP ((RT.L x) :# (RT.L y)) = fmap RT.L $ fft_2 (x :# y)
+-- fftP (u :# v) = (w + z) :# (w - z)
+--   where w = fmap fftP $ RT.unB u
+--         z = fmap fftP $ RT.unB v
+
+fft_r2_dit :: (Num a, Ord a, IsNat n) => RTree n a -> RTree n a  -- Why is 'Ord a' necessary?
+-- fft_r2_dit = RT.butterfly (fft_2 . (P.secondP addPhase))
+fft_r2_dit = RT.butterfly fft_2
+
+-- fft_r2_dit' :: (Num a, Ord a, IsNat n) => RTree n (Complex a) -> RTree n (Complex a)  -- Why is 'Ord (Complex a)' necessary?
+-- fft_r2_dit' = butterfly2 fft_2'
+
+-- fft_tree :: (Num a, IsNat n) => RTree n (Pair a) -> Pair (RTree n a)
+-- fft_tree (RT.L p) = transpose $ RT.L $ fft_2 p
+-- fft_tree b = fmap fft_tree $ transpose b
+
+-- main = go "fft_2" (fft_2 :: Pair Int -> Pair Int)
+-- main = go "fftP" (fftP :: Pair (RTree N1 Int) -> Pair (RTree N1 Int))
+-- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 Int -> RTree N2 Int)
+main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Int) -> RTree N2 (Complex Int))
+-- main = go "fft_tree" (fft_tree :: RTree N1 (Pair Int) -> Pair (RTree N1 Int))
+
+----------------------------------------------------------------
+
 -- main = go "map-not-v5" (fmap not :: Vec N5 Bool -> Vec N5 Bool)
 
 -- main = go "map-square-v5" (fmap square :: Vec N5 Int -> Vec N5 Int)
@@ -332,7 +402,7 @@ main :: IO ()
 
 -- main = go "and-v5" (and :: Vec N5 Bool -> Bool)
 
-main = go "sum-t3" (sum :: RTree N3 Int -> Int)
+-- main = go "sum-t3" (sum :: RTree N3 Int -> Int)
 
 -- main = go "sum-lt3" (sum :: LTree N3 Int -> Int)
 
@@ -1083,8 +1153,8 @@ histogramSO = scanl histogramStepO (pure 0)
 
 -- main = goNew "foo" (loop (\ ((),((),())) -> ((),((),()))))
 
-fibS :: Num a => () -> a
-fibS = loop ((\ ((),(a,b)) -> (a,(b,a+b))) . second (delay (0,1)))
+-- fibS :: Num a => () -> a
+-- fibS = loop ((\ ((),(a,b)) -> (a,(b,a+b))) . second (delay (0,1)))
 
 -- main = goNew "foo" (Mealy.asFun (Mealy (\ ((),(a,b)) -> (a,(b,a+b))) (0::Int,1)))
 
