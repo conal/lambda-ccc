@@ -37,7 +37,7 @@ addPhase = addPhase' nat
 
 addPhase' :: (IsNat n, RealFloat a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
 addPhase' Zero = id
-addPhase' n    = (* (scanlTEx (*) (conjugate phaseDelta) (pure phaseDelta)))
+addPhase' n    = (* (scanlTEx (*) 1 (pure phaseDelta)))
     where phaseDelta = cis ((-pi) / (2 ** (natToZ n)))
 
 -- Radix-2, DIT FFT
