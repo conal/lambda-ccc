@@ -15,42 +15,38 @@ module Main where
 
 import Prelude hiding ({- id,(.), -}foldl,foldr,sum,product,zipWith,reverse,and,or,scanl,minimum,maximum)
 
+import Control.Applicative
+import Control.Arrow
 import Control.Monad (forM_)
 import Data.Complex
 import Data.Foldable (sum)
 import Data.Newtypes.PrettyDouble
+import TypeUnary.Nat (IsNat, natToZ, Nat(..), nat, N2)
 
-import TypeUnary.Nat (IsNat,natToZ,Nat(..),nat)
-import Circat.Pair (Pair(..))
+import Circat.Pair (toP, fromP)
+import Circat.Scan (scanlTEx)
 import qualified Circat.Pair as P
 import qualified Circat.RTree as RT
+import Circat.RTree (bottomSplit)
 
 type RTree = RT.Tree
 
--- Defining this, in response to a complaint from GHC.
--- My hope/assumption is that, given my particular use of Pair, it is
--- a completely moot definition.
-instance Eq a => Ord (Complex a) where
-    (<=) x y = x <= y
-
--- A 2-element FFT.
-fft_2 :: Num a => Pair a -> Pair a
-fft_2 p = P.toP (sum p, sum (P.secondP (0 -) p))
-
 -- Phasor, as a function of tree depth.
-addPhase :: Nat n -> Complex PrettyDouble -> Complex PrettyDouble
-addPhase Zero = id
-addPhase n    = (* (cis ((-pi) / (natToZ n))))
+addPhase :: (IsNat n, RealFloat a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
+addPhase = addPhase' nat
+
+addPhase' :: (IsNat n, RealFloat a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
+addPhase' Zero = id
+addPhase' n    = (* (scanlTEx (*) (conjugate phaseDelta) (pure phaseDelta)))
+    where phaseDelta = cis ((-pi) / (2 ** (natToZ n)))
 
 -- Radix-2, DIT FFT
-fft_r2_dit :: IsNat n => RTree n (Complex PrettyDouble) -> RTree n (Complex PrettyDouble)
+fft_r2_dit :: (IsNat n, RealFloat a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
 fft_r2_dit = fft_r2_dit' nat
 
-fft_r2_dit' :: IsNat n => Nat n -> RTree n (Complex PrettyDouble) -> RTree n (Complex PrettyDouble)
-fft_r2_dit' Zero        = error "Whoops! Shouldn't have ended up here."
-fft_r2_dit' (Succ Zero) = RT.butterfly fft_2
-fft_r2_dit' (Succ n)    = RT.butterfly (fft_2 . (P.secondP (addPhase n)))
--- fft_r2_dit' n           = RT.butterfly (fft_2 . (P.secondP (addPhase n)))
+fft_r2_dit' :: (RealFloat a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
+fft_r2_dit'  Zero    = id
+fft_r2_dit' (Succ n) = RT.toB . toP . ((uncurry (+)) &&& (uncurry (-))) . fromP . P.secondP addPhase . fmap (fft_r2_dit' n) . bottomSplit
 
 -- Test config.
 realData :: [[PrettyDouble]]
@@ -63,6 +59,7 @@ realData = [  [1.0,   0.0,   0.0,   0.0 ]  -- Delta
 complexData :: [[Complex PrettyDouble]]
 complexData = map (map (:+ 0.0)) realData
 
+myTree2 :: [a] -> RTree N2 a
 myTree2 [w, x, y, z] = RT.tree2 w x y z
 myTree2 _            = error "Something went horribly wrong!"
 
@@ -71,7 +68,7 @@ myTree2 _            = error "Something went horribly wrong!"
 --
 dft :: RealFloat a => [Complex a] -> [Complex a]
 dft xs = [ sum [ x * exp((0.0 :+ (-1.0)) * 2 * pi / lenXs * fromIntegral(k * n))
-                 | (x, n) <- zip xs [0..]
+                 | (x, n) <- Prelude.zip xs [0..]
                ]
            | k <- [0..(length xs - 1)]
          ]
