@@ -39,13 +39,9 @@ import Circat.RTree (bottomSplit)
 type RTree = RT.Tree
 
 -- Phasor, as a function of tree depth.
-addPhase :: (IsNat n, RealFloat a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
-addPhase = addPhase' nat
-
-addPhase' :: (IsNat n, RealFloat a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
-addPhase' Zero = id
-addPhase' n    = (* (scanlTEx (*) 1 (pure phaseDelta)))
-    where phaseDelta = cis ((-pi) / (2 ** (natToZ n)))
+phasor :: (IsNat n, RealFloat a, Enum a) => Nat n -> RTree n (Complex a)
+phasor n = scanlTEx (*) 1 (pure phaseDelta)
+    where phaseDelta = cis ((-pi) / 2 ** natToZ n)
 
 -- Radix-2, DIT FFT
 fft_r2_dit :: (IsNat n, RealFloat a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
@@ -53,15 +49,15 @@ fft_r2_dit = fft_r2_dit' nat
 
 fft_r2_dit' :: (RealFloat a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
 fft_r2_dit'  Zero    = id
-fft_r2_dit' (Succ n) = RT.toB . toP . ((uncurry (+)) &&& (uncurry (-))) . fromP . P.secondP addPhase . fmap (fft_r2_dit' n) . bottomSplit
+fft_r2_dit' (Succ n) = RT.toB . toP . (uncurry (+) &&& uncurry (-)) . fromP . P.secondP (liftA2 (*) (phasor n)) . fmap (fft_r2_dit' n) . bottomSplit
 
 -- Test config.
 realData :: [[PrettyDouble]]
-realData = [  [1.0,   0.0,   0.0,   0.0 ]  -- Delta
-            , [1.0,   1.0,   1.0,   1.0 ]  -- Constant
-            , [1.0, (-1.0),  1.0, (-1.0)]  -- Nyquist
-            , [1.0,   0.0, (-1.0),  0.0 ]  -- Fundamental
-            , [0.0,   1.0,   0.0, (-1.0)]  -- Fundamental w/ 90-deg. phase lag
+realData = [  [1.0,   0.0,   0.0,   0.0]  -- Delta
+            , [1.0,   1.0,   1.0,   1.0]  -- Constant
+            , [1.0,  -1.0,   1.0,  -1.0]  -- Nyquist
+            , [1.0,   0.0,  -1.0,   0.0]  -- Fundamental
+            , [0.0,   1.0,   0.0,  -1.0]  -- Fundamental w/ 90-deg. phase lag
            ]
 complexData :: [[Complex PrettyDouble]]
 complexData = map (map (:+ 0.0)) realData
