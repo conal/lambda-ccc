@@ -88,8 +88,7 @@ import LambdaCCC.Run
 import qualified Data.Typeable
 
 -- To support Dave's FFT stuff, below.
--- import Data.Complex
-import Circat.Misc (inTranspose)
+-- import Data.Complex (cis)
 
 {--------------------------------------------------------------------
     Misc
@@ -295,71 +294,40 @@ do2 = inTest "hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize DoTree.hss"
 -- Only works when compiled with HERMIT
 main :: IO ()
 
--------- Dave's FFT stuff -------------------------------------------------
+-------- Dave's FFT stuff ----------------------------------------------
 -- Types, for reference:
 -- transpose :: RTree n (Pair a) -> Pair (RTree n a)
 
--- A 2-element FFT.
-fft_2 :: Num a => Pair a -> Pair a
-fft_2 p = P.toP (sum p, sum p')
-    where p' = P.toP (x, -y)
-          x  = P.fstP p
-          y  = P.sndP p
--- fft_2 p = P.toP (sum p', sum (secondP (-) p'))
---   where p' = secondP addPhasors p
+-- cis :: Float -> Complex Int
+-- cis :: Float -> Complex a
+cis :: (Integral a) => a -> Complex a
+cis p = round (100 * cos (2 * pi * (fromIntegral p) / 100)) :+ round (100 * cos (2 * pi * (fromIntegral p) / 100))
 
--- Phasors generation.
--- phasors :: (IsNat n) => Vec n a -> Vec n a  -- Last a is, actually, fixed type, but this seems to break the flow.
--- phasors = phasors' nat
--- 
--- phasors' :: Nat n -> Vec n a -> Vec n a
--- phasors' Zero     = 
--- phasors' (Succ n) = 
-
-cis :: Float -> Complex Int
-cis p = round (cos p * 100) :+ round (sin p * 100)
-
-addPhase :: IsNat n => RTree n (Complex Int) -> RTree n (Complex Int)
+-- Phasor, as a function of tree depth.
+-- addPhase :: (IsNat n, RealFloat a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
+addPhase :: (IsNat n, Integral a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
 addPhase = addPhase' nat
 
-addPhase' :: Nat n -> RTree n (Complex Int) -> RTree n (Complex Int)
+-- addPhase' :: (IsNat n, RealFloat a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
+addPhase' :: (Integral a, Enum a, IsNat n) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
 addPhase' Zero = id
-addPhase' n    = fmap ( (fmap (`div` 100)) . (* (cis ((-pi) / (natToZ n)))) )
+addPhase' n    = (* (scanlTEx (*) 1 (pure phaseDelta)))
+    -- where phaseDelta = cis (round ((-50) / (2 ** (natToZ n)))
+    where phaseDelta = cis ((-50) `div` (2 ^ (natToZ n)))
 
--- butterfly2 :: (IsNat n, Ord a) => Unop (Pair (Complex a)) -> Unop (RTree n (Complex a))
--- butterfly2 = butterfly2' nat
--- 
--- butterfly2' :: Ord a => Nat n -> Unop (Pair (Complex a)) -> Unop (RTree n (Complex a))
--- butterfly2' Zero     _ = id
--- butterfly2' (Succ m) f = RT.inB (fmap (butterfly2' m g) . (inTranspose.fmap) g)
---   where g = f . (P.secondP addPhase)
+-- Radix-2, DIT FFT
+-- fft_r2_dit :: (IsNat n, RealFloat a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
+fft_r2_dit :: (IsNat n, Integral a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
+fft_r2_dit = fft_r2_dit' nat
 
--- Generalized radix-2 DIT FFT.
--- fftP :: (Num a, IsNat n) => Pair (RTree n a) -> Pair (RTree n a)
--- fftP = sum . secondP (-) 
--- fftP ((RT.L x) :# (RT.L y)) = fmap RT.L $ fft_2 (x :# y)
--- fftP (u :# v) = (w + z) :# (w - z)
---   where w = fmap fftP $ RT.unB u
---         z = fmap fftP $ RT.unB v
+-- fft_r2_dit' :: (RealFloat a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
+fft_r2_dit' :: (Integral a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
+fft_r2_dit'  Zero    = id
+fft_r2_dit' (Succ n) = RT.toB . P.toP . ((uncurry (+)) &&& (uncurry (-))) . P.fromP . P.secondP addPhase . fmap (fft_r2_dit' n) . RT.bottomSplit
 
-fft_r2_dit :: (Num a, Ord a, IsNat n) => RTree n a -> RTree n a  -- Why is 'Ord a' necessary?
--- fft_r2_dit = RT.butterfly (fft_2 . (P.secondP addPhase))
-fft_r2_dit = RT.butterfly fft_2
-
--- fft_r2_dit' :: (Num a, Ord a, IsNat n) => RTree n (Complex a) -> RTree n (Complex a)  -- Why is 'Ord (Complex a)' necessary?
--- fft_r2_dit' = butterfly2 fft_2'
-
--- fft_tree :: (Num a, IsNat n) => RTree n (Pair a) -> Pair (RTree n a)
--- fft_tree (RT.L p) = transpose $ RT.L $ fft_2 p
--- fft_tree b = fmap fft_tree $ transpose b
-
--- main = go "fft_2" (fft_2 :: Pair Int -> Pair Int)
--- main = go "fftP" (fftP :: Pair (RTree N1 Int) -> Pair (RTree N1 Int))
--- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 Int -> RTree N2 Int)
 main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Int) -> RTree N2 (Complex Int))
--- main = go "fft_tree" (fft_tree :: RTree N1 (Pair Int) -> Pair (RTree N1 Int))
-
-----------------------------------------------------------------
+-- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Complex Double))
+-------- End Dave's FFT stuff ------------------------------------------
 
 -- main = go "map-not-v5" (fmap not :: Vec N5 Bool -> Vec N5 Bool)
 
