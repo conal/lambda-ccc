@@ -50,9 +50,10 @@ binop op a b = ConstE op :^ a :^ b
 (||*) = binop OrP
 xorE  = binop XorP
 
-infixl 6 +@
-(+@) :: Binop (EP Int)
+infixl 6 +@, -@
+(+@), (-@) :: Binop (EP Int)
 (+@) = binop AddP
+(-@) = binop SubP
 
 -- TODO: Use Num and Boolean classes
 

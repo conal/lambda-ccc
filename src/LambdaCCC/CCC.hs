@@ -385,6 +385,7 @@ instance MuxCat (:->) where
 
 instance NumCat (:->) Int where
   add = primUnc AddP
+  sub = primUnc SubP
   mul = primUnc MulP
 
 -- TODO: reconcile curried vs uncurried, eliminating the conversions here.

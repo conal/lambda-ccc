@@ -374,6 +374,7 @@ class HasOpInfo p where
 instance HasOpInfo Prim where
   opInfo MulP = Just $ OpInfo "*"     (7,AssocLeft )
   opInfo AddP = Just $ OpInfo "+"     (6,AssocLeft )
+  opInfo SubP = Just $ OpInfo "-"     (6,AssocLeft )
   opInfo AndP = Just $ OpInfo "&&"    (3,AssocRight)
   opInfo OrP  = Just $ OpInfo "||"    (2,AssocRight)
   opInfo XorP = Just $ OpInfo "`xor`" (2,AssocRight)
@@ -521,6 +522,7 @@ intL = kLit
 "reify/(||)"    reifyEP (||)  = kPrim OrP
 "reify/xor"     reifyEP xor   = kPrim XorP
 "reify/(+)"     reifyEP (+)   = kPrim AddP
+"reify/(-)"     reifyEP (-)   = kPrim SubP
 "reify/(*)"     reifyEP (*)   = kPrim MulP
 "reify/exl"     reifyEP fst   = kPrim ExlP
 "reify/exr"     reifyEP snd   = kPrim ExrP
@@ -731,6 +733,7 @@ instance Eq1' Prim where
   XorP    ==== XorP    = True
   NegateP ==== NegateP = True
   AddP    ==== AddP    = True
+  SubP    ==== SubP    = True
   MulP    ==== MulP    = True
   EqP     ==== EqP     = True
   NeP     ==== NeP     = True

@@ -33,7 +33,7 @@ Library
                   , hermit >= 0.5.0.1
                   , ty >= 0.1.5
                   , type-unary >= 0.2.16
-                  , circat >= 0.6.2
+                  , circat >= 0.6.3
                   , hermit-extras >= 0.2.1
                   , MemoTrie
                   , QuickCheck >= 2.7.3

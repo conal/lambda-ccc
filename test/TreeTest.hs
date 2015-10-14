@@ -326,6 +326,9 @@ fft_r2_dit'  Zero    = id
 fft_r2_dit' (Succ n) = RT.toB . P.toP . ((uncurry (+)) &&& (uncurry (-))) . P.fromP . P.secondP addPhase . fmap (fft_r2_dit' n) . RT.bottomSplit
 
 main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Int) -> RTree N2 (Complex Int))
+
+-- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
+
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Complex Double))
 -------- End Dave's FFT stuff ------------------------------------------
 
@@ -1635,3 +1638,9 @@ foldMap' f = foldl (\ m a -> mappend (f a) m) mempty
 
 
 -- foldMap' f = foldr (mappend . f) mempty
+
+
+-- main = go "foo" (\ x y -> (x+y,x-y :: Int))
+
+-- main = go "foo" ((-) :: Binop (Complex Int))
+-- main = go "foo" ((*) :: Binop (Complex Int))

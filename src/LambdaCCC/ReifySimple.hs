@@ -433,6 +433,7 @@ primMap = M.fromList
   , ("Circat.Misc.xor"           , "XorP")
   , ("GHC.Num.$fNumInt_$cnegate" , "NegateP")
   , ("GHC.Num.$fNumInt_$c+"      , "AddP")
+  , ("GHC.Num.$fNumInt_$c-"      , "SubP")
   , ("GHC.Num.$fNumInt_$c*"      , "MulP")
   -- TODO: Use Num methods
   , ("GHC.Tuple.fst"             , "ExlP")
