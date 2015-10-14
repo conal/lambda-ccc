@@ -325,9 +325,9 @@ fft_r2_dit' :: (Integral a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (
 fft_r2_dit'  Zero    = id
 fft_r2_dit' (Succ n) = RT.toB . P.toP . ((uncurry (+)) &&& (uncurry (-))) . P.fromP . P.secondP addPhase . fmap (fft_r2_dit' n) . RT.bottomSplit
 
-main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Int) -> RTree N2 (Complex Int))
+-- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Int) -> RTree N2 (Complex Int))
 
--- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
+main = goSep "fft_r2_dit" 1 (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
 
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Complex Double))
 -------- End Dave's FFT stuff ------------------------------------------
@@ -1639,8 +1639,17 @@ foldMap' f = foldl (\ m a -> mappend (f a) m) mempty
 
 -- foldMap' f = foldr (mappend . f) mempty
 
-
--- main = go "foo" (\ x y -> (x+y,x-y :: Int))
+-- main = go "foo" (\ x y -> (x+y,x-y :: Complex Int))
 
 -- main = go "foo" ((-) :: Binop (Complex Int))
 -- main = go "foo" ((*) :: Binop (Complex Int))
+
+-- main = go "foo" (+ negate (5 :: Int))
+
+-- main = go "foo" (\ (x :: Int) y -> (x + negate y, y - negate x))
+
+-- main = go "foo" (negate . negate :: Unop Int)
+
+-- main = go "foo" (negate . negate . negate . negate . negate :: Unop Int)
+
+-- main = go "foo" (\ x (y :: Int) -> (x + negate y, negate x + y, x - negate y, negate x - y))
