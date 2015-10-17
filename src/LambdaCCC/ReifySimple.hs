@@ -37,7 +37,7 @@ import Prelude hiding (id,(.))
 import Data.Functor ((<$>),void)
 import Control.Category (Category(..))
 import Control.Monad ((<=<))
-import Control.Arrow ((>>>),(***))
+import Control.Arrow ((>>>))
 import qualified Data.Map as M
 import Data.String (fromString)
 
@@ -272,15 +272,19 @@ reifyBottom =
 
 -- Translate methods to cat class and prim
 stdMeths :: M.Map String (String,String)
-stdMeths =
-  M.fromList $
-  map (("GHC.Classes."++) *** twice ("Circat.Prim."++)) $
-  [ ("==",( "CircuitEq","EqP")), ("/=",( "CircuitEq","NeP"))
-  , ("<" ,("CircuitOrd","LtP")), (">" ,("CircuitOrd","GtP"))
-  , ("<=",("CircuitOrd","LeP")), (">=",("CircuitOrd","GeP"))
-  ]
+stdMeths = M.fromList $ concatMap ops
+    [ ( "GHC.Classes","Eq"
+      , [("==","EqP"), ("/=","NeP")])
+    , ( "GHC.Classes","Ord"
+      , [("<","LtP"),(">","GtP"),("<=","LeP"),(">=","GeP")])
+    , ( "GHC.Num"
+      ,"Num", [("negate","NegateP"),("+","AddP"),("-","SubP"),("*","MulP")])
+    ]
  where
-   twice f = f *** f
+   op modu cls stdMeth ctor =
+     ( modu++"."++stdMeth
+     , ("Circat.Prim.Circuit"++cls, "Circat.Prim."++ctor))
+   ops (modu,cls,meths) = [op modu cls stdMeth ctor | (stdMeth,ctor) <- meths]
 
 -- Reify standard methods, given type and dictionary argument.
 reifyStdMeth :: ReExpr
@@ -431,11 +435,6 @@ primMap = M.fromList
   , ("GHC.Classes.&&"            , "AndP")
   , ("GHC.Classes.||"            , "OrP")
   , ("Circat.Misc.xor"           , "XorP")
-  , ("GHC.Num.$fNumInt_$cnegate" , "NegateP")
-  , ("GHC.Num.$fNumInt_$c+"      , "AddP")
-  , ("GHC.Num.$fNumInt_$c-"      , "SubP")
-  , ("GHC.Num.$fNumInt_$c*"      , "MulP")
-  -- TODO: Use Num methods
   , ("GHC.Tuple.fst"             , "ExlP")
   , ("GHC.Tuple.snd"             , "ExrP")
   , ("Data.Either.Left"          , "InlP")
