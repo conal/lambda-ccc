@@ -30,7 +30,6 @@ import Test.QuickCheck (choose, vectorOf)
 import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.All (quickCheckAll)
 
-import Circat.Pair (toP, fromP)
 import Circat.Scan (scanlTEx)
 import qualified Circat.Pair as P
 import qualified Circat.RTree as RT
@@ -49,7 +48,7 @@ fft_r2_dit = fft_r2_dit' nat
 
 fft_r2_dit' :: (RealFloat a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
 fft_r2_dit'  Zero    = id
-fft_r2_dit' (Succ n) = RT.toB . toP . (uncurry (+) &&& uncurry (-)) . fromP . P.secondP (liftA2 (*) (phasor n)) . fmap (fft_r2_dit' n) . bottomSplit
+fft_r2_dit' (Succ n) = RT.toB . P.inP (uncurry (+) &&& uncurry (-)) . P.secondP (liftA2 (*) (phasor n)) . fmap (fft_r2_dit' n) . bottomSplit
 
 -- Test config.
 realData :: [[PrettyDouble]]

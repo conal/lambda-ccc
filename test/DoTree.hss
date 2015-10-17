@@ -19,8 +19,8 @@ try (repeat (any-td (repeat reify-misc)))
 try bash
 try unshadow
 
--- -- Generate a run-time error message for remaining reifyEP applications.
--- try (any-td reifyOops)
+-- Generate a run-time error message for remaining reifyEP applications.
+try (any-td reifyOops)
 
 ----
 
