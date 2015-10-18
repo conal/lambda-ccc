@@ -75,7 +75,7 @@ import Circat.Shift
 import Circat.Scan
 import Circat.Mealy hiding (ArrowCircuit(..))
 import qualified Circat.Mealy as Mealy
-import Circat.Circuit (GenBuses(..), GS, Attr, systemSuccess, Complex(..))
+import Circat.Circuit (GenBuses(..), GS, Attr, systemSuccess, Complex(..),cis)
 
 -- Strange -- why needed? EP won't resolve otherwise. Bug?
 import qualified LambdaCCC.Lambda
@@ -88,7 +88,7 @@ import LambdaCCC.Run
 import qualified Data.Typeable
 
 -- To support Dave's FFT stuff, below.
-import Data.Complex (cis)
+-- import Data.Complex (cis)
 import Data.Newtypes.PrettyDouble
 
 {--------------------------------------------------------------------
@@ -310,7 +310,7 @@ fft_r2_dit'  Zero    = id
 fft_r2_dit' (Succ n) = RT.toB . P.inP (uncurry (+) &&& uncurry (-)) . P.secondP (liftA2 (*) (phasor n)) . fmap (fft_r2_dit' n) . RT.bottomSplit
 
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
--- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex Double) -> RTree N1 (Complex Double))
+main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Complex Double))
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex PrettyDouble) -> RTree N1 (Complex PrettyDouble))
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Int) -> RTree N2 (Complex Int))
 -- main = goSep "fft_r2_dit" 1 (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
@@ -1656,4 +1656,22 @@ foldMap' f = foldl (\ m a -> mappend (f a) m) mempty
 
 -- main = go "foo" (\ (x :: Int) -> x + 1)
 
-main = go "foo" ((+) :: Binop (Complex Double))
+-- main = go "foo" ((+) :: Binop (Complex Double))
+
+-- main = go "foo" ((*) :: Binop (Complex Double))
+
+-- main = go "foo" ((+) :: Binop Double)
+
+-- main = go "foo" ((+) :: Binop Int)
+
+-- phasor :: (IsNat n, RealFloat a, Enum a) => Nat n -> RTree n (Complex a)
+-- phasor n = scanlTEx (*) 1 (pure phaseDelta)
+--     where phaseDelta = cis ((-pi) / 2 ** natToZ n)
+
+-- main = go "foo" (phasor (nat :: Nat N1))
+
+-- main = go "foo" (1 :: Complex Double)
+
+-- main = go "foo" (fromInteger 1 :: Double)
+
+-- main = go "foo" (fromIntegral :: Int -> Double)
