@@ -311,7 +311,7 @@ fft_r2_dit' (Succ n) = RT.toB . P.inP (uncurry (+) &&& uncurry (-)) . P.secondP 
 
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex Double) -> RTree N1 (Complex Double))
-main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex PrettyDouble) -> RTree N1 (Complex PrettyDouble))
+-- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex PrettyDouble) -> RTree N1 (Complex PrettyDouble))
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Int) -> RTree N2 (Complex Int))
 -- main = goSep "fft_r2_dit" 1 (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
 -------- End Dave's FFT stuff ------------------------------------------
@@ -1649,3 +1649,11 @@ foldMap' f = foldl (\ m a -> mappend (f a) m) mempty
 -- main = go "foo" (negate . negate . negate . negate . negate :: Unop Int)
 
 -- main = go "foo" (\ x (y :: Int) -> (x + negate y, negate x + y, x - negate y, negate x - y))
+
+-- main = go "foo" (3.0 :: Double)
+
+-- main = go "foo" (\ (x :: Double) -> x + 1)
+
+-- main = go "foo" (\ (x :: Int) -> x + 1)
+
+main = go "foo" ((+) :: Binop (Complex Double))

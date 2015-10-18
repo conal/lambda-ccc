@@ -758,11 +758,11 @@ instance Eq1' Prim where
   _       ==== _       = False
 
 instance Eq1' Lit where
-  UnitL x ==== UnitL y = x == y
-  BoolL x ==== BoolL y = x == y
-  IntL  x ==== IntL  y = x == y
+  UnitL x   ==== UnitL y   = x == y
+  BoolL x   ==== BoolL y   = x == y
+  IntL  x   ==== IntL  y   = x == y
   DoubleL x ==== DoubleL y = x == y
-  _       ==== _       = False
+  _         ==== _         = False
 
 type IfCirc = IfCat (:>)
 

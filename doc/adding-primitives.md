@@ -19,3 +19,12 @@ In case you really need a new primitive:
 *   Add a new constructor for your primitive type.
 *   Search for an existing `Lit` constructor in circat and lambda-ccc, and add similar support for your type.
 
+
+----
+
+To explain:
+
+*   `Circat.Classes`: `OkDom`
+*   `Circat.Circuit`:
+    *   `Buses`. Search for `IntB` references, and add similar.
+    *   `Ty`. Search for `IntT` references, and add similar.
