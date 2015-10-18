@@ -43,6 +43,7 @@ import Data.String (fromString)
 
 import HERMIT.Core (localFreeIdsExpr)
 import HERMIT.GHC hiding (mkStringExpr)
+import TcType (isDoubleTy)  -- Doesn't seem to be coming in with HERMIT.GHC.
 import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary hiding (externals)
@@ -358,7 +359,7 @@ reifyLit :: ReExpr
 reifyLit =
   unReify >>>
   do ty <- exprTypeT
-     guardMsg (any ($ ty) [isUnitTy,isBoolTy,isIntTy])
+     guardMsg (any ($ ty) [isUnitTy,isBoolTy,isIntTy,isDoubleTy])
        "isLitT: must have type (), Bool, or Int"
      void callDataConT
      e        <- idR

@@ -88,7 +88,8 @@ import LambdaCCC.Run
 import qualified Data.Typeable
 
 -- To support Dave's FFT stuff, below.
--- import Data.Complex (cis)
+import Data.Complex (cis)
+import Data.Newtypes.PrettyDouble
 
 {--------------------------------------------------------------------
     Misc
@@ -295,41 +296,24 @@ do2 = inTest "hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize DoTree.hss"
 main :: IO ()
 
 -------- Dave's FFT stuff ----------------------------------------------
--- Types, for reference:
--- transpose :: RTree n (Pair a) -> Pair (RTree n a)
-
--- cis :: Float -> Complex Int
--- cis :: Float -> Complex a
-cis :: (Integral a) => a -> Complex a
-cis p = round (100 * cos (2 * pi * (fromIntegral p) / 100)) :+ round (100 * cos (2 * pi * (fromIntegral p) / 100))
-
 -- Phasor, as a function of tree depth.
--- addPhase :: (IsNat n, RealFloat a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
-addPhase :: (IsNat n, Integral a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
-addPhase = addPhase' nat
-
--- addPhase' :: (IsNat n, RealFloat a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
-addPhase' :: (Integral a, Enum a, IsNat n) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
-addPhase' Zero = id
-addPhase' n    = (* (scanlTEx (*) 1 (pure phaseDelta)))
-    -- where phaseDelta = cis (round ((-50) / (2 ** (natToZ n)))
-    where phaseDelta = cis ((-50) `div` (2 ^ (natToZ n)))
+phasor :: (IsNat n, RealFloat a, Enum a) => Nat n -> RTree n (Complex a)
+phasor n = scanlTEx (*) 1 (pure phaseDelta)
+    where phaseDelta = cis ((-pi) / 2 ** natToZ n)
 
 -- Radix-2, DIT FFT
--- fft_r2_dit :: (IsNat n, RealFloat a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
-fft_r2_dit :: (IsNat n, Integral a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
+fft_r2_dit :: (IsNat n, RealFloat a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
 fft_r2_dit = fft_r2_dit' nat
 
--- fft_r2_dit' :: (RealFloat a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
-fft_r2_dit' :: (Integral a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
+fft_r2_dit' :: (RealFloat a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
 fft_r2_dit'  Zero    = id
-fft_r2_dit' (Succ n) = RT.toB . P.toP . ((uncurry (+)) &&& (uncurry (-))) . P.fromP . P.secondP addPhase . fmap (fft_r2_dit' n) . RT.bottomSplit
+fft_r2_dit' (Succ n) = RT.toB . P.inP (uncurry (+) &&& uncurry (-)) . P.secondP (liftA2 (*) (phasor n)) . fmap (fft_r2_dit' n) . RT.bottomSplit
 
+-- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
+-- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex Double) -> RTree N1 (Complex Double))
+main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex PrettyDouble) -> RTree N1 (Complex PrettyDouble))
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Int) -> RTree N2 (Complex Int))
-
 -- main = goSep "fft_r2_dit" 1 (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
-
--- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Complex Double))
 -------- End Dave's FFT stuff ------------------------------------------
 
 -- main = go "map-not-v5" (fmap not :: Vec N5 Bool -> Vec N5 Bool)
@@ -1650,7 +1634,7 @@ foldMap' f = foldl (\ m a -> mappend (f a) m) mempty
 
 -- main = go "foo" (> (5 :: Int))
 
-main = goSep "foo" 1.5 (\ (x :: Int) -> ((x+3,x-3,x*3,-x),(x==3,x>3)))
+-- main = goSep "foo" 1.5 (\ (x :: Int) -> ((x+3,x-3,x*3,-x),(x==3,x>3)))
 
 -- main = go "foo" (\ (x :: Int) -> (x+3,x==3))
 
