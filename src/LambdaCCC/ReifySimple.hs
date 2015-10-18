@@ -22,12 +22,14 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.ReifySimple
-  ( reifyMisc, isPrimitive, lamName, repName --, ifName
+  ( reifyMisc, lamName, repName --, ifName
   , inReify -- TEMP
   , reifyEval, reifyIf, reifyDelay, reifyLoop, reifyBottom
   , reifyRepMeth, reifyApp, reifyLam, reifyMonoLet
   , reifyTupCase, reifyLit, reifyPrim, reifyStdMeth
   , reifyOops
+  , isPrimOrRepMeth, isPrimitiveOp, isPrimitiveTy
+  , observing
   ) where
 
   -- TODO: export externals instead, and use in Monomorphize
@@ -279,13 +281,13 @@ stdMeths = M.fromList $ concatMap ops
     , ( "GHC.Classes","Ord"
       , [("<","LtP"),(">","GtP"),("<=","LeP"),(">=","GeP")])
     , ( "GHC.Num"
-      ,"Num", [("negate","NegateP"),("+","AddP"),("-","SubP"),("*","MulP")])
+      , "Num", [("negate","NegateP"),("+","AddP"),("-","SubP"),("*","MulP")])
     ]
  where
-   op modu cls stdMeth ctor =
-     ( modu++"."++stdMeth
+   op modu cls meth ctor =
+     ( modu++"."++meth
      , ("Circat.Prim.Circuit"++cls, "Circat.Prim."++ctor))
-   ops (modu,cls,meths) = [op modu cls stdMeth ctor | (stdMeth,ctor) <- meths]
+   ops (modu,cls,meths) = [op modu cls meth ctor | (meth,ctor) <- meths]
 
 -- Reify standard methods, given type and dictionary argument.
 reifyStdMeth :: ReExpr
@@ -359,8 +361,7 @@ reifyLit :: ReExpr
 reifyLit =
   unReify >>>
   do ty <- exprTypeT
-     guardMsg (any ($ ty) [isUnitTy,isBoolTy,isIntTy,isDoubleTy])
-       "isLitT: must have type (), Bool, or Int"
+     guardMsg (isPrimitiveTy ty) "reifyLit: must have primitive type"
      void callDataConT
      e        <- idR
      hasLitD  <- simpleDict (primName "HasLit") $* ty
@@ -447,8 +448,37 @@ primMap = M.fromList
 -- maybe a transformation that succeeds only for primitives, since we'll have to
 -- look up IDs.
 
-isPrimitive :: Var -> Bool
-isPrimitive (fqVarName -> name) =
+isPrimitiveName :: String -> Bool
+isPrimitiveName name =
      name `M.member` primMap
   || name `M.member` stdMeths
-  || isRepMeth name
+  -- || isRepMeth name
+
+isPrimOrRepMeth :: Var -> Type -> Bool
+isPrimOrRepMeth (fqVarName -> name) ty =
+  isRepMeth name || (isPrimitiveName name && isPrimitiveTy ty)
+
+isPrimitiveOp :: Var -> Bool
+isPrimitiveOp (fqVarName -> name) =
+     name `M.member` primMap
+  || name `M.member` stdMeths
+  -- || isRepMeth name
+
+-- isPrimitiveOp :: Var -> Type -> Bool
+-- isPrimitiveOp (fqVarName -> name) ty =
+--      name `M.member` primMap
+--   || (name `M.member` stdMeths && isPrimitiveTy ty)
+--   || isRepMeth name
+
+-- isPrimitiveOp :: Var -> [CoreExpr] -> Bool
+-- isPrimitiveOp (fqVarName -> name) args =
+--      name `M.member` primMap
+--   || (name `M.member` stdMeths && tyArg1 args)
+--   || isRepMeth name
+--  where
+--    tyArg1 [] = True  -- test hack
+--    tyArg1 (Type ty : _) = isPrimitiveTy ty
+--    tyArg1 _ = False
+
+isPrimitiveTy :: Type -> Bool
+isPrimitiveTy ty = any ($ ty) [isUnitTy,isBoolTy,isIntTy,isDoubleTy]
