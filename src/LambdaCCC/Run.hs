@@ -82,10 +82,10 @@ goNew name = goNew' name []
 -- Diagram and Verilog
 outGV :: String -> [Attr] -> UU -> IO ()
 outGV name attrs circ =
-  do outV
-     outD ("pdf","")
+  do outD ("pdf","")
      -- outD ("svg","") 
      -- outD ("png","-Gdpi=200")
+     outV
  where
    g       = mkGraph name circ
    outD ss = outDotG ss attrs g
