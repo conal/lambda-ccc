@@ -41,7 +41,7 @@ import HERMIT.Plugin (hermitPlugin,pass,interactive)
 -- import HERMIT.Name (HermitName)
 
 import HERMIT.Extras hiding (findTyConT)
-import qualified HERMIT.Extras as Ex
+-- import qualified HERMIT.Extras as Ex
 
 -- import LambdaCCC.CoerceEncode
 import LambdaCCC.ReifySimple
@@ -50,8 +50,10 @@ import LambdaCCC.ReifySimple
     Observing
 --------------------------------------------------------------------}
 
-observing :: Ex.Observing
-observing = False
+-- For now, import from ReifySimple
+
+-- observing :: Ex.Observing
+-- observing = True
 
 -- #define LintDie
 
@@ -155,21 +157,35 @@ filterToBool t = (t >> return True) <+ return False
     Monomorphization
 --------------------------------------------------------------------}
 
+#if 0
 -- Unfold a name applied to some type and/or dictionary arguments
-specializeTyDict :: ReExpr
-specializeTyDict =
+specializeTyDict' :: ReExpr
+specializeTyDict' =
     tryR simplifyAll
   . unfoldPredR okay
   . rejectR (dictResultTy . exprType)
   . rejectR isType
  where
    okay = -- const $ liftA2 (&&) (not.null) (all isTyOrDict)
-          -- (\ v args -> isGlobalId v && not (isPrimitive v) && all isTyOrDict args)
-          (\ v args -> not (isPrimitive v)
+          -- (\ v args -> isGlobalId v && not (isPrimitiveOp v) && all isTyOrDict args)
+          (\ v args -> not (isPrimitiveOp v)
                     && all isTyOrDict args
                     && (isGlobalId v || not (null args))
           )
           -- const $ all isTyOrDict
+#endif
+
+specializeTyDict :: ReExpr
+specializeTyDict = tryR simplifyAll . unfoldPredR okay
+                 . rejectR (dictResultTy . exprType)
+                 . rejectR isType
+ where
+   okay v [Type ty] = not (isPrimOrRepMeth v ty)
+                      -- not (isRepMeth v || (isPrimitiveOp v && isPrimitiveTy ty))
+   -- what's this one for? If I use it, take care with repr/abst
+   -- okay v []        = isGlobalId v
+   okay _ _         = False
+
 
 #if 1
 dictResultTy :: Type -> Bool
@@ -276,6 +292,7 @@ mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
                 , nowatchR "caseReduceUnfoldsDictR" caseReduceUnfoldsDictR
                 , caseDefaultR
                 , reprAbstR
+                , watchR "doubleFromLitInteger" doubleFromLitInteger
                 ]
 
 -- 2014-10-03: I moved rewriteIf from mySimplifiers to simplifyAll''. It was kicking in
@@ -393,6 +410,13 @@ letSubstOneOccR = oneOccT >> letNonRecSubstR
 -- standardizeR' :: (Standardizable a, SyntaxEq a, Injection a CoreTC) => RewriteH a
 -- standardizeR' = watchR "standardizeR" $
 --                 standardizeR
+
+doubleFromLitInteger :: ReExpr
+doubleFromLitInteger =
+  do App (Var (fqVarName -> "GHC.Float.$fNumDouble_$cfromInteger")) arg <- idR
+     Lit (LitInteger i _intTy) <- tryR inlineR $* arg
+     dcon <- findIdT "GHC.Types.D#"
+     return $ App (Var dcon) (Lit (MachDouble (fromIntegral i)))
 
 {--------------------------------------------------------------------
     Yet another go at standardizing types
@@ -652,4 +676,5 @@ externals =
     , externC "case-wild" caseWildR "case of wild ==> let (doesn't preserve evaluation)"
     , externC "cast-cast" castCastR "..."
     , externC "cast-transitive-univ" castTransitiveUnivR "..."
+    , externC "doubleFromLitInteger" doubleFromLitInteger "..."
     ]
