@@ -36,7 +36,6 @@ import HERMIT.Core (CoreDef(..))
 import HERMIT.Dictionary hiding (externals)
 import HERMIT.External (External,external)
 import HERMIT.GHC
-import TcType (isDoubleTy)  -- Doesn't seem to be coming in with HERMIT.GHC.
 import HERMIT.Kure
 import HERMIT.Plugin (hermitPlugin,pass,interactive)
 -- import HERMIT.Name (HermitName)
@@ -398,9 +397,6 @@ letSubstOneOccR = oneOccT >> letNonRecSubstR
 {--------------------------------------------------------------------
     Yet another go at standardizing types
 --------------------------------------------------------------------}
-
-isStandardTy :: Type -> Bool
-isStandardTy t = any ($ t) [isUnitTy,isBoolTy,isIntTy,isPairTy,isDoubleTy]
 
 closedType :: Type -> Bool
 closedType = isEmptyVarSet . tyVarsOfType
