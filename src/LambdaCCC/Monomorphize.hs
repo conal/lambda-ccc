@@ -31,6 +31,8 @@ import Data.Functor ((<$>),void)
 import Control.Applicative ((<*>))
 -- import Control.Monad (unless)
 import Data.List (isPrefixOf)
+import qualified Data.Map as M
+import Data.String (fromString)
 
 import HERMIT.Core (CoreDef(..))
 import HERMIT.Dictionary hiding (externals)
@@ -176,7 +178,8 @@ specializeTyDict' =
 #endif
 
 specializeTyDict :: ReExpr
-specializeTyDict = tryR simplifyAll . unfoldPredR okay
+specializeTyDict = tryR simplifyAll
+                 . unfoldPredR okay
                  . rejectR (dictResultTy . exprType)
                  . rejectR isType
  where
@@ -292,7 +295,7 @@ mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
                 , nowatchR "caseReduceUnfoldsDictR" caseReduceUnfoldsDictR
                 , caseDefaultR
                 , reprAbstR
-                , watchR "doubleFromLitInteger" doubleFromLitInteger
+                , watchR "fromLitInteger" fromLitInteger
                 ]
 
 -- 2014-10-03: I moved rewriteIf from mySimplifiers to simplifyAll''. It was kicking in
@@ -411,12 +414,21 @@ letSubstOneOccR = oneOccT >> letNonRecSubstR
 -- standardizeR' = watchR "standardizeR" $
 --                 standardizeR
 
-doubleFromLitInteger :: ReExpr
-doubleFromLitInteger =
-  do App (Var (fqVarName -> "GHC.Float.$fNumDouble_$cfromInteger")) arg <- idR
-     Lit (LitInteger i _intTy) <- tryR inlineR $* arg
-     dcon <- findIdT "GHC.Types.D#"
-     return $ App (Var dcon) (Lit (MachDouble (fromIntegral i)))
+fromLitInteger :: ReExpr
+fromLitInteger =
+  do App (Var v) arg <- idR
+     Lit (LitInteger i ity) <- tryR inlineR $* arg
+     Just (ctor,toLit) <- return (M.lookup (fqVarName v) (conversions ity))
+     dcon <- findIdT (fromString ctor)
+     return $ App (Var dcon) (Lit (toLit i))
+ where
+   conversions :: Type -> M.Map String (String, Integer -> Literal)
+   conversions _ity = M.fromList (decorate <$> plains)
+    where
+      plains = [("Float","Double","D#",MachDouble . fromInteger)
+               ,("Num","Int","I#",MachInt . fromInteger)]
+      decorate (modu,p,q,toLit) = ("GHC."++modu++".$fNum"++p++"_$cfromInteger"
+                                  ,("GHC.Types."++q,toLit))
 
 {--------------------------------------------------------------------
     Yet another go at standardizing types
@@ -676,5 +688,5 @@ externals =
     , externC "case-wild" caseWildR "case of wild ==> let (doesn't preserve evaluation)"
     , externC "cast-cast" castCastR "..."
     , externC "cast-transitive-univ" castTransitiveUnivR "..."
-    , externC "doubleFromLitInteger" doubleFromLitInteger "..."
+    , externC "fromLitInteger" fromLitInteger "..."
     ]
