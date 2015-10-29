@@ -262,14 +262,20 @@ RT.B         :: Pair (RTree n a) -> RTree (S n)   a
 inTest :: String -> IO ()
 inTest cmd = systemSuccess ("cd ../test; " ++ cmd) -- (I run ghci in ../src)
 
+mk :: String -> IO ()
+mk s = inTest ("make " ++ s)
+
 doit :: IO ()
-doit = inTest "make doit"
+doit = mk "doit"
 
 reify :: IO ()
-reify = inTest "make reify"
+reify = mk "reify"
+
+reifyDone :: IO ()
+reifyDone = mk "reify-done"
 
 noReify :: IO ()
-noReify = inTest "make no-reify"
+noReify = mk "no-reify"
 
 make :: IO ()
 make = systemSuccess "cd ../..; make"
@@ -310,7 +316,7 @@ fft_r2_dit'  Zero    = id
 fft_r2_dit' (Succ n) = RT.toB . P.inP (uncurry (+) &&& uncurry (-)) . P.secondP (liftA2 (*) (phasor n)) . fmap (fft_r2_dit' n) . RT.bottomSplit
 
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
-main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Complex Double))
+-- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Complex Double))
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex PrettyDouble) -> RTree N1 (Complex PrettyDouble))
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Int) -> RTree N2 (Complex Int))
 -- main = goSep "fft_r2_dit" 1 (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
@@ -416,7 +422,7 @@ main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Com
 
 -- main = go "dot-22" ((\ ((a,b),(c,d)) -> a*c + b*d) :: ((Int,Int),(Int,Int)) -> Int)
 
--- main = go "tdot-4" (dot :: RTree N4 (Int,Int) -> Int)
+-- main = go "tdot-2" (dot :: RTree N2 (Int,Int) -> Int)
 
 -- main = go "tpdot-4" (dot'' :: RTree N4 (Pair Int) -> Int)
 
@@ -425,7 +431,7 @@ main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Com
 
 -- main = go "prod1" (prod :: RTree N1 (Int,Int) -> RTree N1 Int)
 
--- main = go "dot5" (dot :: RTree N5 (Int,Int) -> Int)
+-- main = go "dot3" (dot :: RTree N3 (Int,Int) -> Int)
 
 -- main = go "squares2" (squares :: Unop (RTree N2 Int))
 
@@ -510,7 +516,9 @@ main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Com
 
 -- main = go "lsums-v5" (lsums :: Vec N5 Int -> (Vec N5 Int, Int))
 
--- main = go "lsums-rt2" (lsums :: RTree N2 Int -> (RTree N2 Int, Int))
+main = go "lsums-rt2" (lsums :: RTree N2 Int -> (RTree N2 Int, Int))
+
+-- main = go "foo" (0 :: Int)
 
 -- main = go "lsums-lt2" (lsums :: LTree N2 Int -> (LTree N2 Int, Int))
 
@@ -1664,14 +1672,19 @@ foldMap' f = foldl (\ m a -> mappend (f a) m) mempty
 
 -- main = go "foo" ((+) :: Binop Int)
 
--- phasor :: (IsNat n, RealFloat a, Enum a) => Nat n -> RTree n (Complex a)
--- phasor n = scanlTEx (*) 1 (pure phaseDelta)
---     where phaseDelta = cis ((-pi) / 2 ** natToZ n)
-
--- main = go "foo" (phasor (nat :: Nat N1))
-
 -- main = go "foo" (1 :: Complex Double)
 
 -- main = go "foo" (fromInteger 1 :: Double)
 
+-- main = go "foo" (fromInteger 1 :: PrettyDouble)
+
 -- main = go "foo" (fromIntegral :: Int -> Double)
+
+-- phasor :: (IsNat n, RealFloat a, Enum a) => Nat n -> RTree n (Complex a)
+-- phasor n = scanlTEx (*) 1 (pure phaseDelta)
+--  where
+--    phaseDelta = cis ((-pi) / (2 ** natToZ n))
+
+-- main = go "foo" (phasor (nat :: Nat N1))
+
+-- main = go "foo" (natToZ (nat :: Nat N1) :: Int)
