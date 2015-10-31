@@ -11,6 +11,7 @@
 
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 module Main where
 
@@ -20,35 +21,48 @@ import Control.Applicative
 import Control.Arrow
 import Control.Monad (forM_, unless)
 import Data.Complex
-import Data.Foldable (sum)
+import Data.Foldable (Foldable, sum, foldl')
 import Data.Newtypes.PrettyDouble
 import System.Exit (exitFailure)
-import TypeUnary.Nat (IsNat, natToZ, Nat(..), nat, N2, N3, N4, N5)  -- , N6)
+import TypeUnary.Nat (IsNat, Nat(..), nat, N2, N3, N4, N5)  -- , N6)
 
 -- import Test.QuickCheck (choose, vectorOf, elements, collect)
 import Test.QuickCheck (choose, vectorOf)
 import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.All (quickCheckAll)
 
-import Circat.Scan (scanlTEx)
+import Circat.Scan (lproducts, LScan)
 import qualified Circat.Pair as P
 import qualified Circat.RTree as RT
 import Circat.RTree (bottomSplit)
 
 type RTree = RT.Tree
 
--- Phasor, as a function of tree depth.
-phasor :: (IsNat n, RealFloat a, Enum a) => Nat n -> RTree n (Complex a)
-phasor n = scanlTEx (*) 1 (pure phaseDelta)
-    where phaseDelta = cis ((-pi) / 2 ** natToZ n)
+-- FFT, as a class
+--   The LScan constraint comes from the use of 'lproducts', in 'phasor'.
+class (LScan f) => FFT f where
+    fft  :: (RealFloat a) => f (Complex a) -> f (Complex a)
 
--- Radix-2, DIT FFT
-fft_r2_dit :: (IsNat n, RealFloat a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
-fft_r2_dit = fft_r2_dit' nat
+instance IsNat n => FFT (RTree n) where
+    fft = fft' nat
+        where   fft' :: (RealFloat a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
+                fft' Zero     = id
+                fft' (Succ n) = inDIT $ fftP . P.secondP addPhase . fmap (fft' n)
+                    where   inDIT g  = RT.toB . g . bottomSplit
+                            fftP     = P.inP (uncurry (+) &&& uncurry (-))
+                            addPhase = liftA2 (*) id phasor
 
-fft_r2_dit' :: (RealFloat a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
-fft_r2_dit'  Zero    = id
-fft_r2_dit' (Succ n) = RT.toB . P.inP (uncurry (+) &&& uncurry (-)) . P.secondP (liftA2 (*) (phasor n)) . fmap (fft_r2_dit' n) . bottomSplit
+-- Phasor, as a general function on LScans.
+--   Gives the "length" (i.e. - number of elements in) of a Foldable.
+--   (Soon, to be provided by the Foldable class, as "length".)
+flen :: (Foldable f) => f a -> Int
+flen = foldl' (flip ((+) . const 1)) 0
+
+--   Given a Foldable Applicative LScan, construct its matching phasor.
+phasor :: (Applicative f, Foldable f, LScan f, RealFloat b) => f a -> f (Complex b)
+phasor f = fst $ lproducts (pure phaseDelta)
+    where   phaseDelta = cis ((-pi) / (fromIntegral n))
+            n          = flen f
 
 -- Test config.
 realData :: [[PrettyDouble]]
@@ -112,19 +126,19 @@ instance Arbitrary FFTTestVal where
         return $ FFTTestVal zs
 
 prop_fft_test_N2 :: FFTTestVal -> Bool
-prop_fft_test_N2 testVal = fft_r2_dit (myTree2 zs) == (RT.fromList $ dft zs)
+prop_fft_test_N2 testVal = fft (myTree2 zs) == (RT.fromList $ dft zs)
     where zs = take 4 $ getVal testVal
 
 prop_fft_test_N3 :: FFTTestVal -> Bool
-prop_fft_test_N3 testVal = fft_r2_dit (myTree3 zs) == (RT.fromList $ dft zs)
+prop_fft_test_N3 testVal = fft (myTree3 zs) == (RT.fromList $ dft zs)
     where zs = take 8 $ getVal testVal
 
 prop_fft_test_N4 :: FFTTestVal -> Bool
-prop_fft_test_N4 testVal = fft_r2_dit (myTree4 zs) == (RT.fromList $ dft zs)
+prop_fft_test_N4 testVal = fft (myTree4 zs) == (RT.fromList $ dft zs)
     where zs = take 16 $ getVal testVal
 
 prop_fft_test_N5 :: FFTTestVal -> Bool
-prop_fft_test_N5 testVal = fft_r2_dit (myTree5 zs) == (RT.fromList $ dft zs)
+prop_fft_test_N5 testVal = fft (myTree5 zs) == (RT.fromList $ dft zs)
     where zs = take 32 $ getVal testVal
 
 -- Test definitions & choice
@@ -136,7 +150,7 @@ basicTest = do
         putStr "Expected output: "
         print $ dft x
         putStr "Actual output:   "
-        print $ fft_r2_dit $ myTree2 x
+        print $ fft $ myTree2 x
         )
 
 -- This weirdness is required, as of GHC 7.8.
