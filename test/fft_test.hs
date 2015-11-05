@@ -61,7 +61,7 @@ flen = foldl' (flip ((+) . const 1)) 0
 --   Given a Foldable Applicative LScan, construct its matching phasor.
 phasor :: (Applicative f, Foldable f, LScan f, RealFloat b) => f a -> f (Complex b)
 phasor f = fst $ lproducts (pure phaseDelta)
-    where   phaseDelta = cis ((-pi) / (fromIntegral n))
+    where   phaseDelta = cis ((-pi) / fromIntegral n)
             n          = flen f
 
 -- Test config.
@@ -121,37 +121,36 @@ newtype FFTTestVal = FFTTestVal {
 } deriving (Show)
 instance Arbitrary FFTTestVal where
     arbitrary = do
-        xs <- vectorOf 32 $ choose ((-1.0::Double), 1.0)
+        xs <- vectorOf 32 $ choose (-1.0::Double, 1.0)
         let zs = map ((:+ 0) . PrettyDouble) xs
         return $ FFTTestVal zs
 
 prop_fft_test_N2 :: FFTTestVal -> Bool
-prop_fft_test_N2 testVal = fft (myTree2 zs) == (RT.fromList $ dft zs)
+prop_fft_test_N2 testVal = fft (myTree2 zs) == RT.fromList (dft zs)
     where zs = take 4 $ getVal testVal
 
 prop_fft_test_N3 :: FFTTestVal -> Bool
-prop_fft_test_N3 testVal = fft (myTree3 zs) == (RT.fromList $ dft zs)
+prop_fft_test_N3 testVal = fft (myTree3 zs) == RT.fromList (dft zs)
     where zs = take 8 $ getVal testVal
 
 prop_fft_test_N4 :: FFTTestVal -> Bool
-prop_fft_test_N4 testVal = fft (myTree4 zs) == (RT.fromList $ dft zs)
+prop_fft_test_N4 testVal = fft (myTree4 zs) == RT.fromList (dft zs)
     where zs = take 16 $ getVal testVal
 
 prop_fft_test_N5 :: FFTTestVal -> Bool
-prop_fft_test_N5 testVal = fft (myTree5 zs) == (RT.fromList $ dft zs)
+prop_fft_test_N5 testVal = fft (myTree5 zs) == RT.fromList (dft zs)
     where zs = take 32 $ getVal testVal
 
 -- Test definitions & choice
 basicTest :: IO ()
-basicTest = do
-    forM_ complexData (\x -> do
-        putStr "\nTesting input: "
-        print x
-        putStr "Expected output: "
-        print $ dft x
-        putStr "Actual output:   "
-        print $ fft $ myTree2 x
-        )
+basicTest = forM_ complexData (\x -> do
+                putStr "\nTesting input: "
+                print x
+                putStr "Expected output: "
+                print $ dft x
+                putStr "Actual output:   "
+                print $ fft $ myTree2 x
+                )
 
 -- This weirdness is required, as of GHC 7.8.
 return []
