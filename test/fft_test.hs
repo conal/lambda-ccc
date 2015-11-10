@@ -12,6 +12,8 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Main where
 
@@ -39,30 +41,30 @@ import Circat.RTree (bottomSplit)
 type RTree = RT.Tree
 
 -- FFT, as a class
---   The LScan constraint comes from the use of 'lproducts', in 'phasor'.
-class (LScan f) => FFT f where
-    fft  :: (RealFloat a) => f (Complex a) -> f (Complex a)
+--   The LScan constraint comes from the use of 'lproducts', in 'addPhase'.
+class (Applicative f, Foldable f, LScan f, RealFloat a, Num (f (Complex a))) => FFT f a where
+    -- Computes the FFT of a functor.
+    fft  :: f (Complex a) -> f (Complex a)
 
-instance IsNat n => FFT (RTree n) where
+    -- Adds the proper phase adjustments to a functor.
+    addPhase :: f (Complex a) -> f (Complex a)
+    addPhase = liftA2 (*) id phasor
+      where phasor f = fst $ lproducts (pure phaseDelta)
+              where phaseDelta = cis ((-pi) / fromIntegral n)
+                    n          = flen f
+
+instance (IsNat n, RealFloat a) => FFT (RTree n) a where
     fft = fft' nat
         where   fft' :: (RealFloat a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
                 fft' Zero     = id
                 fft' (Succ n) = inDIT $ fftP . P.secondP addPhase . fmap (fft' n)
                     where   inDIT g  = RT.toB . g . bottomSplit
                             fftP     = P.inP (uncurry (+) &&& uncurry (-))
-                            addPhase = liftA2 (*) id phasor
 
--- Phasor, as a general function on LScans.
---   Gives the "length" (i.e. - number of elements in) of a Foldable.
---   (Soon, to be provided by the Foldable class, as "length".)
+-- Gives the "length" (i.e. - number of elements in) of a Foldable.
+-- (Soon, to be provided by the Foldable class, as "length".)
 flen :: (Foldable f) => f a -> Int
 flen = foldl' (flip ((+) . const 1)) 0
-
---   Given a Foldable Applicative LScan, construct its matching phasor.
-phasor :: (Applicative f, Foldable f, LScan f, RealFloat b) => f a -> f (Complex b)
-phasor f = fst $ lproducts (pure phaseDelta)
-    where   phaseDelta = cis ((-pi) / fromIntegral n)
-            n          = flen f
 
 -- Test config.
 realData :: [[PrettyDouble]]
