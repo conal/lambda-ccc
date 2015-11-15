@@ -14,6 +14,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Main where
 
@@ -42,24 +43,28 @@ type RTree = RT.Tree
 
 -- FFT, as a class
 --   The LScan constraint comes from the use of 'lproducts', in 'addPhase'.
-class (Applicative f, Foldable f, LScan f, RealFloat a, Num (f (Complex a))) => FFT f a where
-    -- Computes the FFT of a functor.
-    fft  :: f (Complex a) -> f (Complex a)
+class (Applicative f, Foldable f, LScan f, Num (f a)) => FFT f a where
+    fft  :: f a -> f a  -- Computes the FFT of a functor.
 
-    -- Adds the proper phase adjustments to a functor.
-    addPhase :: f (Complex a) -> f (Complex a)
-    addPhase = liftA2 (*) id phasor
-      where phasor f = fst $ lproducts (pure phaseDelta)
-              where phaseDelta = cis ((-pi) / fromIntegral n)
-                    n          = flen f
+-- Note that this definition of the FFT instance for Pair assumes DIT.
+-- How can we eliminate this assumption and make this more general?
+instance (RealFloat a, FFT f (Complex a)) => FFT P.Pair (f (Complex a)) where
+    fft = P.inP (uncurry (+) &&& uncurry (-)) . P.secondP addPhase . fmap fft
 
-instance (IsNat n, RealFloat a) => FFT (RTree n) a where
+instance (IsNat n, RealFloat a) => FFT (RTree n) (Complex a) where
     fft = fft' nat
         where   fft' :: (RealFloat a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
                 fft' Zero     = id
-                fft' (Succ n) = inDIT $ fftP . P.secondP addPhase . fmap (fft' n)
+                fft' (Succ _) = inDIT fft
                     where   inDIT g  = RT.toB . g . bottomSplit
-                            fftP     = P.inP (uncurry (+) &&& uncurry (-))
+
+-- Adds the proper phase adjustments to a functor containing Complex RealFloats,
+-- and instancing Num.
+addPhase :: (Applicative f, Foldable f, LScan f, RealFloat a, Num (f (Complex a))) => f (Complex a) -> f (Complex a)
+addPhase = liftA2 (*) id phasor
+  where phasor f = fst $ lproducts (pure phaseDelta)
+          where phaseDelta = cis ((-pi) / fromIntegral n)
+                n          = flen f
 
 -- Gives the "length" (i.e. - number of elements in) of a Foldable.
 -- (Soon, to be provided by the Foldable class, as "length".)
