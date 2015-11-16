@@ -5,9 +5,32 @@
 --
 -- Copyright (c) 2015 David Banas; all rights reserved World wide.
 --
--- I'm waiting for Conal to find time to look into my latest non-termination
--- failure through his compiler. While I do, I'm attempting, here, to verify
--- the computational correctness of my current FFT candidate.
+-- NOTE: I have moved general FFT expression development up to the
+--       top level of the TreeViz project, into the fft-ccc.hs file.
+--
+--       Please, conduct all future explorations in general FFT
+--       expression, using Conal's machinery, which aren't necessarily
+--       intended to be compilable, but rather as a less constrained
+--       exploration of FFT expression alternatives, there.
+--
+--       I'm making this change of venue, for two reasons:
+--
+--       1) I find this file very useful, specifically, as a staging
+--          area for new test cases, intended for insertion into Conal's
+--          TreeTest.hs file, where they will actually be compiled
+--          by his machinery.
+--
+--       2) I'm realizing that a less constrained (by the requirements
+--          for compilation) vehicle for general exploration of more
+--          abstract, higher level expressions of the FFT operation,
+--          using Conal's data types and there associated functions, as
+--          well as others (potentially) would be very useful.
+--
+--       3) I'd like to start a wiki page, which would track the history
+--          of this more generic development of FFT expression, and the
+--          TreeViz project seems a natural base for such an effort,
+--          desparately needing a wiki of its own to narrate the history
+--          of the effort to search for more efficient FFT implementations.
 
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TemplateHaskell #-}
