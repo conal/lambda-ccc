@@ -32,7 +32,7 @@ Library
                   , kure >= 2.16.0
                   , hermit >= 0.5.0.1
                   , ty >= 0.1.5
-                  , type-unary >= 0.2.16
+                  , type-unary >= 0.2.21
                   , circat >= 0.6.3
                   , hermit-extras >= 0.2.1
                   , MemoTrie
