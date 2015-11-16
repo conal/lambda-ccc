@@ -42,13 +42,13 @@ import Circat.RTree (bottomSplit)
 type RTree = RT.Tree
 
 -- FFT, as a class
---   The LScan constraint comes from the use of 'lproducts', in 'addPhase'.
-class (Applicative f, Foldable f, LScan f, Num (f a)) => FFT f a where
+-- (The LScan constraint comes from the use of 'lproducts', in 'addPhase'.)
+class (LScan f) => FFT f a where
     fft  :: f a -> f a  -- Computes the FFT of a functor.
 
 -- Note that this definition of the FFT instance for Pair assumes DIT.
 -- How can we eliminate this assumption and make this more general?
-instance (RealFloat a, FFT f (Complex a)) => FFT P.Pair (f (Complex a)) where
+instance (RealFloat a, Applicative f, Foldable f, Num (f (Complex a)), FFT f (Complex a)) => FFT P.Pair (f (Complex a)) where
     fft = P.inP (uncurry (+) &&& uncurry (-)) . P.secondP addPhase . fmap fft
 
 instance (IsNat n, RealFloat a) => FFT (RTree n) (Complex a) where
