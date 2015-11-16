@@ -5,13 +5,39 @@
 --
 -- Copyright (c) 2015 David Banas; all rights reserved World wide.
 --
--- I'm waiting for Conal to find time to look into my latest non-termination
--- failure through his compiler. While I do, I'm attempting, here, to verify
--- the computational correctness of my current FFT candidate.
+-- NOTE: I have moved general FFT expression development up to the
+--       top level of the TreeViz project, into the fft-ccc.hs file.
+--
+--       Please, conduct all future explorations in general FFT
+--       expression, using Conal's machinery, which aren't necessarily
+--       intended to be compilable, but rather as a less constrained
+--       exploration of FFT expression alternatives, there.
+--
+--       I'm making this change of venue, for two reasons:
+--
+--       1) I find this file very useful, specifically, as a staging
+--          area for new test cases, intended for insertion into Conal's
+--          TreeTest.hs file, where they will actually be compiled
+--          by his machinery.
+--
+--       2) I'm realizing that a less constrained (by the requirements
+--          for compilation) vehicle for general exploration of more
+--          abstract, higher level expressions of the FFT operation,
+--          using Conal's data types and there associated functions, as
+--          well as others (potentially) would be very useful.
+--
+--       3) I'd like to start a wiki page, which would track the history
+--          of this more generic development of FFT expression, and the
+--          TreeViz project seems a natural base for such an effort,
+--          desparately needing a wiki of its own to narrate the history
+--          of the effort to search for more efficient FFT implementations.
 
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Main where
 
@@ -39,30 +65,34 @@ import Circat.RTree (bottomSplit)
 type RTree = RT.Tree
 
 -- FFT, as a class
---   The LScan constraint comes from the use of 'lproducts', in 'phasor'.
-class (LScan f) => FFT f where
-    fft  :: (RealFloat a) => f (Complex a) -> f (Complex a)
+-- (The LScan constraint comes from the use of 'lproducts', in 'addPhase'.)
+class (LScan f) => FFT f a where
+    fft  :: f a -> f a  -- Computes the FFT of a functor.
 
-instance IsNat n => FFT (RTree n) where
+-- Note that this definition of the FFT instance for Pair assumes DIT.
+-- How can we eliminate this assumption and make this more general?
+instance (RealFloat a, Applicative f, Foldable f, Num (f (Complex a)), FFT f (Complex a)) => FFT P.Pair (f (Complex a)) where
+    fft = P.inP (uncurry (+) &&& uncurry (-)) . P.secondP addPhase . fmap fft
+
+instance (IsNat n, RealFloat a) => FFT (RTree n) (Complex a) where
     fft = fft' nat
         where   fft' :: (RealFloat a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
                 fft' Zero     = id
-                fft' (Succ n) = inDIT $ fftP . P.secondP addPhase . fmap (fft' n)
+                fft' (Succ _) = inDIT fft
                     where   inDIT g  = RT.toB . g . bottomSplit
-                            fftP     = P.inP (uncurry (+) &&& uncurry (-))
-                            addPhase = liftA2 (*) id phasor
 
--- Phasor, as a general function on LScans.
---   Gives the "length" (i.e. - number of elements in) of a Foldable.
---   (Soon, to be provided by the Foldable class, as "length".)
+-- Adds the proper phase adjustments to a functor containing Complex RealFloats,
+-- and instancing Num.
+addPhase :: (Applicative f, Foldable f, LScan f, RealFloat a, Num (f (Complex a))) => f (Complex a) -> f (Complex a)
+addPhase = liftA2 (*) id phasor
+  where phasor f = fst $ lproducts (pure phaseDelta)
+          where phaseDelta = cis ((-pi) / fromIntegral n)
+                n          = flen f
+
+-- Gives the "length" (i.e. - number of elements in) of a Foldable.
+-- (Soon, to be provided by the Foldable class, as "length".)
 flen :: (Foldable f) => f a -> Int
 flen = foldl' (flip ((+) . const 1)) 0
-
---   Given a Foldable Applicative LScan, construct its matching phasor.
-phasor :: (Applicative f, Foldable f, LScan f, RealFloat b) => f a -> f (Complex b)
-phasor f = fst $ lproducts (pure phaseDelta)
-    where   phaseDelta = cis ((-pi) / (fromIntegral n))
-            n          = flen f
 
 -- Test config.
 realData :: [[PrettyDouble]]
@@ -121,37 +151,36 @@ newtype FFTTestVal = FFTTestVal {
 } deriving (Show)
 instance Arbitrary FFTTestVal where
     arbitrary = do
-        xs <- vectorOf 32 $ choose ((-1.0::Double), 1.0)
+        xs <- vectorOf 32 $ choose (-1.0::Double, 1.0)
         let zs = map ((:+ 0) . PrettyDouble) xs
         return $ FFTTestVal zs
 
 prop_fft_test_N2 :: FFTTestVal -> Bool
-prop_fft_test_N2 testVal = fft (myTree2 zs) == (RT.fromList $ dft zs)
+prop_fft_test_N2 testVal = fft (myTree2 zs) == RT.fromList (dft zs)
     where zs = take 4 $ getVal testVal
 
 prop_fft_test_N3 :: FFTTestVal -> Bool
-prop_fft_test_N3 testVal = fft (myTree3 zs) == (RT.fromList $ dft zs)
+prop_fft_test_N3 testVal = fft (myTree3 zs) == RT.fromList (dft zs)
     where zs = take 8 $ getVal testVal
 
 prop_fft_test_N4 :: FFTTestVal -> Bool
-prop_fft_test_N4 testVal = fft (myTree4 zs) == (RT.fromList $ dft zs)
+prop_fft_test_N4 testVal = fft (myTree4 zs) == RT.fromList (dft zs)
     where zs = take 16 $ getVal testVal
 
 prop_fft_test_N5 :: FFTTestVal -> Bool
-prop_fft_test_N5 testVal = fft (myTree5 zs) == (RT.fromList $ dft zs)
+prop_fft_test_N5 testVal = fft (myTree5 zs) == RT.fromList (dft zs)
     where zs = take 32 $ getVal testVal
 
 -- Test definitions & choice
 basicTest :: IO ()
-basicTest = do
-    forM_ complexData (\x -> do
-        putStr "\nTesting input: "
-        print x
-        putStr "Expected output: "
-        print $ dft x
-        putStr "Actual output:   "
-        print $ fft $ myTree2 x
-        )
+basicTest = forM_ complexData (\x -> do
+                putStr "\nTesting input: "
+                print x
+                putStr "Expected output: "
+                print $ dft x
+                putStr "Actual output:   "
+                print $ fft $ myTree2 x
+                )
 
 -- This weirdness is required, as of GHC 7.8.
 return []
