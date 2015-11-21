@@ -174,7 +174,7 @@ prop_fft_test_N5 testVal = fft (myTree5 zs) == RT.fromList (dft zs)
 -- Test definitions & choice
 basicTest :: IO ()
 basicTest = forM_ complexData (\x -> do
-                putStr "\nTesting input:   "
+                putStr "\nTesting input: "
                 print x
                 putStr "Expected output: "
                 print $ dft x
