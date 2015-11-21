@@ -47,7 +47,7 @@ import Control.Applicative
 import Control.Arrow
 import Control.Monad (forM_, unless)
 import Data.Complex
-import Data.Foldable (Foldable, sum, foldl')
+import Data.Foldable (Foldable, sum, foldl', toList)
 import Data.Newtypes.PrettyDouble
 import System.Exit (exitFailure)
 import TypeUnary.Nat (IsNat, Nat(..), nat, N2, N3, N4, N5)  -- , N6)
@@ -174,12 +174,12 @@ prop_fft_test_N5 testVal = fft (myTree5 zs) == RT.fromList (dft zs)
 -- Test definitions & choice
 basicTest :: IO ()
 basicTest = forM_ complexData (\x -> do
-                putStr "\nTesting input: "
+                putStr "\nTesting input:   "
                 print x
                 putStr "Expected output: "
                 print $ dft x
                 putStr "Actual output:   "
-                print $ fft $ myTree2 x
+                print $ toList (fft (myTree2 x))
                 )
 
 -- This weirdness is required, as of GHC 7.8.
@@ -197,4 +197,3 @@ advancedTest = do
 main :: IO ()
 -- main = basicTest
 main = advancedTest
-
