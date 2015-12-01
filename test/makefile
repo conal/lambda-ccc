@@ -26,3 +26,7 @@ dont:
 
 foo:
 	$(HERM) Foo.hss
+
+compile:
+	cd ../..; make
+
