@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, FlexibleContexts, ScopedTypeVariables #-}
+{-# LANGUAGE ConstraintKinds #-} -- for LFScan
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -29,7 +30,7 @@ import TypeUnary.Nat -- (IsNat(..))
 import TypeUnary.Vec (Vec,vec1,(<+>))
 
 import Circat.RTree
-import Circat.Scan (LScan(..),lsums)
+import Circat.Scan (LScan(..),LFScan,lsums)
 
 type Bits n = Vec n Bool
 
@@ -44,7 +45,7 @@ histogramFold :: (Foldable f, Functor f, IsNat n, Num b) =>
                  f (Bits n) -> RTree n b
 histogramFold = sum . fmap oneTree
 
-histogramScan :: (LScan f, IsNat n, Num b) =>
+histogramScan :: (LFScan f, IsNat n, Num b) =>
                  f (Bits n) -> (f (RTree n b), RTree n b)
 histogramScan = lsums . fmap oneTree
 
@@ -98,7 +99,7 @@ testHF :: (Functor f, Foldable f, IsNat n, Num b) =>
 testHF = toList . histogramFold
 
 -- Test histogramScan
-testHS :: (LScan f, Foldable f, IsNat n, Num b) =>
+testHS :: (LFScan f, Foldable f, IsNat n, Num b) =>
           f (Bits n) -> ([[b]], [b])
 testHS = first toList . (fmap toList *** toList) . histogramScan
 
