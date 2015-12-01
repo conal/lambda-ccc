@@ -54,6 +54,7 @@ import TypeUnary.TyNat
 import TypeUnary.Nat (IsNat,natToZ)
 import TypeUnary.Vec hiding (transpose,iota)
 import qualified TypeUnary.Vec as V
+import Control.Compose ((:.)(..),unO)
 
 import LambdaCCC.Misc
   (xor,boolToInt,dup,Unop,Binop,Ternop,transpose,(:*),loop,delay,Reversible(..))
@@ -73,9 +74,11 @@ import qualified Circat.RaggedTree as Ra
 import Circat.RaggedTree (TU(..), R1, R2, R3, R4, R5, R8, R11, R13)
 import Circat.Shift
 import Circat.Scan
+import Circat.FFT
 import Circat.Mealy hiding (ArrowCircuit(..))
 import qualified Circat.Mealy as Mealy
-import Circat.Circuit (GenBuses(..), GS, Attr, systemSuccess, Complex(..),cis)
+import Circat.Circuit (GenBuses(..), GS, Attr, systemSuccess)
+import Circat.Complex
 
 -- Strange -- why needed? EP won't resolve otherwise. Bug?
 import qualified LambdaCCC.Lambda
@@ -87,9 +90,9 @@ import LambdaCCC.Run
 -- Experiment for Typeable resolution in reification
 import qualified Data.Typeable
 
--- To support Dave's FFT stuff, below.
--- import Data.Complex (cis)
-import Data.Newtypes.PrettyDouble
+-- -- To support Dave's FFT stuff, below.
+-- -- import Data.Complex (cis)
+-- import Data.Newtypes.PrettyDouble
 
 {--------------------------------------------------------------------
     Misc
@@ -277,8 +280,11 @@ reifyDone = mk "reify-done"
 noReify :: IO ()
 noReify = mk "no-reify"
 
-make :: IO ()
-make = systemSuccess "cd ../..; make"
+noReifyDone :: IO ()
+noReifyDone = mk "no-reify-done"
+
+compile :: IO ()
+compile = mk "compile"
 
 dateFigureSvg :: String -> String -> IO ()
 dateFigureSvg date fig = systemSuccess (printf "cd ../test; ./date-figure-svg %s \"%s\"" date fig)
@@ -301,6 +307,7 @@ do2 = inTest "hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize DoTree.hss"
 -- Only works when compiled with HERMIT
 main :: IO ()
 
+#if 0
 -------- Dave's FFT stuff ----------------------------------------------
 -- Phasor, as a function of tree depth.
 phasor :: (IsNat n, RealFloat a, Enum a) => Nat n -> RTree n (Complex a)
@@ -316,11 +323,61 @@ fft_r2_dit'  Zero    = id
 fft_r2_dit' (Succ n) = RT.toB . P.inP (uncurry (+) &&& uncurry (-)) . P.secondP (liftA2 (*) (phasor n)) . fmap (fft_r2_dit' n) . RT.bottomSplit
 
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
-main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Complex Double))
+-- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Complex Double))
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex PrettyDouble) -> RTree N1 (Complex PrettyDouble))
 -- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Int) -> RTree N2 (Complex Int))
 -- main = goSep "fft_r2_dit" 1 (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
 -------- End Dave's FFT stuff ------------------------------------------
+#else
+
+type C = Complex Double
+
+-- main = go "foo" ()
+
+-- main = go "fft-p" (fft :: Unop (Pair C))
+
+-- main = go "fft-lt0" (fft :: LTree N0 C -> RTree N0 C)
+
+-- main = go "fft-lt2" (fft :: LTree N2 C -> RTree N2 C)
+
+-- main = go "fft-rt1" (fft :: RTree N1 C -> LTree N1 C)
+
+-- twiddles :: forall g f a. (AFS g, AFS f, RealFloat a) => g (f (Complex a))
+
+-- main = go "twiddles-rt1p" (twiddles :: RTree N1 (Pair C))
+
+main = go "foo" (size (undefined :: RTree N1 ()))
+
+-- main = go "foo" (size (undefined :: (RTree N1 :. Pair) ()))
+
+-- main = go "foo" (size (undefined :: Pair ()))
+
+-- main = go "foo" (negate :: Unop Double)
+
+-- omega n = cis (- 2 * pi / fromIntegral n)
+
+-- main = go "omega-1" (omega (1 :: Int))
+
+-- main = go "omega-2" (omega (2 :: Int))
+
+-- -- Okay
+-- main = go "foo" (\ x -> cis (-2 * pi / x) :: C)
+
+-- -- Trips over fromInteger . toInteger
+-- main = go "foo" (\ (n :: Int) -> cis (-2 * pi / fromIntegral n) :: C)
+
+-- -- Trips over fromInteger . toInteger (the definition of fromIntegral)
+-- main = go "foo" (fromIntegral :: Int -> Double)
+
+-- main = go "foo" (pure (3 :+ 4) :: RTree N2 C)
+
+-- main = go "foo" (size (undefined :: RTree N5 ()))
+
+-- main = go "foo" (exp :: C -> C)
+
+-- main = go "foo" (exp :: Double -> Double)
+
+#endif
 
 -- main = go "map-not-v5" (fmap not :: Vec N5 Bool -> Vec N5 Bool)
 
@@ -518,7 +575,7 @@ main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Com
 
 -- main = go "lsums-rt2" (lsums :: RTree N2 Int -> (RTree N2 Int, Int))
 
--- main = go "lsums-lt2" (lsums :: LTree N2 Int -> (LTree N2 Int, Int))
+-- main = go "lsums-lt3" (lsums :: LTree N3 Int -> (LTree N3 Int, Int))
 
 -- -- 2:1; 3:1.5; 4:2; 5:2.5
 -- main = goSep "lParities-rt5" (5/2) (lParities :: RTree N5 Bool -> (RTree N5 Bool, Bool))

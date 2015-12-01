@@ -67,7 +67,7 @@ import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
 -- (Observing, observeR', triesL, labeled)
 
 observing :: Ex.Observing
-observing = False
+observing = False -- True
 
 triesL :: InCoreTC t => [(String,RewriteH t)] -> RewriteH t
 triesL = Ex.triesL observing
@@ -135,10 +135,10 @@ reifyEval :: ReExpr
 reifyEval = unReify >>> unEval
 
 reifyOf :: CoreExpr -> TransformU CoreExpr
-reifyOf e = appsE reifyS [exprType e] [e]
+reifyOf e = appsE reifyS [exprType' e] [e]
 
 evalOf :: CoreExpr -> TransformU CoreExpr
-evalOf e = appsE evalS [dropEP (exprType e)] [e]
+evalOf e = appsE evalS [dropEP (exprType' e)] [e]
 
 dropEP :: Unop Type
 dropEP (TyConApp (unqualifiedName . tyConName -> name) [t]) =
@@ -152,7 +152,7 @@ reifyR = idR >>= reifyOf
 -- reify (u v) --> reify u `appP` reify v
 reifyApp :: ReExpr
 reifyApp = do App u v <- unReify
-              Just (a,b) <- constT (return (splitFunTy_maybe (exprType u)))
+              Just (a,b) <- constT (return (splitFunTy_maybe (exprType' u)))
               -- guardMsg (not (isDictTy a)) "reifyApp: dictionary argument"
               u' <- reifyOf u
               v' <- reifyOf v
@@ -180,7 +180,7 @@ reifyLam = do Lam v e <- unReify
               guardMsg (not (isTyVar v)) "reifyLam: doesn't handle type lambda"
               sub     <- varSubst [v]
               e'      <- reifyOf (sub e)
-              appsE "lamvP#" [varType v, exprType e] [varLitE v,e']
+              appsE "lamvP#" [varType v, exprType' e] [varLitE v,e']
 
 -- reifyDef introduces foo_reified binding, which the letFloatLetR then moves up
 -- one level. Typically (always?) the "foo = eval foo_reified" definition gets
@@ -195,7 +195,7 @@ reifyMonoLet =
        rhsE  <- reifyOf rhs
        sub   <- varSubst [v]
        bodyE <- reifyOf (sub body)
-       appsE "letvP#" [varType v, exprType body] [varLitE v, rhsE,bodyE]
+       appsE "letvP#" [varType v, exprType' body] [varLitE v, rhsE,bodyE]
 
 -- Placeholder
 worthLet :: CoreExpr -> TransformU Bool
@@ -266,7 +266,7 @@ reifyIf =
 reifyBottom :: ReExpr
 reifyBottom =
   do App (Var (fqVarName -> "Circat.Rep.bottom")) (Type ty) <- unReify
-     dict <- simpleDict ("Circat.Prim.CircuitBot") $* ty
+     dict <- simpleDict ("Circat.Prim.CircuitBot") $* [ty]
      appsE "bottomEP" [ty] [dict]
 
 -- TODO: Combine reifyBottom with reifyStdMeths?
@@ -280,8 +280,16 @@ stdMeths = M.fromList $ concatMap ops
       , [("==","EqP"), ("/=","NeP")])
     , ( "GHC.Classes","Ord"
       , [("<","LtP"),(">","GtP"),("<=","LeP"),(">=","GeP")])
-    , ( "GHC.Num"
-      , "Num", [("negate","NegateP"),("+","AddP"),("-","SubP"),("*","MulP")])
+    , ( "GHC.Num", "Num"
+      , [("negate","NegateP"),("+","AddP"),("-","SubP"),("*","MulP")])
+    , ( "GHC.Float", "Floating"
+      , [("exp","ExpP"),("cos","CosP"),("sin","SinP")])
+    , ( "GHC.Real", "Fractional"
+      , [("recip","RecipP"),("/","DivideP")])
+    -- FromIntegral has two parameters besides the category,
+    -- and so needs special treatment. (This one doesn't work.)
+    , ( "GHC.Real", "FromIntegral"
+      , [("fromIntegral","FromIP")])
     ]
  where
    op modu cls meth ctor =
@@ -290,14 +298,19 @@ stdMeths = M.fromList $ concatMap ops
    ops (modu,cls,meths) = [op modu cls meth ctor | (meth,ctor) <- meths]
 
 -- Reify standard methods, given type and dictionary argument.
+-- We assume only a single type argument.
 reifyStdMeth :: ReExpr
 reifyStdMeth =
   unReify >>>
   do ty <- exprTypeT
-     (Var (fqVarName -> flip M.lookup stdMeths -> Just (cls,prim)), [tya], [_dict]) <- callSplitT
-     catDict <- simpleDict (fromString cls) $* tya
+     (Var (fqVarName -> flip M.lookup stdMeths -> Just (cls,prim)), tyArgs, moreArgs) <- callSplitT
+     guardMsg (not (any isType moreArgs))
+         "reifyStdMeth: types among moreArgs"
+     guardMsg (all (isDictTy . exprType) moreArgs)
+         "reifyStdMeth: non-dict argument"
+     catDict <- simpleDict (fromString cls) $* tyArgs
      primV <- findIdT (fromString prim)
-     appsE1 "kPrimEP" [ty] (mkApps (Var primV) [Type tya,catDict])
+     appsE1 "kPrimEP" [ty] (App (mkTyApps (Var primV) tyArgs) catDict)
 
 -- Reify an application of 'repr' or 'abst' to its type, dict, and coercion
 -- args (four in total), leaving the final expression argument for reifyApp.
@@ -317,7 +330,7 @@ repMethNames = repName <$> ["repr","abst"]
 -- reify of case on 0-tuple or 2-tuple
 reifyTupCase :: ReExpr
 reifyTupCase =
-  do Case scrut@(exprType -> scrutT) wild bodyT [alt] <- unReify
+  do Case scrut@(exprType' -> scrutT) wild bodyT [alt] <- unReify
      (patE,rhs) <- reifyAlt wild alt
      scrut'     <- reifyOf scrut
      appsE letS [scrutT,bodyT] [patE,scrut',rhs]
@@ -364,15 +377,15 @@ reifyLit =
      guardMsg (isPrimitiveTy ty) "reifyLit: must have primitive type"
      void callDataConT
      e        <- idR
-     hasLitD  <- simpleDict (primName "HasLit") $* ty
+     hasLitD  <- simpleDict (primName "HasLit") $* [ty]
      appsE "kLit" [ty] [hasLitD,e]
 
 reifyDelay :: ReExpr
 reifyDelay =
   unReify >>>
   do (Var (fqVarName -> "Circat.Misc.delay"),[Type ty,s0]) <- callT
-     showD     <- simpleDict "GHC.Show.Show" $* ty
-     genBusesD <- simpleDict "Circat.Circuit.GenBuses" $* ty
+     showD     <- simpleDict "GHC.Show.Show" $* [ty]
+     genBusesD <- simpleDict "Circat.Circuit.GenBuses" $* [ty]
      primV     <- findIdT "Circat.Prim.DelayP"
      appsE1 "kPrimEP" [ty `FunTy` ty]
        (mkApps (Var primV) [Type ty,genBusesD,showD,s0])
@@ -381,7 +394,7 @@ reifyLoop :: ReExpr
 reifyLoop =
   unReify >>>
   do (Var (fqVarName -> "Circat.Misc.loop"),tys@[_a,_b,s],[h]) <- callSplitT
-     dict <- simpleDict (lamName "CircuitLoopKon") $* s
+     dict <- simpleDict (lamName "CircuitLoopKon") $* [s]
      h'   <- reifyOf h
      appsE "loopEP" tys [dict,h']
 

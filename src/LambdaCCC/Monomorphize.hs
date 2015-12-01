@@ -71,8 +71,9 @@ watchR lab r = labeled observing (lab,r)  -- don't lint
 
 #endif
 
--- nowatchR = watchR
-nowatchR _ = id
+nowatchR = watchR
+
+-- nowatchR _ = id
 
 skipT :: Monad m => Transform c m a b
 skipT = fail "untried"
@@ -103,7 +104,7 @@ caseNoVarR =
      return rhs
 
 bragMemo :: Bool
-bragMemo = False
+bragMemo = False -- True
 
 -- Memoize a transformation. Don't introduce a let binding (for later floating),
 -- which would interfere with additional simplification.
@@ -165,7 +166,7 @@ specializeTyDict' :: ReExpr
 specializeTyDict' =
     tryR simplifyAll
   . unfoldPredR okay
-  . rejectR (dictResultTy . exprType)
+  . rejectR (dictResultTy . exprType')
   . rejectR isType
  where
    okay = -- const $ liftA2 (&&) (not.null) (all isTyOrDict)
@@ -178,9 +179,10 @@ specializeTyDict' =
 #endif
 
 specializeTyDict :: ReExpr
-specializeTyDict = tryR simplifyAll
+specializeTyDict = watchR "specializeTyDict" $
+                   tryR simplifyAll
                  . unfoldPredR okay
-                 . rejectR (dictResultTy . exprType)
+                 . rejectR (dictResultTy . exprType')
                  . rejectR isType
  where
    okay v [Type ty] = not (isPrimOrRepMeth v ty)
@@ -208,25 +210,26 @@ resultTy ty                    = ty
 #endif
 
 isTyOrDict :: CoreExpr -> Bool
-isTyOrDict e = isType e || isDictTy (exprType e)
+isTyOrDict e = isType e || isDictTy (exprType' e)
             || isEqBox e  -- experiment
 -- TODO: Fix function name if we keep isEqBox
 
 monomorphize :: ReExpr
-monomorphize = memoFloatLabelR (repeatR specializeTyDict)
+monomorphize = watchR "monomorphize" $
+               memoFloatLabelR (repeatR specializeTyDict)
 
 -- | case c of { False -> a'; True -> a }  ==>  if_then_else c a a'
 -- Assuming there's a HasIf instance.
 rewriteIf :: ReExpr
 #if 0
 rewriteIf = do Case c _wild ty [(_,[],a'),(_,[],a)] <- id
-               guardMsg (isBoolTy (exprType c)) "scrutinee not Boolean"
+               guardMsg (isBoolTy (exprType' c)) "scrutinee not Boolean"
                hasIfTc <- findTyConT (ifName "HasIf")
                dict    <- buildDictionaryT' $* TyConApp hasIfTc [ty]
                apps' (ifName "if_then_else") [ty] [dict,c,a,a']
 #else
 rewriteIf = do Case c wild ty [(_False,[],a'),(_True,[],a)] <- id
-               guardMsg (isBoolTy (exprType c)) "scrutinee not Boolean"
+               guardMsg (isBoolTy (exprType' c)) "scrutinee not Boolean"
                guardMsg (isDeadOcc (idOccInfo wild)) "rewriteIf: wild is alive"
                ifCircTc <- findTyConT (lamName "IfCirc")
                dict     <- buildDictionaryT' $* TyConApp ifCircTc [ty]
@@ -251,27 +254,13 @@ bashWith
   | replaceBash = \ rs -> bashUsingE (promoteR <$> (rs ++ bashSimplifiers))
   | otherwise   = \ rs -> bashExtendedWithE (promoteR <$> rs)
 
--- Experiment
-simplifyAll'' :: ReExpr
-#if 0
-simplifyAll'' = go
- where
-   go = -- tryR (tryR go . reIf) . simplifyAll'
-        (tryR (tryR go . reIf) . simplifyAll') <+ (tryR go . reIf)
-        -- tryR go . (simplifyAll' <+ reIf)
-   reIf = anytdE (watchR "rewriteIf" rewriteIf)
-#else
-simplifyAll'' = simplifyAll'             -- TODO:  eliminate simplifyAll''
-#endif
-
 simplifyAll :: ReExpr
 simplifyAll = -- watchR "simplifyAll" $
               bashWith mySimplifiers
 
 extraSimplifiers :: [ReExpr]
 extraSimplifiers =
-  [ letSubstOneOccR
-  -- Experiment
+  [ watchR "letSubstOneOccR" letSubstOneOccR
   , watchR "standardizeCase" standardizeCase
   , watchR "standardizeCon"  standardizeCon
   , watchR "rewriteIf" rewriteIf
@@ -281,20 +270,20 @@ fullSimpliers :: [ReExpr]
 fullSimpliers = mySimplifiers ++ extraSimplifiers
 
 simplifyAll' :: ReExpr
-simplifyAll' = -- watchR "simplifyAll'" $
+simplifyAll' = watchR "simplifyAll'" $
                bashWith fullSimpliers
 
 mySimplifiers :: [ReExpr]
-mySimplifiers = [ castFloatAppUnivR    -- or castFloatAppR'
-                , castCastR
-                , castTransitiveUnivR
-                , letSubstTrivialR  -- instead of letNonRecSubstSafeR
+mySimplifiers = [ watchR "castFloatAppUnivR" castFloatAppUnivR   -- or castFloatAppR'
+                , watchR "castCastR" castCastR
+                , watchR "castTransitiveUnivR" castTransitiveUnivR
+                , watchR "letSubstTrivialR" letSubstTrivialR  -- instead of letNonRecSubstSafeR
              -- , letSubstOneOccR -- delay
                 -- Previous two lead to nontermination. Investigate.
 --                 , watchR "recastR" recastR -- Experimental
                 , nowatchR "caseReduceUnfoldsDictR" caseReduceUnfoldsDictR
-                , caseDefaultR
-                , reprAbstR
+                , watchR "caseDefaultR" caseDefaultR
+                , watchR "reprAbstR" reprAbstR
                 , watchR "fromLitInteger" fromLitInteger
                 ]
 
@@ -341,7 +330,7 @@ caseReduceUnfoldsR =
 
 caseReduceUnfoldsDictR :: ReExpr
 caseReduceUnfoldsDictR =
-  void (onScrutineeR (acceptR (isDictTy . exprType))) >> caseReduceUnfoldsR
+  void (onScrutineeR (acceptR (isDictTy . exprType'))) >> caseReduceUnfoldsR
 
 simplifyAllRhs :: ReProg
 simplifyAllRhs = progRhsAnyR simplifyAll
@@ -353,7 +342,8 @@ simplifyAllRhs = progRhsAnyR simplifyAll
 -- simplifyAllBind' = nonRecAllR id simplifyAll'
 
 letFloatCaseAltR' :: ReExpr
-letFloatCaseAltR' = letFloatCaseAltR Nothing
+letFloatCaseAltR' = watchR "letFloatCaseAltR'" $
+                    letFloatCaseAltR Nothing
 
 letFloatR :: ReCore
 letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprNoDelayR <+ letFloatCaseAltR')
@@ -362,7 +352,8 @@ letFloatR = promoteR letFloatTopR <+ promoteR (letFloatExprNoDelayR <+ letFloatC
 -- Since x0 won't get reified, any floating bindings wouldn't get the same
 -- interpretation as the non-reified x0.
 letFloatExprNoDelayR :: ReExpr
-letFloatExprNoDelayR = unlessM (isDelayLet <$> id) letFloatExprR
+letFloatExprNoDelayR = watchR "letFloatExprNoDelayR" $
+                       unlessM (isDelayLet <$> id) letFloatExprR
 
 isDelayLet :: CoreExpr -> Bool
 isDelayLet (collectArgs -> ( Var (fqVarName -> "Circat.Misc.delay")
@@ -392,16 +383,17 @@ retypeProgR = progRhsAnyR ({-bracketR "retypeExprR"-} retypeExprR)
 -- many alternatives. TODO: investigate.
 
 passE :: ReExpr
-passE = id
+passE = watchR "passE" $
+        id
       . tryR (watchR "simplifyAll" simplifyAll)  -- after let floating
       . tryR (anybuE (letFloatExprNoDelayR <+ letFloatCaseAltR'))
-      . tryR (anybuE (letAllR bindUnLetIntroR id))
+      . tryR (anybuE (watchR "letAllR-bindUnLetIntroR" $ letAllR bindUnLetIntroR id))
 --       . tryR (watchR "retypeExprR" retypeExprR) -- Needed?
       . tryR (extractR unshadowR)
-      . tryR simplifyAll''
+      . tryR simplifyAll'
 --       . tryR (anytdE (repeatR (  watchR "standardizeCase" standardizeCase
 --                               <+ watchR "standardizeCon" standardizeCon)))
-      . onetdE (watchR "monomorphize" monomorphize)
+      . onetdE monomorphize
 
 -- TODO: Find a much more efficient strategy. I think repeated onetdE is very
 -- expensive. I went this way to help memoization. Revisit!
@@ -497,8 +489,8 @@ standardizeCase =
 standardizeCase' :: ReExpr
 standardizeCase' =
     id
---   . anytdE ((onCaseAlts . onAltRhs) (caseReduceR True <+ caseReduceUnfoldR True))
---   . anytdE caseFloatCaseR
+  . anytdE ((onCaseAlts . onAltRhs) (caseReduceR True <+ caseReduceUnfoldR True))
+  . anytdE caseFloatCaseR
   . onScrutineeR (unfoldMethodR . watchR "abstReprR" abstReprR)
 
 
@@ -532,12 +524,12 @@ recastF (regularizeType -> a) (regularizeType -> b) =
                idId <- findIdT "id"
                return $ Var idId `App` Type a
     reprR = do f <- hasRepMethod "repr" $* a
-               (a',b') <- unJustT $* splitFunTy_maybe (exprType f)
+               (a',b') <- unJustT $* splitFunTy_maybe (exprType' f)
                guardMsg (a' =~= a) "recast tryMeth: a' /= a"
                g <- recastF b' b
                buildCompositionT g f
     abstR = do g <- hasRepMethod "abst" $* b
-               (a',b') <- unJustT $* splitFunTy_maybe (exprType g)
+               (a',b') <- unJustT $* splitFunTy_maybe (exprType' g)
                guardMsg (b' =~= b) "recast tryMeth: b' /= b"
                f <- recastF a a'
                buildCompositionT g f
@@ -589,12 +581,13 @@ reprAbstR =
 -- TODO: Move elsewhere
 
 reifyPrep :: ReExpr
-reifyPrep = inReify (
+reifyPrep = watchR "reifyPrep" $
+            inReify (
                 id
               . tryR unshadowE
               . tryR simplifyAll'
               . tryR (anytdE (watchR "recastR" recastR))             -- Experimental
-              . tryR (repeatR ({- watchR "passE" -} passE))
+              . tryR (repeatR passE)
               )
         -- . tryR (unfoldNameR "LambdaCCC.Run.go")
 
@@ -628,8 +621,6 @@ externals :: [External]
 externals =
     [ externC "simplifyAll" simplifyAll "Bash with normalization simplifiers (no inlining)"
     , externC "simplifyAll'" simplifyAll' "simplifyAll plus letSubstOneOccR"
-    , externC "simplifyAll'" simplifyAll' "simplifyAll plus letSubstOneOccR"
-    , externC "simplifyAll''" simplifyAll'' "..."
     , externC "simplifyAllRhs" simplifyAllRhs "simplify-all on all top-level RHSs"
 --     , externC "simplifyAllRhs'" simplifyAllRhs' "simplify-all' on all top-level RHSs"
 --     , externC "simplifyAllBind'" simplifyAllBind' "simplify-all' on all binding RHS"

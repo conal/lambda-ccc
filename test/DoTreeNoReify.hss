@@ -5,16 +5,16 @@ set-pp-type     Show
 -- set-pp-coercion Show
 set-pp-coercion Kind
 
-set-pp-type     Omit
-set-pp-coercion Omit
+-- set-pp-type     Omit
+-- set-pp-coercion Omit
 
 binding-of 'main
 -- Marked INLINE in LambdaCCC.Run, but still needs explicit unfolding here:
 try (any-td (unfold ['go,'go','goM,'goM','goMSep,'reifyMealy,'goNew,'goNew']))
 down ; try simplifyAll' ; up
 
--- -- Necessary??
--- any-td reify-prep
+-- Necessary??
+any-td reify-prep
 
 -- application-of 'reifyEP
 
