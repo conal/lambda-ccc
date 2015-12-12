@@ -10,7 +10,7 @@ set-pp-coercion Kind
 
 binding-of 'main
 -- Marked INLINE in LambdaCCC.Run, but still needs explicit unfolding here:
-try (any-td (unfold ['go,'go','goM,'goM','goMSep,'reifyMealy,'goNew,'goNew']))
+try (any-td (unfold ['go,'go','goSep,'goM,'goM','goMSep,'reifyMealy,'goNew,'goNew']))
 down ; try simplifyAll' ; up
 
 -- Necessary??

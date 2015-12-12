@@ -178,6 +178,10 @@ specializeTyDict' =
           -- const $ all isTyOrDict
 #endif
 
+unTypeMb :: CoreExpr -> Maybe Type
+unTypeMb (Type ty) = Just ty
+unTypeMb _         = Nothing
+
 specializeTyDict :: ReExpr
 specializeTyDict = watchR "specializeTyDict" $
                    tryR simplifyAll
@@ -185,12 +189,18 @@ specializeTyDict = watchR "specializeTyDict" $
                  . rejectR (dictResultTy . exprType')
                  . rejectR isType
  where
-   okay v [Type ty] = not (isPrimOrRepMeth v ty)
+   -- Arguments are all types, and function/method is not a prim or repr/abst.
+   okay v (mapM unTypeMb -> Just tys) = isGlobalId v &&  -- EXPERIMENTAL. See below.
+                                        not (isPrimOrRepMeth v tys)
+   -- okay v [Type ty] = not (isPrimOrRepMeth v [ty])
                       -- not (isRepMeth v || (isPrimitiveOp v && isPrimitiveTy ty))
    -- what's this one for? If I use it, take care with repr/abst
    -- okay v []        = isGlobalId v
    okay _ _         = False
 
+-- TODO: revisit the isGlobalId test. I don't think it's really what I'm looking
+-- for. Sometimes GHC moves code out of the 'reifyEP' call but still local.
+-- Also, what about local polymorphic definitions?
 
 #if 1
 dictResultTy :: Type -> Bool
@@ -372,9 +382,13 @@ letFloatArgNoDelayR = unlessM (isDelayLet <$> id) letFloatArgR
 caseDefaultR :: ReExpr
 caseDefaultR =
   do Case scrut wild _ [(_,[],body)] <- id
-     return $ case idOccInfo wild of
-                IAmDead -> body
-                _       -> Let (NonRec wild scrut) body
+     case idOccInfo wild of
+       IAmDead -> return body
+       _       ->
+--          do guardMsg (not (isUnLiftedType (exprType scrut)))
+--               "caseDefaultR: unlifted type"
+            return (Let (NonRec wild scrut) body)
+
 
 retypeProgR :: ReProg
 retypeProgR = progRhsAnyR ({-bracketR "retypeExprR"-} retypeExprR)

@@ -134,8 +134,13 @@ unEval = unCallE1 evalS
 reifyEval :: ReExpr
 reifyEval = unReify >>> unEval
 
+-- Generate a reify call. Fail on dictionaries.
 reifyOf :: CoreExpr -> TransformU CoreExpr
-reifyOf e = appsE reifyS [exprType' e] [e]
+reifyOf e = do guardMsg (not (isDictTy (exprType' e)))
+                        "reifyOf: Given a type expr."
+               appsE reifyS [exprType' e] [e]
+
+-- reifyOf e = appsE reifyS [exprType' e] [e]
 
 evalOf :: CoreExpr -> TransformU CoreExpr
 evalOf e = appsE evalS [dropEP (exprType' e)] [e]
@@ -467,9 +472,9 @@ isPrimitiveName name =
   || name `M.member` stdMeths
   -- || isRepMeth name
 
-isPrimOrRepMeth :: Var -> Type -> Bool
-isPrimOrRepMeth (fqVarName -> name) ty =
-  isRepMeth name || (isPrimitiveName name && isPrimitiveTy ty)
+isPrimOrRepMeth :: Var -> [Type] -> Bool
+isPrimOrRepMeth (fqVarName -> name) tys =
+  isRepMeth name || (isPrimitiveName name && all isPrimitiveTy tys)
 
 isPrimitiveOp :: Var -> Bool
 isPrimitiveOp (fqVarName -> name) =

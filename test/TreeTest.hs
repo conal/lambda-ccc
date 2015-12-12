@@ -307,28 +307,7 @@ do2 = inTest "hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize DoTree.hss"
 -- Only works when compiled with HERMIT
 main :: IO ()
 
-#if 0
--------- Dave's FFT stuff ----------------------------------------------
--- Phasor, as a function of tree depth.
-phasor :: (IsNat n, RealFloat a, Enum a) => Nat n -> RTree n (Complex a)
-phasor n = scanlTEx (*) 1 (pure phaseDelta)
-    where phaseDelta = cis ((-pi) / 2 ** natToZ n)
-
--- Radix-2, DIT FFT
-fft_r2_dit :: (IsNat n, RealFloat a, Enum a) => RTree n (Complex a) -> RTree n (Complex a)
-fft_r2_dit = fft_r2_dit' nat
-
-fft_r2_dit' :: (RealFloat a, Enum a) => Nat n -> RTree n (Complex a) -> RTree n (Complex a)
-fft_r2_dit'  Zero    = id
-fft_r2_dit' (Succ n) = RT.toB . P.inP (uncurry (+) &&& uncurry (-)) . P.secondP (liftA2 (*) (phasor n)) . fmap (fft_r2_dit' n) . RT.bottomSplit
-
--- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
--- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Double) -> RTree N2 (Complex Double))
--- main = go "fft_r2_dit" (fft_r2_dit :: RTree N1 (Complex PrettyDouble) -> RTree N1 (Complex PrettyDouble))
--- main = go "fft_r2_dit" (fft_r2_dit :: RTree N2 (Complex Int) -> RTree N2 (Complex Int))
--- main = goSep "fft_r2_dit" 1 (fft_r2_dit :: RTree N1 (Complex Int) -> RTree N1 (Complex Int))
--------- End Dave's FFT stuff ------------------------------------------
-#else
+---- FFT
 
 type C = Complex Double
 
@@ -336,19 +315,29 @@ type C = Complex Double
 
 -- main = go "fft-p" (fft :: Unop (Pair C))
 
--- main = go "fft-lt0" (fft :: LTree N0 C -> RTree N0 C)
-
--- main = go "fft-lt2" (fft :: LTree N2 C -> RTree N2 C)
+-- main = go "fft-lt1" (fft :: LTree N1 C -> RTree N1 C)
 
 -- main = go "fft-rt1" (fft :: RTree N1 C -> LTree N1 C)
 
 -- twiddles :: forall g f a. (AFS g, AFS f, RealFloat a) => g (f (Complex a))
 
--- main = go "twiddles-rt1p" (twiddles :: RTree N1 (Pair C))
+-- main = go "twiddles-lt1p" (twiddles :: LTree N1 (Pair C))
 
-main = go "foo" (size (undefined :: RTree N1 ()))
+-- main = go "foo" (omega (size (undefined :: (LTree N1 :. Pair) ())))
 
--- main = go "foo" (size (undefined :: (RTree N1 :. Pair) ()))
+-- twiddles :: forall g f a. (AFS g, AFS f, RealFloat a) => g (f (Complex a))
+-- twiddles = powers <$> powers (omega (tySize(g :. f)))
+
+main = go "foo" (powers :: Int -> LTree N1 Int)
+
+-- zoop :: Int
+-- zoop = 3
+
+-- main = go "foo" zoop
+
+-- main = go "foo" (size (undefined :: RTree N3 ()))
+
+-- main = go "foo" (size (undefined :: (LTree N3 :. Pair) ()))
 
 -- main = go "foo" (size (undefined :: Pair ()))
 
@@ -377,13 +366,13 @@ main = go "foo" (size (undefined :: RTree N1 ()))
 
 -- main = go "foo" (exp :: Double -> Double)
 
-#endif
+---- End FFT
 
 -- main = go "map-not-v5" (fmap not :: Vec N5 Bool -> Vec N5 Bool)
 
 -- main = go "map-square-v5" (fmap square :: Vec N5 Int -> Vec N5 Int)
 
--- main = go "map-t3" (fmap not :: Unop (RTree N3 Bool))
+-- main = go "map-rt3" (fmap not :: Unop (RTree N3 Bool))
 
 -- main = go "tdott-2" (dot''' :: Pair (RTree N2 Int) -> Int)
 
@@ -439,10 +428,10 @@ main = go "foo" (size (undefined :: RTree N1 ()))
 -- main = go "test" (dot :: RTree N4 (Int,Int) -> Int)
 
 -- -- Ranksep: rt1=0.5, rt2=1, rt3=2, rt4=4,rt5=8
--- main = goSep "transpose-pt4" 4 (transpose :: Pair (RTree N4 Bool) -> RTree N4 (Pair Bool))
+-- main = goSep "transpose-prt4" 4 (transpose :: Pair (RTree N4 Bool) -> RTree N4 (Pair Bool))
 
 -- -- Ranksep: rt1=0.5, rt2=1, rt3=2, rt4=4,rt5=8
--- main = goSep "transpose-t4p" 4 (transpose :: RTree N4 (Pair Bool) -> Pair (RTree N4 Bool))
+-- main = goSep "transpose-rt2p" 1 (transpose :: RTree N2 (Pair Bool) -> Pair (RTree N2 Bool))
 
 -- -- Ranksep: rt1=1, rt2=2, rt3=4, rt4=8, rt5=16
 -- main = goSep "transpose-v3t5" 16 (transpose :: Vec N3 (RTree N5 Bool) -> RTree N5 (Vec N3 Bool))
