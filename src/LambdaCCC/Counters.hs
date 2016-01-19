@@ -19,9 +19,7 @@ module LambdaCCC.Counters where
 
 -- TODO: explicit exports
 
-import Data.Functor ((<$>))
-import Data.Traversable (Traversable)
-import Control.Applicative (Applicative(..),liftA2)
+import Control.Applicative (liftA2)
 
 import Circat.Misc (Unop)
 import Circat.Scan (LScan(..),lAlls,scanlT)

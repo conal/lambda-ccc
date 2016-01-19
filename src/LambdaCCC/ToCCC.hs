@@ -30,7 +30,6 @@ module LambdaCCC.ToCCC
 
 import Prelude hiding (id,(.),curry,uncurry,const)
 
-import Data.Functor ((<$>))
 import Control.Monad (mplus)
 import Data.Maybe (fromMaybe)
 -- import Data.Coerce (Coercible,coerce)

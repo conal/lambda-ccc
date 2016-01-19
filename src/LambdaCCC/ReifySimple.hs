@@ -36,7 +36,7 @@ module LambdaCCC.ReifySimple
 
 import Prelude hiding (id,(.))
 
-import Data.Functor ((<$>),void)
+import Data.Functor (void)
 import Control.Category (Category(..))
 import Control.Monad ((<=<))
 import Control.Arrow ((>>>))
@@ -53,8 +53,8 @@ import HERMIT.Name (HermitName)
 
 import LambdaCCC.Misc ((<~))
 
-import HERMIT.Extras hiding (findTyConT,observeR',triesL)
-import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
+import HERMIT.Extras hiding (findTyConT,observeR',orL)
+import qualified HERMIT.Extras as Ex -- (Observing, observeR', orL, labeled)
 
 -- Drop TypeEncode for now.
 -- import TypeEncode.Plugin (encodeOf, reConstructR, reCaseR)
@@ -64,13 +64,13 @@ import qualified HERMIT.Extras as Ex -- (Observing, observeR', triesL, labeled)
     Observing
 --------------------------------------------------------------------}
 
--- (Observing, observeR', triesL, labeled)
+-- (Observing, observeR', orL, labeled)
 
 observing :: Ex.Observing
 observing = False -- True
 
-triesL :: InCoreTC t => [(String,RewriteH t)] -> RewriteH t
-triesL = Ex.triesL observing
+orL :: InCoreTC t => [(String,RewriteH t)] -> RewriteH t
+orL = Ex.orL observing
 
 -- labeled :: InCoreTC t => (String, RewriteH t) -> RewriteH t
 -- labeled = Ex.labeled observing
@@ -434,7 +434,7 @@ miscL = [ ---- Special applications and so must come before reifyApp
         ]
 
 reifyMisc :: ReExpr
-reifyMisc = triesL miscL
+reifyMisc = orL miscL
 
 {--------------------------------------------------------------------
     Primitives

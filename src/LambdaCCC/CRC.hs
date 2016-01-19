@@ -26,7 +26,6 @@ import Prelude hiding (foldl,scanl,sum)
 
 import Control.Applicative -- (Applicative(..),liftA2,liftA3)
 import Data.Foldable (Foldable(..),sum)
-import Data.Traversable (Traversable(..))
 -- import Control.Category (id,(.))
 -- import Control.Arrow ((&&&))
 

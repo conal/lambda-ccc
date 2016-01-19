@@ -42,8 +42,8 @@ Library
                     LambdaCCC.ShowUtils
                     LambdaCCC.Lambda
                     LambdaCCC.ToCCC
-                    LambdaCCC.Monomorphize
-                    LambdaCCC.ReifySimple
+--                     LambdaCCC.Monomorphize
+--                     LambdaCCC.ReifySimple
                     LambdaCCC.Run
                     LambdaCCC.StateTrie
                     LambdaCCC.Adder

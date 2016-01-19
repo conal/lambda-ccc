@@ -20,10 +20,8 @@ module LambdaCCC.RadixSort where
 
 -- TODO: explicit exports
 
-import Prelude hiding (sum)
-
-import Data.Foldable (Foldable,sum,toList)
-import Control.Applicative (Applicative(..),liftA2)
+import Data.Foldable (toList)
+import Control.Applicative (liftA2)
 import Control.Arrow ((***),first)
 
 import TypeUnary.Nat -- (IsNat(..))

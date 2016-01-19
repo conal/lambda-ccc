@@ -21,7 +21,6 @@ module LambdaCCC.Bitonic where
 
 import Prelude hiding (reverse)
 
-import Data.Functor ((<$>))
 import Data.Foldable (toList)
 
 import TypeUnary.TyNat (N1,N2,N3,N4)

@@ -21,7 +21,6 @@ module LambdaCCC.StateTrie
   ) where
 
 import Control.Arrow (first)
-import Control.Applicative (Applicative(..))
 
 import Control.Monad.State -- mtl
 

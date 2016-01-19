@@ -26,8 +26,7 @@ module LambdaCCC.Adder where
 
 import Prelude hiding (mapM)
 
-import Data.Monoid (Monoid(..))
-import Control.Applicative (Applicative,liftA2,(<$>))
+import Control.Applicative (liftA2)
 import Data.Traversable (Traversable(..))
 
 -- import Control.Monad.Trans.State
