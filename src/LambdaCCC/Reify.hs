@@ -48,7 +48,7 @@ import Circat.Misc ((<~))
 import HERMIT.Extras hiding (findTyConT,observeR',orL,simplifyE)
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', orL, labeled)
 
-import Monomorph.Stuff (preMonoR, monomorphizeE, simplifyE)
+import Monomorph.Stuff (preMonoR, monomorphizeE, simplifyE) -- , simplifyWithLetFloatingE
 
 {--------------------------------------------------------------------
     Utilities. Move to HERMIT.Extras
@@ -153,7 +153,7 @@ unEval = unCallE1 evalS
 
 -- reify (eval e) --> e
 reifyEval :: ReExpr
-reifyEval = unReify >>> unEval
+reifyEval = unEval . unReify
 
 -- Generate a reify call. Fail on dictionaries.
 reifyOf :: CoreExpr -> TransformU CoreExpr
@@ -405,7 +405,6 @@ miscL = [ ---- Special applications and so must come before reifyApp
         , ("reifyMonoLet" , reifyMonoLet)
         , ("reifyTupCase" , reifyTupCase)
         , ("reifyPrim"    , reifyPrim)
---      , ("reifyCast"    , reifyCast)
         ]
 
 reifyMisc :: ReExpr
@@ -483,13 +482,26 @@ reifyProgR = progBindsAnyR (const $
                             nonRecAllR id reifyE)
 
 reifyMonomorph :: ReExpr
-reifyMonomorph = inReify (tryR simplifyE . monomorphizeE)
+reifyMonomorph = -- bracketR "reifyMonomorph" $
+                 inReify (tryR unshadowE . tryR simplifyE . monomorphizeE)
+
+-- simplifyWithLetFloatingE can take much longer than simplifyE, so use it
+-- mainly when debugging.
+
+reifyGutsR :: ReGuts
+reifyGutsR = modGutsR reifyProgR
 
 reifyR :: ReCore
-reifyR = promoteR (modGutsR reifyProgR)
-       . tryR monomorphR
+reifyR = id -- tryR (anytdR (promoteR reifyOops))
+       . try "reifying" (promoteR reifyGutsR)
+       . try "monomorphizing" monomorphR
        . tryR (anytdR (promoteR unfoldDriver))
-       . tryR preMonoR -- though always succeeds (for now)
+       . tryR preMonoR
+ where
+   try str rew = tryR rew . traceR (str ++ " ...")
+
+monomorphR :: ReCore
+monomorphR = anytdR (promoteR reifyMonomorph)
 
 unfoldDriver :: ReExpr
 unfoldDriver = tryR bashE . tryR simplifyE .  -- TODO: simpler simplification
@@ -500,14 +512,10 @@ unfoldDriver = tryR bashE . tryR simplifyE .  -- TODO: simpler simplification
 -- Note: unfoldNamesR could be made more efficient. Maybe fix it or use an more
 -- direct route with unfoldPredR and a *set* of names.
 
-monomorphR :: ReCore
-monomorphR = anytdR (promoteR reifyMonomorph)
-
--- reifyR = promoteR (modGutsR reifyProgR)
-
 externals :: [External]
 externals =
     [ externC' "reify" reifyR
+    , externC' "reifyE" reifyE
     -- TEMP:
     , externC' "monomorph" monomorphR
     , externC' "rewrite-if" rewriteIf
@@ -528,6 +536,9 @@ externals =
     , externC' "reify-oops" reifyOops
     , externC' "reify-monomorph" reifyMonomorph
     , externC' "reify-prog" reifyProgR
+    , externC' "reify-guts" reifyGutsR
     , externC' "unfold-driver" unfoldDriver
     , externC' "optimize-cast" optimizeCastR
+    , externC' "unreify" unReify
+    , externC' "uneval" unEval
     ]
