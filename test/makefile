@@ -10,7 +10,7 @@ play:
 # 	ghc $*.hs
 
 Examples: ../dist Examples.hs
-	ghc -fforce-recomp -fplugin=LambdaCCC.Plugin -O -dcore-lint Examples.hs
+	time ghc -fforce-recomp -fplugin=LambdaCCC.Plugin -O -dcore-lint Examples.hs
 # 	ghc Examples.hs
 
 # Why the -fforce-recomp? I guess GHC doesn't notice that the plugin has
@@ -20,7 +20,7 @@ compile:
 	cd .. ; make
 
 compile-circat:
-	cd ~/Tabula/Haskell/circat ; make
+	cd ~/Haskell/circat ; make
 	make compile-mono
 
 compile-extras:
