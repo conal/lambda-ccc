@@ -67,7 +67,7 @@ goSep name s = go' name [ranksep s]
 
 -- Run an example: reify, CCC, circuit.
 run :: Okay a => String -> [Attr] -> EP a -> IO ()
-run name attrs e = do print e
+run name attrs e = do putStrLn (name ++ " = " ++ show e)
                       outGV name attrs (unitize' (toCCC e))
 {-# NOINLINE run #-}
 
