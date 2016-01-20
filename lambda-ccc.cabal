@@ -14,8 +14,7 @@ Stability:          experimental
 build-type:         Simple
 
 Extra-Source-Files:
-                    test/Tests.hs
-                    test/Tests.hss
+                    test/Examples.hs
 
 source-repository head
   type:             git
@@ -33,17 +32,19 @@ Library
                   , hermit >= 0.5.0.1
                   , ty >= 0.1.5
                   , type-unary >= 0.2.21
+                  , MemoTrie
                   , circat >= 0.6.3
                   , hermit-extras >= 0.2.2
-                  , MemoTrie
+                  , monomorph
                   , QuickCheck >= 2.7.3
 
   Exposed-Modules:  LambdaCCC.Misc
                     LambdaCCC.ShowUtils
                     LambdaCCC.Lambda
                     LambdaCCC.ToCCC
---                     LambdaCCC.Monomorphize
---                     LambdaCCC.ReifySimple
+                    LambdaCCC.Reify
+                    LambdaCCC.Interactive
+                    LambdaCCC.Plugin
                     LambdaCCC.Run
                     LambdaCCC.StateTrie
                     LambdaCCC.Adder

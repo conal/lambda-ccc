@@ -8,7 +8,7 @@ demo:
 	hermit test/Plus.hs -opt=LambdaCCC +Plus
 
 tags: dist
-	cd src ; find . -name '*.*hs' | egrep -v 'Junk|Old|Unused|Setup|Reify|Monomorphize' | xargs hasktags -e
+	cd src ; find . -name '*.*hs' | egrep -v 'Junk|Old|Unused|Setup' | xargs hasktags -e
 
 # Remove "Reify|Monomorphize" later
 

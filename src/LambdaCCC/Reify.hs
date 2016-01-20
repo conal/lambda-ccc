@@ -1,7 +1,7 @@
-{-# LANGUAGE TemplateHaskell, TypeOperators, GADTs, KindSignatures #-}
+{-# LANGUAGE CPP, TemplateHaskell, TypeOperators, GADTs, KindSignatures #-}
 {-# LANGUAGE ViewPatterns, PatternGuards #-}
 {-# LANGUAGE FlexibleContexts, ConstraintKinds #-}
-{-# LANGUAGE MagicHash, MultiWayIf, TupleSections, CPP #-}
+{-# LANGUAGE MagicHash, MultiWayIf, TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# OPTIONS_GHC -Wall #-}
@@ -11,7 +11,7 @@
 
 ----------------------------------------------------------------------
 -- |
--- Module      :  LambdaCCC.ReifySimple
+-- Module      :  LambdaCCC.Reify
 -- Copyright   :  (c) 2013 Tabula, Inc.
 -- LICENSE     :  BSD3
 --
@@ -21,18 +21,9 @@
 -- Reify a Core expression into GADT
 ----------------------------------------------------------------------
 
-module LambdaCCC.ReifySimple
-  ( reifyMisc, lamName, repName --, ifName
-  , inReify -- TEMP
-  , reifyEval, reifyIf, reifyDelay, reifyLoop, reifyBottom
-  , reifyRepMeth, reifyApp, reifyLam, reifyMonoLet
-  , reifyTupCase, reifyLit, reifyPrim, reifyStdMeth
-  , reifyOops
-  , isPrimOrRepMeth, isPrimitiveOp, isPrimitiveTy
-  , observing
-  ) where
+module LambdaCCC.Reify where
 
-  -- TODO: export externals instead, and use in Monomorphize
+-- TODO: Explicit exports
 
 import Prelude hiding (id,(.))
 
@@ -50,15 +41,21 @@ import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary hiding (externals)
 import HERMIT.Name (HermitName)
+import HERMIT.External (External)
 
-import LambdaCCC.Misc ((<~))
+import Circat.Misc ((<~))
 
-import HERMIT.Extras hiding (findTyConT,observeR',orL)
+import HERMIT.Extras hiding (findTyConT,observeR',orL,simplifyE)
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', orL, labeled)
 
--- Drop TypeEncode for now.
--- import TypeEncode.Plugin (encodeOf, reConstructR, reCaseR)
--- import qualified TypeEncode.Plugin as Enc
+import Monomorph.Stuff (preMonoR, monomorphizeE, simplifyE)
+
+{--------------------------------------------------------------------
+    Utilities. Move to HERMIT.Extras
+--------------------------------------------------------------------}
+
+unshadowE :: ReExpr
+unshadowE = extractR unshadowR
 
 {--------------------------------------------------------------------
     Observing
@@ -68,6 +65,24 @@ import qualified HERMIT.Extras as Ex -- (Observing, observeR', orL, labeled)
 
 observing :: Ex.Observing
 observing = False -- True
+
+-- #define LintDie
+
+#ifdef LintDie
+watchR, nowatchR :: String -> Unop ReExpr
+watchR lab r = lintingExprR lab (labeled observing (lab,r)) -- hard error
+#else
+-- watchR :: String -> Unop ReExpr
+-- watchR lab r = labeled observing (lab,r) >>> lintExprR  -- Fail softly on core lint error.
+
+watchR :: InCoreTC a => String -> RewriteH a -> RewriteH a
+watchR lab r = labeled' observing (lab,r)  -- don't lint
+#endif
+
+nowatchR :: InCoreTC a => String -> RewriteH a -> RewriteH a
+nowatchR _ = id
+
+-- nowatchR = watchR
 
 orL :: InCoreTC t => [(String,RewriteH t)] -> RewriteH t
 orL = Ex.orL observing
@@ -106,9 +121,6 @@ unCallE1 = unCall1 . lamName
 appsE1 :: String -> [Type] -> CoreExpr -> TransformU CoreExpr
 appsE1 str ts e = appsE str ts [e]
 
--- callNameLam :: String -> TransformH CoreExpr (CoreExpr, [CoreExpr])
--- callNameLam = callNameT . lamName
-
 -- Some names
 
 evalS, reifyS :: String
@@ -122,6 +134,15 @@ varPatS = "varPat#"
 
 epS :: String
 epS = "EP"
+
+-- Use an internal name while reifying, so as not to confuse with the reifyEP
+-- that kicks the whole thing off.
+mkReifyId :: TransformU Id
+mkReifyId = findIdT reifyLocalS
+
+reifyLocalS :: HermitName
+reifyLocalS = "LambdaCCC...."
+
 
 -- reify u --> u
 unReify :: ReExpr
@@ -151,8 +172,8 @@ dropEP (TyConApp (unqualifiedName . tyConName -> name) [t]) =
   else error ("dropEP: not an EP: " ++ show name)
 dropEP _ = error "dropEP: not a TyConApp"
 
-reifyR :: ReExpr
-reifyR = idR >>= reifyOf
+wrapReify :: ReExpr
+wrapReify = idR >>= reifyOf
 
 -- reify (u v) --> reify u `appP` reify v
 reifyApp :: ReExpr
@@ -162,12 +183,6 @@ reifyApp = do App u v <- unReify
               u' <- reifyOf u
               v' <- reifyOf v
               appsE "appP" [b,a] [u', v'] -- note b,a
-
--- reifyApps =
---   unReify >>> callSplitT >>> arr (\ (f,ts,es) -> ((f,ts),es)) >>> reifyCall
-
--- reifyCall :: TransformH ((CoreExpr,[Type]), [CoreExpr]) CoreExpr
--- reifyCall = reifyR 
 
 -- TODO: Use arr instead of (constT (return ...))
 -- TODO: refactor so we unReify once and then try variations
@@ -219,48 +234,9 @@ worthLet _ = return True
 
 -- Rewrite inside of reify applications
 inReify :: Unop ReExpr
-inReify = reifyR <~ unReify
+inReify = wrapReify <~ unReify
 
-#if 0
-reifyRuleNames :: [RuleName]
-reifyRuleNames = map (RuleName . ("reify/" ++))
-  [ "not","(&&)","(||)","xor","(+)","(*)","exl","exr","pair","inl","inr"
-  , "if","()","false","true"
-  ]
-
--- ,"if-bool","if-pair"
-
--- or: words "not (&&) (||) xor ..."
-
--- TODO: Is there a way not to redundantly specify this rule list?
--- Yes -- trust GHC to apply the rules later.
--- Keep for now, to help us see that whether reify applications vanish.
-
-reifyRules :: ReExpr
-reifyRules = rulesR reifyRuleNames >>> cleanupUnfoldR
-
-#endif
-
-#if 0
-reifyCast :: ReExpr
-reifyCast =
-  unReify >>>
-  do Cast e co <- idR
-     let Pair a b = coercionKind co
-     re   <- reifyOf e
-     aTyp <- buildTypeableT' $* a
-     bTyp <- buildTypeableT' $* b
-     appsE "coerceEP" [a,b] [aTyp,bTyp,mkEqBox (toRep co),re]
-
--- TODO: Probe whether we ever get nominal casts here.
--- If so, reify differently, probably as a Core cast with mkNthCo.
-
--- Convert a coercion to representational if not already
-toRep :: Unop Coercion
-toRep co | coercionRole co == Representational = co
-         | otherwise = mkSubCo co
-
-#endif
+-- TODO: More efficient inReify implementation, re-using the existing reify
 
 reifyIf :: ReExpr
 reifyIf =
@@ -380,7 +356,9 @@ reifyLit =
   unReify >>>
   do ty <- exprTypeT
      guardMsg (isPrimitiveTy ty) "reifyLit: must have primitive type"
-     void callDataConT
+     (void callDataConT <+
+      do (_,[_],[_dict,Lit _]) <- callNameSplitT "GHC.Num.fromInteger"
+         return ())
      e        <- idR
      hasLitD  <- simpleDict (primName "HasLit") $* [ty]
      appsE "kLit" [ty] [hasLitD,e]
@@ -414,23 +392,20 @@ reifyOops =
 
 miscL :: [(String,ReExpr)]
 miscL = [ ---- Special applications and so must come before reifyApp
-          ("reifyEval"        , reifyEval)
---      , ("reifyRulesPrefix" , reifyRulesPrefix)
---      , ("reifyRules"       , reifyRules)
-        , ("reifyRepMeth"     , reifyRepMeth)
-        , ("reifyStdMeth"     , reifyStdMeth) 
-        , ("reifyIf"          , reifyIf)
-        , ("reifyBottom"      , reifyBottom)
-        , ("reifyDelay"       , reifyDelay)
-        , ("reifyLoop"        , reifyLoop)
-        , ("reifyLit"         , reifyLit)
-        ----
-        , ("reifyApp"         , reifyApp)
-        , ("reifyLam"         , reifyLam)
-        , ("reifyMonoLet"     , reifyMonoLet)
-        , ("reifyTupCase"     , reifyTupCase)
-        , ("reifyPrim"        , reifyPrim)
---      , ("reifyCast"        , reifyCast)
+          ("reifyEval"    , reifyEval)
+        , ("reifyRepMeth" , reifyRepMeth)
+        , ("reifyStdMeth" , reifyStdMeth) 
+        , ("reifyIf"      , reifyIf)
+        , ("reifyBottom"  , reifyBottom)
+        , ("reifyDelay"   , reifyDelay)
+        , ("reifyLoop"    , reifyLoop)
+        , ("reifyLit"     , reifyLit)
+        , ("reifyApp"     , reifyApp)
+        , ("reifyLam"     , reifyLam)
+        , ("reifyMonoLet" , reifyMonoLet)
+        , ("reifyTupCase" , reifyTupCase)
+        , ("reifyPrim"    , reifyPrim)
+--      , ("reifyCast"    , reifyCast)
         ]
 
 reifyMisc :: ReExpr
@@ -470,7 +445,6 @@ isPrimitiveName :: String -> Bool
 isPrimitiveName name =
      name `M.member` primMap
   || name `M.member` stdMeths
-  -- || isRepMeth name
 
 isPrimOrRepMeth :: Var -> [Type] -> Bool
 isPrimOrRepMeth (fqVarName -> name) tys =
@@ -480,23 +454,80 @@ isPrimitiveOp :: Var -> Bool
 isPrimitiveOp (fqVarName -> name) =
      name `M.member` primMap
   || name `M.member` stdMeths
-  -- || isRepMeth name
-
--- isPrimitiveOp :: Var -> Type -> Bool
--- isPrimitiveOp (fqVarName -> name) ty =
---      name `M.member` primMap
---   || (name `M.member` stdMeths && isPrimitiveTy ty)
---   || isRepMeth name
-
--- isPrimitiveOp :: Var -> [CoreExpr] -> Bool
--- isPrimitiveOp (fqVarName -> name) args =
---      name `M.member` primMap
---   || (name `M.member` stdMeths && tyArg1 args)
---   || isRepMeth name
---  where
---    tyArg1 [] = True  -- test hack
---    tyArg1 (Type ty : _) = isPrimitiveTy ty
---    tyArg1 _ = False
 
 isPrimitiveTy :: Type -> Bool
 isPrimitiveTy ty = any ($ ty) [isUnitTy,isBoolTy,isIntTy,isDoubleTy]
+
+-- | case c of { False -> a'; True -> a }  ==>  if_then_else c a a'
+-- Assuming there's a HasIf instance.
+rewriteIf :: ReExpr
+rewriteIf = do Case c wild ty [(_False,[],a'),(_True,[],a)] <- id
+               guardMsg (isBoolTy (exprType' c)) "scrutinee not Boolean"
+               guardMsg (isDeadOcc (idOccInfo wild)) "rewriteIf: wild is alive"
+               ifCircTc <- findTyConT (lamName "IfCirc")
+               dict     <- buildDictionaryT' $* TyConApp ifCircTc [ty]
+               apps' (lamName "if'") [ty] [dict,pair c (pair a a')]
+ where
+   pair p q = mkCoreTup [p,q]
+
+{--------------------------------------------------------------------
+    Run it
+--------------------------------------------------------------------}
+
+reifyE :: ReExpr
+reifyE = anytdE (repeatR reifyMisc)
+
+reifyProgR :: ReProg
+reifyProgR = progBindsAnyR (const $
+                            -- observeR "reifyBindR" .
+                            nonRecAllR id reifyE)
+
+reifyMonomorph :: ReExpr
+reifyMonomorph = inReify (tryR simplifyE . monomorphizeE)
+
+reifyR :: ReCore
+reifyR = promoteR (modGutsR reifyProgR)
+       . tryR monomorphR
+       . tryR (anytdR (promoteR unfoldDriver))
+       . tryR preMonoR -- though always succeeds (for now)
+
+unfoldDriver :: ReExpr
+unfoldDriver = tryR bashE . tryR simplifyE .  -- TODO: simpler simplification
+               unfoldNamesR ((fromString . ("LambdaCCC.Run." ++)) <$>
+                             ["go","go'","goSep","goNew","goNew'"])
+                             -- ,"goM","goM'","goMSep","reifyMealy"
+
+-- Note: unfoldNamesR could be made more efficient. Maybe fix it or use an more
+-- direct route with unfoldPredR and a *set* of names.
+
+monomorphR :: ReCore
+monomorphR = anytdR (promoteR reifyMonomorph)
+
+-- reifyR = promoteR (modGutsR reifyProgR)
+
+externals :: [External]
+externals =
+    [ externC' "reify" reifyR
+    -- TEMP:
+    , externC' "monomorph" monomorphR
+    , externC' "rewrite-if" rewriteIf
+    , externC' "reify-misc" reifyMisc
+    , externC' "reify-eval" reifyEval
+    , externC' "reify-if" reifyIf
+    , externC' "reify-delay" reifyDelay
+    , externC' "reify-loop" reifyLoop
+    , externC' "reify-bottom" reifyBottom
+    , externC' "reify-repmeth" reifyRepMeth
+    , externC' "reify-stdmeth" reifyStdMeth
+    , externC' "reify-app" reifyApp
+    , externC' "reify-lam" reifyLam
+    , externC' "reify-monolet" reifyMonoLet
+    , externC' "reify-tupcase" reifyTupCase
+    , externC' "reify-lit" reifyLit
+    , externC' "reify-prim" reifyPrim
+    , externC' "reify-oops" reifyOops
+    , externC' "reify-monomorph" reifyMonomorph
+    , externC' "reify-prog" reifyProgR
+    , externC' "unfold-driver" unfoldDriver
+    , externC' "optimize-cast" optimizeCastR
+    ]

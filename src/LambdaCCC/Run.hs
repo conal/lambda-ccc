@@ -23,7 +23,7 @@
 ----------------------------------------------------------------------
 
 module LambdaCCC.Run
-  ( go,go',goSep,run,goM,goM',goMSep
+  ( go,go',goSep,run,runSep,goM,goM',goMSep
   , goNew, goNew'
   ) where
 
@@ -70,6 +70,9 @@ run :: Okay a => String -> [Attr] -> EP a -> IO ()
 run name attrs e = do print e
                       outGV name attrs (unitize' (toCCC e))
 {-# NOINLINE run #-}
+
+runSep :: Okay a => String -> Double -> EP a -> IO ()
+runSep name s = run name [ranksep s]
 
 goNew' :: Okay a => String -> [Attr] -> a -> IO ()
 goNew' name attrs f = run name attrs (reifyEP f)

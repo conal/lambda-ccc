@@ -1,32 +1,32 @@
-HERM = hermit TreeTest.hs -v0 -opt=LambdaCCC.Monomorphize
+default: go
 
-doit:
-	time $(HERM) DoTree.hss resume && ./TreeTest
+go:	Examples
+	./Examples
 
-reify-done:
-	echo "" | make reify ; echo
+play:
+	hermit Examples.hs -v0 -opt=LambdaCCC.Interactive
 
-no-reify-done:
-	echo "" | make no-reify ; echo
+# %.o: ../dist $*.hs
+# 	ghc $*.hs
 
-dont-done:
-	echo "" | make dont ; echo
+Examples: ../dist Examples.hs
+	ghc -fforce-recomp -fplugin=LambdaCCC.Plugin -O -dcore-lint Examples.hs
+# 	ghc Examples.hs
 
-foo-done:
-	echo "" | make foo ; echo
-
-reify:
-	$(HERM) DoTree.hss
-
-no-reify:
-	$(HERM) DoTreeNoReify.hss
-
-dont:
-	$(HERM) Dont.hss
-
-foo:
-	$(HERM) Foo.hss
+# Why the -fforce-recomp? I guess GHC doesn't notice that the plugin has
+# changed. Odd, since it does seem notice when cabal-installing.
 
 compile:
-	cd ../..; make
+	cd .. ; make
 
+compile-circat:
+	cd ~/Tabula/Haskell/circat ; make
+	make compile-mono
+
+compile-extras:
+	cd ~/Tabula/Haskell/hermit-extras ; make
+	make compile-mono
+
+compile-mono:
+	cd ~/Haskell/monomorph ; make
+	make compile
