@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, TupleSections, ViewPatterns, ConstraintKinds #-}
+{-# LANGUAGE CPP, TupleSections, ViewPatterns, ConstraintKinds, LambdaCase #-}
 
 -- Try removing these extensions later 
 {-# LANGUAGE ScopedTypeVariables, MultiWayIf, FlexibleContexts #-}
@@ -6,7 +6,7 @@
 {-# OPTIONS_GHC -Wall #-}
 
 -- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -22,24 +22,30 @@
 
 module LambdaCCC.Monomorphize (monomorphizeE,MonadNuff) where
 
-import Control.Arrow (first)
+import Prelude hiding (id,(.))
+
+import Control.Category (id,(.))
+import Control.Arrow (first,second,arr,(>>>))
 import Control.Monad.IO.Class (MonadIO)
-import Data.Char (isSpace)
 
 import Language.KURE
 import HERMIT.Context
 import HERMIT.Core
 import HERMIT.Dictionary
 import HERMIT.GHC
+import HERMIT.Kure
 import HERMIT.Monad
 import HERMIT.Name
 
-import HERMIT.Extras (moduledName,normaliseTypeM,apps)
+import HERMIT.Extras
+  (moduledName,newIdT,apps',($*),showPprT,normaliseTypeT)
 
 import LambdaCCC.Misc (Unop)
 
 -- TODO: Tighten imports
 
+repName :: String -> HermitName
+repName = moduledName "Circat.Rep"
 
 -- Monomorphism-normalized expressions
 newtype Norm = Norm { unNorm :: CoreExpr }
@@ -60,9 +66,12 @@ data CtorApp = CtorApp DataCon [Norm]
 type MonadNuff m = ( MonadIO m, MonadCatch m, MonadUnique m, MonadThings m
                    , HasDynFlags m, HasHermitMEnv m, LiftCoreM m )
 
-type ContextNuff c = (ReadPath c Crumb, AddBindings c)
+type ContextNuff c =
+  ( ReadPath c Crumb, ExtendPath c Crumb
+  , AddBindings c, ReadBindings c
+  , HasEmptyContext c )
 
-type CMNuff c m = (ContextNuff c, MonadNuff m)
+type Nuff c m = (ContextNuff c, MonadNuff m)
 
 -- Transform to constructor-application form, plus outer bindings ready for
 -- 'mkCoreLets'. If not already in this form, consider "abst (repr scrut')",
@@ -72,66 +81,80 @@ type CMNuff c m = (ContextNuff c, MonadNuff m)
 -- scrut' in case abstv' of ...". If it helps, add a continuation argument to
 -- apply to the result of case reduction.
 
-toCtorApp :: CMNuff c m => Subst -> c -> Norm -> m ([CoreBind],CtorApp)
-toCtorApp sub c = go (10 :: Int) -- number of tries
+toCtorApp :: Nuff c m => Transform c m Norm ([CoreBind],CtorApp)
+toCtorApp = go (10 :: Int) -- number of tries
  where
-   go 0 _ = fail "toCtorApp: too many tries"
-   go _ (Norm (collectArgs -> (Var (isDataConWorkId_maybe -> Just dcon),args))) =
-     return $ ([],CtorApp dcon (Norm <$> args))
-   go n (Norm scrut) =
-     do (abst,repr) <- mkAbstRepr (substTy sub ty)  -- substTy necessary?
-        v <- newIdH "w" ty
-        abstv' <- mono sub [] c (App abst (Var v))
-        first (NonRec v (App repr scrut) :) <$> go (n-1) abstv'
-    where
-      ty = exprType scrut
+   go :: Nuff c m => Int -> Transform c m Norm ([CoreBind],CtorApp)
+   go 0 = fail "toCtorApp: too many tries"
+
+   go n = readerT $ \ case
+     (Norm (collectArgs -> (Var (isDataConWorkId_maybe -> Just dcon),args))) ->
+       return ([],CtorApp dcon (Norm <$> args))
+
+     (Norm scrut) ->
+       do (abst,repr) <- abstRepr $* ty
+          v <- newIdT "w" $* ty
+          abstv' <- mono0 $* App abst (Var v)
+          first (NonRec v (App repr scrut) :) <$> (go (n-1) $* abstv')
+      where
+        ty = exprType scrut
 
 -- | Monomorphizing transformation
-monomorphizeE :: CMNuff c m => Rewrite c m CoreExpr
-monomorphizeE = unNorm <$> transform (mono emptySubst [])
+monomorphizeE :: Nuff c m => Rewrite c m CoreExpr
+monomorphizeE = unNorm <$> mono0
 
-mono :: CMNuff c m => Subst -> [Norm] -> c -> CoreExpr -> m Norm
-mono sub args c e@(Var v) =
- case lookupIdSubst (text "mono") sub v of
-   Var v' | v == v' ->  -- not found, so try unfolding
-     maybe (return (Norm e)) (mono sub args c) (getUnfolding v)
-   e'               -> mono sub args c e'  -- revisit. which sub to use?
-mono sub args c (App fun arg) =
-  do arg' <- mono sub args c arg
-     mono sub (arg':args) c fun
-mono sub (Norm (Type ty):args) c (Lam v body) =
-  if isTyVar v then
-    mono (extendTvSubst sub v ty) args c body
-  else
-    fail "mono: Lam/Type confusion"
-mono sub [] c (Lam v body) =
-  inNorm (Lam v) <$> mono sub [] (addLambdaBinding v c) body
-mono sub (Norm arg:args) c (Lam v body) =
-  inNorm (Let b) <$> mono sub args (addBindingGroup b c) body
- where
-   b = NonRec v arg
-mono sub args c (Let binds body) =
-  do binds' <- monoBinds sub c binds
-     body'  <- mono sub args (addBindingGroup binds c) body
-     return (Norm (Let binds' (unNorm body')))
-mono sub args c (Case scrut w ty alts) =
-  do scrut' <- mono sub [] c scrut
-     (binds, CtorApp con conArgs) <- toCtorApp sub c scrut'
-     e' <- caseReduceDatacon (Case (mkCoreConApps con (unNorm <$> conArgs)) w ty alts)
-     return $
-       Norm (mkCoreLets binds (mkCoreApps e' (unNorm <$> args)))
-mono sub args c (Cast e co) = inNorm (flip Cast co) <$> mono sub args c e
-mono sub args c (Tick t e) = inNorm (Tick t) <$> mono sub args c e
-mono _ _ _ e = return (Norm e)
+mono0 :: Nuff c m => Transform c m CoreExpr Norm
+mono0 = mono . arr (,[])
+
+mono :: Nuff c m => Transform c m (CoreExpr,[Norm]) Norm
+mono = readerT $ \ case
+  (e@(Var _), _) ->
+    (mono . first inlineR) <+ return (Norm e)
+  (App fun arg, args) ->
+    do arg' <- mono0 $* arg
+       mono $* (fun, (arg':args))
+  (Lam v body, Norm arg : args) ->
+    mono $* (Let (NonRec v arg) body, args)
+  (Lam v body,[]) ->
+    inNorm (Lam v) <$>
+      liftContext (addLambdaBinding v) (mono0 $* body)
+  (Let binds body, args) ->
+    do binds' <- monoBinds $* binds
+       body' <- liftContext (addBindingGroup binds) mono $* (body,args)
+       return $ inNorm (Let binds') body'
+  (Case scrut w ty alts, args) ->
+    do scrut' <- mono $* (scrut,args)
+       (binds, CtorApp con conArgs) <- toCtorApp $* scrut'
+       e' <- caseReduceDataconWithR False (unNorm <$> mono0) $*
+               Case (unNorm (normConApps con conArgs)) w ty alts
+       return $
+         normLets binds (normApps e' args)
+  -- TODO: Case on Bool and maybe on I# and D#
+  (Cast e co, args) ->
+    do e' <- mono0 $* e
+       return $ normApps (Cast (unNorm e') co) args
+    -- TODO: cast-floating, perhaps in a modified mkCoreLets, which could also
+    -- mess with Norm.
+  (Tick t e, args) ->
+    inNorm (Tick t) <$> mono $* (e,args)
+  (e, args) ->
+    return $ normApps e args
+
+normApps :: CoreExpr -> [Norm] -> Norm
+normApps e args = Norm (mkCoreApps e (unNorm <$> args))
+
+normConApps :: DataCon -> [Norm] -> Norm
+normConApps con args = Norm (mkCoreConApps con (unNorm <$> args))
+
+normLets :: [CoreBind] -> Norm -> Norm
+normLets binds body = Norm (mkCoreLets binds (unNorm body))
 
 -- Warning: I don't type-distinguish between non-normalized and normalized
 -- CoreBind.
-monoBinds :: CMNuff c m => Subst -> c -> CoreBind -> m CoreBind
-monoBinds sub c (NonRec b rhs) =
-  (NonRec b . unNorm) <$> mono sub [] c rhs
-monoBinds sub c (Rec bs) = Rec <$> mapM mo bs
- where
-   mo (b,e) = (b,) . unNorm <$> mono sub [] c e
+monoBinds :: Nuff c m => Rewrite c m CoreBind
+monoBinds = readerT $ \ case
+  NonRec b rhs -> (NonRec b . unNorm) <$> (mono0 $* rhs)
+  Rec bs -> Rec <$> (mapT (second (unNorm <$> mono0)) $* bs)
 
 #if 0
 
@@ -158,18 +181,19 @@ data Bind b = NonRec b (Expr b)
 
 #endif
 
-mkAbstRepr :: MonadNuff m => Type -> m (CoreExpr,CoreExpr)
-mkAbstRepr ty = 
+abstRepr :: Nuff c m => Transform c m Type (CoreExpr,CoreExpr)
+abstRepr = 
   do -- The following check avoids an old problem in buildDictionary. Still needed?
+     ty <- id
      guardMsg (not (isEqPred ty)) "Predicate type"  -- still needed?
      guardMsg (closedType ty) "Type has free variables"
-     hasRepTc <- findTC (repName "HasRep")
-     tyStr <- showPprM ty
+     hasRepTc <- findTyConT (repName "HasRep")
+     tyStr <- showPprT $* ty
      dict  <- prefixFailMsg ("Couldn't build HasRep dictionary for " ++ tyStr) $
-              buildDictionaryM (mkTyConApp hasRepTc [ty])
-     repTc <- findTC (repName "Rep")
+              buildDictionaryT $* mkTyConApp hasRepTc [ty]
+     repTc <- findTyConT (repName "Rep")
      (mkEqBox -> eq,ty') <- prefixFailMsg "normaliseTypeT failed: "$
-                            normaliseTypeM Nominal (TyConApp repTc [ty])
+                            normaliseTypeT Nominal $* TyConApp repTc [ty]
      let mkMeth meth = apps' (repName meth) [ty] [dict,Type ty',eq]
      repr <- mkMeth "repr"
      abst <- mkMeth "abst"
@@ -181,6 +205,8 @@ closedType = isEmptyVarSet . tyVarsOfType
 {--------------------------------------------------------------------
     Misc adaptations of HEMIT operations dropping context
 --------------------------------------------------------------------}
+
+#if 0
 
 -- Apply a named id to type and value arguments.
 apps' :: MonadNuff m => HermitName -> [Type] -> [CoreExpr] -> m CoreExpr
@@ -205,13 +231,11 @@ findTC nm = do
         NamedTyCon tc -> return tc
         other -> fail $ "findTyCon: impossible Named returned: " ++ show other
 
-repName :: String -> HermitName
-repName = moduledName "Circat.Rep"
-
 -- | Get a GHC pretty-printing
 showPprM :: (HasDynFlags m, Outputable a, Monad m) => a -> m String
 showPprM a = do dynFlags <- getDynFlags
                 return (showPpr dynFlags a)
+#endif
 
 {--------------------------------------------------------------------
     
@@ -230,7 +254,7 @@ buildDictionaryT = prefixFailMsg "buildDictionaryT failed: " $ contextfreeT $ \ 
     return $ case bnds of
                 [NonRec v e] | i == v -> e -- the common case that we would have gotten a single non-recursive let
                 _ -> mkCoreLets bnds (varToCoreExpr i)
-#else
+#elif 0
 
 _buildDictionaryT :: (HasDynFlags m, HasHermitMEnv m, LiftCoreM m, MonadCatch m, MonadIO m, MonadUnique m)
                  => Transform c m Type CoreExpr
@@ -251,14 +275,22 @@ buildDictionaryM ty = do
 
 #endif
 
-#if 0
+#if 1
+
 -- | Case of Known Constructor.
 --   Eliminate a case if the scrutinee is a data constructor.
 --   If first argument is True, perform substitution in RHS, if False, build let expressions.
+
 caseReduceDataconR :: forall c m. ( ExtendPath c Crumb, ReadPath c Crumb, AddBindings c
                                   , ReadBindings c, MonadCatch m, MonadUnique m )
                    => Bool -> Rewrite c m CoreExpr
-caseReduceDataconR subst = prefixFailMsg "Case reduction failed: " $
+caseReduceDataconR subst = caseReduceDataconWithR subst id
+
+caseReduceDataconWithR :: forall c m. ( ExtendPath c Crumb, ReadPath c Crumb, AddBindings c
+                                      , ReadBindings c, MonadCatch m, MonadUnique m )
+                       => Bool -> Rewrite c m CoreExpr -> Rewrite c m CoreExpr
+caseReduceDataconWithR subst altRhsR =
+  prefixFailMsg "Case reduction failed: " $
                            withPatFailMsg (wrongExprForm "Case e v t alts") go
     where
         go :: Rewrite c m CoreExpr
@@ -275,11 +307,13 @@ caseReduceDataconR subst = prefixFailMsg "Case reduction failed: " $
                             shadows = [ v | (v,n) <- zip vs [1..], any (elemVarSet v) (drop n fvss) ]
                         in if | any (elemVarSet bndr) fvss -> alphaCaseBinderR Nothing >>> go
                               | null shadows               -> do let binds = zip (bndr : vs) (e : es)
+                                                                 rhs' <- altRhsR . pure rhs
                                                                  return $ if subst
-                                                                          then foldr (uncurry substCoreExpr) rhs binds
-                                                                          else flip mkCoreLets rhs $ map (uncurry NonRec) binds
+                                                                          then foldr (uncurry substCoreExpr) rhs' binds
+                                                                          else flip mkCoreLets rhs' $ map (uncurry NonRec) binds
                               | otherwise                  -> caseOneR (fail "scrutinee") (fail "binder") (fail "type") (\ _ -> acceptR (\ (dc'',_,_) -> dc'' == dc') >>> alphaAltVarsR shadows) >>> go
 -- WARNING: The alpha-renaming to avoid variable capture has not been tested.  We need testing infrastructure!
+
 #else
 
 -- | Case of Known Constructor.
