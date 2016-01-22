@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, TupleSections, ViewPatterns #-}
 {-# OPTIONS_GHC -Wall #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -40,7 +40,7 @@ data CtorApp = CtorApp Id [Norm]
 -- mkCoreLets :: [CoreBind] -> CoreExpr -> CoreExpr
 -- mkCoreLets binds body = foldr mkCoreLet body binds
 
-toCtorApp :: Subst -> Norm -> CoreM ([(Var,CoreExpr)],CtorApp)
+toCtorApp :: MonadUnique m => Subst -> Norm -> m ([(Var,CoreExpr)],CtorApp)
 toCtorApp sub = go (10 :: Int) -- number of tries
  where
    go 0 _ = fail "toCtorApp: too many tries"
@@ -54,11 +54,11 @@ toCtorApp sub = go (10 :: Int) -- number of tries
     where
       ty = exprType scrut
 
-mono :: Subst -> [Norm] -> CoreExpr -> CoreM Norm
-mono _ _ e@(Lit _) = pure (Norm e)
+mono :: Monad m => Subst -> [Norm] -> CoreExpr -> m Norm
+mono _ _ e@(Lit _) = return (Norm e)
 mono sub args e@(Var v) =
  case lookupIdSubst (text "mono") sub v of
-   Var v' | v == v' -> pure (Norm e)
+   Var v' | v == v' -> return (Norm e)
    e'               -> mono sub args e'  -- revisit. which sub to use?
 mono sub args (App fun arg) =
   do arg' <- mono sub args arg
@@ -79,12 +79,11 @@ mono _ _ _ = error "mono: unhandled case"
 
 -- Warning: I don't type-distinguish between non-normalized and normalized
 -- CoreBind.
-monoBinds :: Subst -> CoreBind -> CoreM CoreBind
+monoBinds :: Monad m => Subst -> CoreBind -> m CoreBind
 monoBinds sub (NonRec b rhs) =
   (NonRec b . unNorm) <$> mono sub [] rhs
 monoBinds sub (Rec bs) = Rec <$> mapM mo bs
  where
-   mo :: (Id,CoreExpr) -> CoreM (Id,CoreExpr)
    mo (b,e) = (b,) . unNorm <$> mono sub [] e
 
 #if 0
@@ -112,7 +111,7 @@ data Bind b = NonRec b (Expr b)
 
 #endif
 
-mkAbstRepr :: Type -> CoreM (CoreExpr,CoreExpr)
+mkAbstRepr :: Type -> m (CoreExpr,CoreExpr)
 mkAbstRepr = error "mkAbstRepr not yet implemented"
 
 -- mkAbstRepr ty = 
