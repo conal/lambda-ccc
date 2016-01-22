@@ -8,13 +8,12 @@ Additional info:
 
 Dependencies:
 
-*   GHC 7.8.2 or better
-*   KURE, [commit 7ce26aa](https://github.com/ku-fpg/kure/commit/7ce26aa)
-*   HERMIT, [commit 5557609](https://github.com/ku-fpg/hermit/commit/5557609)
+*   GHC 7.10.3 or better
+*   [KURE](https://github.com/ku-fpg/kure)
+*   [HERMIT](https://github.com/ku-fpg/hermit)
 *   [hermit-extras](http://github.com/conal/hermit-extras)
 *   [circat](https://github.com/conal/circat), for circuit specification, display, and conversion to netlists.
-
-To use these versions of KURE and HERMIT, clone the repos (or pull if already cloned), and use "git checkout [commit-id]".
+*   [monomorph](https://github.com/conal/monomorph) for monomorphization (to be moved into lambda-ccc).
 
 To try out:
 
@@ -35,5 +34,4 @@ To try out:
 
 The `.v.txt` file is Verilog code. Additionally the PDF will be displayed if the display code figures out how to on your system.
 
-There are many other examples in `test/TreeTest.hs`. At any time, all examples but one are commented out.
-
+To play with examples, edit test/Example.hs, and re-run "make".

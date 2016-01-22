@@ -473,6 +473,16 @@ rewriteIf = do Case c wild ty [(_False,[],a'),(_True,[],a)] <- id
     Run it
 --------------------------------------------------------------------}
 
+reifyR :: ReCore
+reifyR = id -- tryR (anytdR (promoteR reifyOops))
+       . try "reifying" (promoteR reifyGutsR)
+       . try "monomorphizing" monomorphR
+       . tryR (anytdR (promoteR unfoldDriver))
+       . tryR preMonoR
+       . tryR (anybuR (promoteR detickE)) -- for ghci break points
+ where
+   try str rew = tryR rew . traceR (str ++ " ...")
+
 reifyE :: ReExpr
 reifyE = anytdE (repeatR reifyMisc)
 
@@ -490,15 +500,6 @@ reifyMonomorph = -- bracketR "reifyMonomorph" $
 
 reifyGutsR :: ReGuts
 reifyGutsR = modGutsR reifyProgR
-
-reifyR :: ReCore
-reifyR = id -- tryR (anytdR (promoteR reifyOops))
-       . try "reifying" (promoteR reifyGutsR)
-       . try "monomorphizing" monomorphR
-       . tryR (anytdR (promoteR unfoldDriver))
-       . tryR preMonoR
- where
-   try str rew = tryR rew . traceR (str ++ " ...")
 
 monomorphR :: ReCore
 monomorphR = anytdR (promoteR reifyMonomorph)

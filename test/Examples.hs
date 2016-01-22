@@ -1,4 +1,5 @@
--- {-# OPTIONS_GHC -fforce-recomp -fplugin=LambdaCCC.Plugin -O -fobject-code -dcore-lint #-}
+-- {-# OPTIONS_GHC -fforce-recomp -fplugin=LambdaCCC.Plugin -dcore-lint
+--       -O -fobject-code -fno-omit-interface-pragmas -fexpose-all-unfoldings #-}
 
 {-# LANGUAGE CPP, TupleSections, GADTs, TypeOperators, Rank2Types #-}
 {-# OPTIONS_GHC -Wall #-}
@@ -21,7 +22,7 @@
 
 -- module Examples where
 
-import Prelude
+-- import Prelude
 
 -- -- Oddly, this import breaks unfolding needed by monomorphize in ghci.
 -- import LambdaCCC.Lambda (EP,reifyEP)
@@ -35,6 +36,7 @@ import TypeUnary.Vec hiding (transpose,iota)
 import qualified TypeUnary.Vec as V
 import Control.Compose ((:.)(..),unO)
 
+-- import LambdaCCC.Lambda (reifyEP)
 import LambdaCCC.Misc
   (xor,boolToInt,dup,Unop,Binop,Ternop,transpose,(:*),loop,delay,Reversible(..))
 import LambdaCCC.Adder
@@ -66,16 +68,24 @@ type RTree = RT.Tree
 type LTree = LT.Tree
 type Ragged = Ra.Tree
 
+-- foo = reifyEP (sqr :: Int -> Int)
+
+-- ghc: panic! (the 'impossible' happened)
+--   (GHC version 7.10.3 for x86_64-apple-darwin):
+-- 	getIdFromTrivialExpr evalEP @ Int (varP# @ Int "x"#)
+
 main = do
+  -- go "sqr" (sqr :: Int -> Int)
   -- go "sump" (sum :: Pair Int -> Int)
-  -- goSep "sumrt2" 1 (sum :: RTree N2 Int -> Int)
+--   goSep "sumrt2" 1 (sum :: RTree N2 Int -> Int)
   -- goSep "maprt8" 4 (fmap sqr :: Unop (RTree N8 Int))
   -- goSep "dotrt8" 3 (dotG :: Pair (RTree N8 Int) -> Int)
   -- goSep "transposet4p" 4 (transpose :: RTree N4 (Pair Bool) -> Pair (RTree N4 Bool))
   -- go "applyLin-rt23" (($@) :: MatrixT N2 N3 Int -> RTree N2 Int -> RTree N3 Int)
   -- go "composeLin-rt232" ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int)
   -- go "lsums-p" (lsums :: Pair Int -> (Pair Int, Int))
-  -- goSep "lsums-rt7" 5 (lsums :: RTree N7 Int -> (RTree N7 Int, Int))
+  -- goSep "lsums-rt9" 15 (lsums :: RTree N9 Int -> (RTree N9 Int, Int))
+  -- go "lsums-rt0" (lsums :: RTree N0 Int -> (RTree N0 Int, Int))
   go "lsums-lt0" (lsums :: LTree N0 Int -> (LTree N0 Int, Int))
 
 {--------------------------------------------------------------------
@@ -83,6 +93,8 @@ main = do
 --------------------------------------------------------------------}
 
 sqr x = x * x
+
+#if 1
 
 dotG :: (Traversable g, Foldable g, Applicative f, Foldable f, Num a) => g (f a) -> a
 dotG = sum . fmap product . transpose
@@ -160,4 +172,6 @@ LT.unB       :: LTree (S n)   a  -> LTree n (Pair a)
 transpose    :: LTree n (Pair a) -> Pair (LTree n a)
 fmap invertL :: Pair (LTree n a) -> Pair (RTree n a)
 RT.B         :: Pair (RTree n a) -> RTree (S n)   a
+#endif
+
 #endif
