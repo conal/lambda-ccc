@@ -326,6 +326,9 @@ getUnfoldingsT config = transform $ \ c i ->
                                                         return $ au ++ su
 #else
 
+-- Simplified form of hermit's getUnfoldingT. Doesn't use any context.
+-- I'm also ignoring capturing for now. Revisit.
+
 getUnfolding :: Id -> Maybe CoreExpr
 getUnfolding i =
   case unfoldingInfo (idInfo i) of
