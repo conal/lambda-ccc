@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, TupleSections, ViewPatterns, ConstraintKinds, LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 -- Try removing these extensions later 
 {-# LANGUAGE ScopedTypeVariables, MultiWayIf, FlexibleContexts #-}
@@ -27,6 +28,7 @@ import Prelude hiding (id,(.))
 import Control.Category (id,(.))
 import Control.Arrow (first,second,arr,(>>>))
 import Control.Monad.IO.Class (MonadIO)
+import qualified Data.Set as S
 
 import Language.KURE
 import HERMIT.Context
@@ -38,7 +40,7 @@ import HERMIT.Monad
 import HERMIT.Name
 
 import HERMIT.Extras
-  (moduledName,newIdT,apps',($*),showPprT,normaliseTypeT)
+  (moduledName,newIdT,apps',($*),showPprT,normaliseTypeT,fqVarName)
 
 import LambdaCCC.Misc (Unop)
 
@@ -53,6 +55,15 @@ newtype Norm = Norm { unNorm :: CoreExpr }
 inNorm :: Unop CoreExpr -> Unop Norm
 inNorm f = Norm . f . unNorm
 
+instance Injection Norm LCoreTC where
+  inject = inject . unNorm
+  project = fmap Norm . project
+
+-- class Injection a u where
+--   inject  :: a -> u
+--   project :: u -> Maybe a
+
+
 -- Constructor applied to normalized arguments, with hoisted bindings.
 data CtorApp = CtorApp DataCon [Norm]
 
@@ -64,12 +75,11 @@ data CtorApp = CtorApp DataCon [Norm]
 -- mkCoreLets binds body = foldr mkCoreLet body binds
 
 type MonadNuff m = ( MonadIO m, MonadCatch m, MonadUnique m, MonadThings m
-                   , HasDynFlags m, HasHermitMEnv m, LiftCoreM m )
+                   , HasDynFlags m, HasHermitMEnv m, LiftCoreM m, HasLemmas m )
 
-type ContextNuff c =
-  ( ReadPath c Crumb, ExtendPath c Crumb
-  , AddBindings c, ReadBindings c
-  , HasEmptyContext c )
+type ContextNuff c = ( ReadPath c Crumb, ExtendPath c Crumb
+                     , LemmaContext c
+                     , AddBindings c, ReadBindings c, HasEmptyContext c )
 
 type Nuff c m = (ContextNuff c, MonadNuff m)
 
@@ -86,12 +96,10 @@ toCtorApp = go (10 :: Int) -- number of tries
  where
    go :: Nuff c m => Int -> Transform c m Norm ([CoreBind],CtorApp)
    go 0 = fail "toCtorApp: too many tries"
-
    go n = readerT $ \ case
-     (Norm (collectArgs -> (Var (isDataConWorkId_maybe -> Just dcon),args))) ->
+     Norm (collectArgs -> (Var (isDataConWorkId_maybe -> Just dcon),args)) ->
        return ([],CtorApp dcon (Norm <$> args))
-
-     (Norm scrut) ->
+     Norm scrut ->
        do (abst,repr) <- abstRepr $* ty
           v <- newIdT "w" $* ty
           abstv' <- mono0 $* App abst (Var v)
@@ -106,10 +114,16 @@ monomorphizeE = unNorm <$> mono0
 mono0 :: Nuff c m => Transform c m CoreExpr Norm
 mono0 = mono . arr (,[])
 
-mono :: Nuff c m => Transform c m (CoreExpr,[Norm]) Norm
-mono = readerT $ \ case
-  (e@(Var _), _) ->
-    (mono . first inlineR) <+ return (Norm e)
+mono, mono' :: Nuff c m => Transform c m (CoreExpr,[Norm]) Norm
+
+mono = observeR "mono" . mono'
+
+mono' = readerT $ \ case
+  (Var v, Norm op : Norm (Type ty) : Norm dict : args') | isPrim v ty ->
+    return (normApps (mkCoreApps (Var v) [op,Type ty,dict]) args')
+  (e@(Var _), args) ->
+    do e' <- ((mono . first inlineR) <+ return (Norm e)) 
+       return (normApps (unNorm e') args)
   (App fun arg, args) ->
     do arg' <- mono0 $* arg
        mono $* (fun, (arg':args))
@@ -139,6 +153,19 @@ mono = readerT $ \ case
     inNorm (Tick t) <$> mono $* (e,args)
   (e, args) ->
     return $ normApps e args
+
+isPrim :: Var -> Type -> Bool
+isPrim v ty = (isDataConWorkId v || fqVarName v `S.member` primNames) &&
+              (ty == unitTy || ty == boolTy || ty == intTy || ty == doubleTy)
+
+-- isDataConWorkId catches I# and D#
+
+primNames :: S.Set String
+primNames = S.fromList
+             [ "GHC."++modu++"."++name | (modu,names) <- prims , name <- names ]
+ where
+   prims = [("Num",["+","-","*","negate","abs","signum","fromInteger"])]
+   -- TODO: more classes & methods
 
 normApps :: CoreExpr -> [Norm] -> Norm
 normApps e args = Norm (mkCoreApps e (unNorm <$> args))
