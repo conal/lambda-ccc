@@ -1,0 +1,18 @@
+set-pp-coercion Show
+set-pp-type Show
+pre-mono
+any-td unfold-driver
+
+application-of 'reifyEP
+app-arg
+
+-- unfold-poly -- loops! I think it's the simplify after the unfold
+
+-- one-td simplify-one-step
+
+-- monomorph
+-- reify-guts
+
+-- application-of 'reifyEP
+-- -- rhs-of 'main
+-- -- reifyE
