@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, TupleSections, ViewPatterns #-}
+{-# LANGUAGE CPP, TupleSections, ViewPatterns, ConstraintKinds #-}
 {-# OPTIONS_GHC -Wall #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
@@ -21,11 +21,24 @@ module LambdaCCC.Monomorphize where
 -- TODO: explicit exports
 
 import Control.Arrow (first)
+import Control.Monad.IO.Class (MonadIO)
+import Data.Char (isSpace)
 
-import GhcPlugins  -- or refine imports
--- import qualified Type as Type
+-- import GhcPlugins  -- or refine imports
+-- import Type (Type(TyConApp))
+-- -- import qualified Type as Type
+-- import Encoding (zEncodeString)
 
-import HERMIT.Name (newIdH)
+import Language.KURE
+import HERMIT.GHC
+import HERMIT.Dictionary
+import HERMIT.Name
+import HERMIT.Monad
+
+import HERMIT.Extras (moduledName,normaliseTypeM,apps)
+
+-- TODO: Tighten imports
+
 
 -- Monomorphism-normalized expressions
 newtype Norm = Norm { unNorm :: CoreExpr }
@@ -40,7 +53,10 @@ data CtorApp = CtorApp Id [Norm]
 -- mkCoreLets :: [CoreBind] -> CoreExpr -> CoreExpr
 -- mkCoreLets binds body = foldr mkCoreLet body binds
 
-toCtorApp :: MonadUnique m => Subst -> Norm -> m ([(Var,CoreExpr)],CtorApp)
+type MonadNuff m = ( MonadIO m, MonadCatch m, MonadUnique m, MonadThings m
+                   , HasDynFlags m, HasHermitMEnv m, LiftCoreM m )
+
+toCtorApp :: MonadNuff m => Subst -> Norm -> m ([(Var,CoreExpr)],CtorApp)
 toCtorApp sub = go (10 :: Int) -- number of tries
  where
    go 0 _ = fail "toCtorApp: too many tries"
@@ -111,19 +127,93 @@ data Bind b = NonRec b (Expr b)
 
 #endif
 
-mkAbstRepr :: Type -> m (CoreExpr,CoreExpr)
-mkAbstRepr = error "mkAbstRepr not yet implemented"
+mkAbstRepr :: MonadNuff m => Type -> m (CoreExpr,CoreExpr)
+mkAbstRepr ty = 
+  do -- The following check avoids an old problem in buildDictionary. Still needed?
+     guardMsg (not (isEqPred ty)) "Predicate type"  -- still needed?
+     guardMsg (closedType ty) "Type has free variables"
+     hasRepTc <- findTC (repName "HasRep")
+     tyStr <- showPprM ty
+     dict  <- prefixFailMsg ("Couldn't build HasRep dictionary for " ++ tyStr) $
+              buildDictionaryM (mkTyConApp hasRepTc [ty])
+     repTc <- findTC (repName "Rep")
+     (mkEqBox -> eq,ty') <- prefixFailMsg "normaliseTypeT failed: "$
+                            normaliseTypeM Nominal (TyConApp repTc [ty])
+     let mkMeth meth = apps' (repName meth) [ty] [dict,Type ty',eq]
+     repr <- mkMeth "repr"
+     abst <- mkMeth "abst"
+     return (repr,abst)
 
--- mkAbstRepr ty = 
---   do -- The following check avoids an old problem in buildDictionary. Still needed?
---      -- guardMsg (not (isEqPred ty)) "Predicate type"  -- still needed?
---      -- guardMsg (closedType ty) "Type has free variables"
---      hasRepTc <- findTyConT (repName "HasRep")
---      tyStr <- showPprT $* ty
---      dict  <- prefixFailMsg ("Couldn't build HasRep dictionary for " ++ tyStr) $
---               buildDictionaryT $* TyConApp hasRepTc [ty]
---      repTc <- findTyConT (repName "Rep")
---      (mkEqBox -> eq,ty') <- prefixFailMsg "normaliseTypeT failed: "$
---                             normaliseTypeT Nominal $* TyConApp repTc [ty]
---      return $ \ meth -> prefixFailMsg "apps' failed: " $
---                         apps' (repName meth) [ty] [dict,Type ty',eq]
+closedType :: Type -> Bool
+closedType = isEmptyVarSet . tyVarsOfType
+
+{--------------------------------------------------------------------
+    Misc adaptations of HEMIT operations dropping context
+--------------------------------------------------------------------}
+
+-- Apply a named id to type and value arguments.
+apps' :: MonadNuff m => HermitName -> [Type] -> [CoreExpr] -> m CoreExpr
+apps' nm ts es = (\ i -> apps i ts es) <$> findVar' nm
+
+-- Like hermit's findId, but no context, and don't include constructors
+findVar' :: MonadNuff m => HermitName -> m Id
+findVar' nm = do
+    nmd <- findInNSModGuts varNS nm
+    case nmd of
+        NamedId i -> return i
+        NamedDataCon dc -> return $ dataConWrapId dc
+        other -> fail $ "findId': impossible Named returned: " ++ show other
+
+-- Like hermit's findTyCon but doesn't take a context, and assumes not a bound var
+
+findTC :: (LiftCoreM m, HasHermitMEnv m, MonadIO m, MonadThings m)
+       => HermitName -> m TyCon
+findTC nm = do
+    nmd <- findInNSModGuts tyConClassNS nm
+    case nmd of
+        NamedTyCon tc -> return tc
+        other -> fail $ "findTyCon: impossible Named returned: " ++ show other
+
+repName :: String -> HermitName
+repName = moduledName "Circat.Rep"
+
+-- | Get a GHC pretty-printing
+showPprM :: (HasDynFlags m, Outputable a, Monad m) => a -> m String
+showPprM a = do dynFlags <- getDynFlags
+                return (showPpr dynFlags a)
+
+{--------------------------------------------------------------------
+    
+--------------------------------------------------------------------}
+
+-- Refactored from HERMIT. Contribute back
+
+#if 0
+buildDictionaryT :: (HasDynFlags m, HasHermitMEnv m, LiftCoreM m, MonadCatch m, MonadIO m, MonadUnique m)
+                 => Transform c m Type CoreExpr
+buildDictionaryT = prefixFailMsg "buildDictionaryT failed: " $ contextfreeT $ \ ty -> do
+    dflags <- getDynFlags
+    binder <- newIdH ("$d" ++ zEncodeString (filter (not . isSpace) (showPpr dflags ty))) ty
+    (i,bnds) <- buildDictionary binder
+    guardMsg (notNull bnds) "no dictionary bindings generated."
+    return $ case bnds of
+                [NonRec v e] | i == v -> e -- the common case that we would have gotten a single non-recursive let
+                _ -> mkCoreLets bnds (varToCoreExpr i)
+#else
+
+buildDictionaryT :: (HasDynFlags m, HasHermitMEnv m, LiftCoreM m, MonadCatch m, MonadIO m, MonadUnique m)
+                 => Transform c m Type CoreExpr
+buildDictionaryT = prefixFailMsg "buildDictionaryT failed: " $ contextfreeT $ buildDictionaryM
+
+buildDictionaryM :: (HasDynFlags m, HasHermitMEnv m, LiftCoreM m, MonadCatch m, MonadIO m, MonadUnique m)
+                 => Type -> m CoreExpr
+buildDictionaryM ty = do
+    dflags <- getDynFlags
+    binder <- newIdH ("$d" ++ zEncodeString (filter (not . isSpace) (showPpr dflags ty))) ty
+    (i,bnds) <- buildDictionary binder
+    guardMsg (notNull bnds) "no dictionary bindings generated."
+    return $ case bnds of
+                [NonRec v e] | i == v -> e -- the common case that we would have gotten a single non-recursive let
+                _ -> mkCoreLets bnds (varToCoreExpr i)
+
+#endif
