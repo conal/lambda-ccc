@@ -20,16 +20,11 @@
 -- Efficient monomorphization
 ----------------------------------------------------------------------
 
-module LambdaCCC.Monomorphize (monomorphize,MonadNuff) where
+module LambdaCCC.Monomorphize (monomorphizeE,MonadNuff) where
 
 import Control.Arrow (first)
 import Control.Monad.IO.Class (MonadIO)
 import Data.Char (isSpace)
-
--- import GhcPlugins  -- or refine imports
--- import Type (Type(TyConApp))
--- -- import qualified Type as Type
--- import Encoding (zEncodeString)
 
 import Language.KURE
 import HERMIT.Core
@@ -40,11 +35,16 @@ import HERMIT.Name
 
 import HERMIT.Extras (moduledName,normaliseTypeM,apps)
 
+import LambdaCCC.Misc (Unop)
+
 -- TODO: Tighten imports
 
 
 -- Monomorphism-normalized expressions
 newtype Norm = Norm { unNorm :: CoreExpr }
+
+inNorm :: Unop CoreExpr -> Unop Norm
+inNorm f = Norm . f . unNorm
 
 -- Constructor applied to normalized arguments, with hoisted bindings.
 data CtorApp = CtorApp DataCon [Norm]
@@ -81,11 +81,16 @@ toCtorApp sub = go (10 :: Int) -- number of tries
     where
       ty = exprType scrut
 
+-- | Monomorphizing transformation
+monomorphizeE :: MonadNuff m => Rewrite c m CoreExpr
+monomorphizeE = contextfreeT monomorphize
+
 monomorphize :: MonadNuff m => CoreExpr -> m CoreExpr
 monomorphize = fmap unNorm . mono emptySubst []
 
 mono :: MonadNuff m => Subst -> [Norm] -> CoreExpr -> m Norm
-mono _ _ e@(Lit _) = return (Norm e)
+mono _ _ e@(Lit _) =
+  return (Norm e)
 mono sub args e@(Var v) =
  case lookupIdSubst (text "mono") sub v of
    Var v' | v == v' ->  -- not found, so try unfolding
@@ -99,6 +104,10 @@ mono sub (Norm (Type ty):args) (Lam v body) =
     mono (extendTvSubst sub v ty) args body
   else
     fail "mono: Lam/Type confusion"
+mono sub [] (Lam v body) =
+  inNorm (Lam v) <$> mono sub [] body
+mono sub (Norm arg:args) (Lam v body) =
+  inNorm (Let (NonRec v arg)) <$> mono sub args ( body)
 mono sub args (Let binds body) =
   do binds' <- monoBinds sub binds
      body'  <- mono sub args body
@@ -109,7 +118,10 @@ mono sub args (Case scrut w ty alts) =
      e' <- caseReduceDatacon (Case (mkCoreConApps con (unNorm <$> conArgs)) w ty alts)
      return $
        Norm (mkCoreLets binds (mkCoreApps e' (unNorm <$> args)))
-mono _ _ _ = error "mono: unhandled case"
+mono sub args (Cast e co) = inNorm (flip Cast co) <$> mono sub args e
+mono sub args (Tick t e) = inNorm (Tick t) <$> mono sub args e
+mono _ _ e@(Type _) = return (Norm e) -- or error
+mono _ _ e@(Coercion _) = return (Norm e) -- or error
 
 -- Warning: I don't type-distinguish between non-normalized and normalized
 -- CoreBind.
