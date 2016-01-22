@@ -27,6 +27,7 @@ import Control.Monad.IO.Class (MonadIO)
 import Data.Char (isSpace)
 
 import Language.KURE
+import HERMIT.Context
 import HERMIT.Core
 import HERMIT.Dictionary
 import HERMIT.GHC
@@ -59,6 +60,10 @@ data CtorApp = CtorApp DataCon [Norm]
 type MonadNuff m = ( MonadIO m, MonadCatch m, MonadUnique m, MonadThings m
                    , HasDynFlags m, HasHermitMEnv m, LiftCoreM m )
 
+type ContextNuff c = (ReadPath c Crumb, AddBindings c)
+
+type CMNuff c m = (ContextNuff c, MonadNuff m)
+
 -- Transform to constructor-application form, plus outer bindings ready for
 -- 'mkCoreLets'. If not already in this form, consider "abst (repr scrut')",
 -- i.e., "let v = repr scrut' in abst v", where abst v is monomorphic. Normalize
@@ -67,8 +72,8 @@ type MonadNuff m = ( MonadIO m, MonadCatch m, MonadUnique m, MonadThings m
 -- scrut' in case abstv' of ...". If it helps, add a continuation argument to
 -- apply to the result of case reduction.
 
-toCtorApp :: MonadNuff m => Subst -> Norm -> m ([CoreBind],CtorApp)
-toCtorApp sub = go (10 :: Int) -- number of tries
+toCtorApp :: CMNuff c m => Subst -> c -> Norm -> m ([CoreBind],CtorApp)
+toCtorApp sub c = go (10 :: Int) -- number of tries
  where
    go 0 _ = fail "toCtorApp: too many tries"
    go _ (Norm (collectArgs -> (Var (isDataConWorkId_maybe -> Just dcon),args))) =
@@ -76,61 +81,57 @@ toCtorApp sub = go (10 :: Int) -- number of tries
    go n (Norm scrut) =
      do (abst,repr) <- mkAbstRepr (substTy sub ty)  -- substTy necessary?
         v <- newIdH "w" ty
-        abstv' <- mono sub [] (App abst (Var v))
+        abstv' <- mono sub [] c (App abst (Var v))
         first (NonRec v (App repr scrut) :) <$> go (n-1) abstv'
     where
       ty = exprType scrut
 
 -- | Monomorphizing transformation
-monomorphizeE :: MonadNuff m => Rewrite c m CoreExpr
-monomorphizeE = contextfreeT monomorphize
+monomorphizeE :: CMNuff c m => Rewrite c m CoreExpr
+monomorphizeE = unNorm <$> transform (mono emptySubst [])
 
-monomorphize :: MonadNuff m => CoreExpr -> m CoreExpr
-monomorphize = fmap unNorm . mono emptySubst []
-
-mono :: MonadNuff m => Subst -> [Norm] -> CoreExpr -> m Norm
-mono _ _ e@(Lit _) =
-  return (Norm e)
-mono sub args e@(Var v) =
+mono :: CMNuff c m => Subst -> [Norm] -> c -> CoreExpr -> m Norm
+mono sub args c e@(Var v) =
  case lookupIdSubst (text "mono") sub v of
    Var v' | v == v' ->  -- not found, so try unfolding
-     maybe (return (Norm e)) (mono sub args) (getUnfolding v)
-   e'               -> mono sub args e'  -- revisit. which sub to use?
-mono sub args (App fun arg) =
-  do arg' <- mono sub args arg
-     mono sub (arg':args) fun
-mono sub (Norm (Type ty):args) (Lam v body) =
+     maybe (return (Norm e)) (mono sub args c) (getUnfolding v)
+   e'               -> mono sub args c e'  -- revisit. which sub to use?
+mono sub args c (App fun arg) =
+  do arg' <- mono sub args c arg
+     mono sub (arg':args) c fun
+mono sub (Norm (Type ty):args) c (Lam v body) =
   if isTyVar v then
-    mono (extendTvSubst sub v ty) args body
+    mono (extendTvSubst sub v ty) args c body
   else
     fail "mono: Lam/Type confusion"
-mono sub [] (Lam v body) =
-  inNorm (Lam v) <$> mono sub [] body
-mono sub (Norm arg:args) (Lam v body) =
-  inNorm (Let (NonRec v arg)) <$> mono sub args ( body)
-mono sub args (Let binds body) =
-  do binds' <- monoBinds sub binds
-     body'  <- mono sub args body
+mono sub [] c (Lam v body) =
+  inNorm (Lam v) <$> mono sub [] (addLambdaBinding v c) body
+mono sub (Norm arg:args) c (Lam v body) =
+  inNorm (Let b) <$> mono sub args (addBindingGroup b c) body
+ where
+   b = NonRec v arg
+mono sub args c (Let binds body) =
+  do binds' <- monoBinds sub c binds
+     body'  <- mono sub args (addBindingGroup binds c) body
      return (Norm (Let binds' (unNorm body')))
-mono sub args (Case scrut w ty alts) =
-  do scrut' <- mono sub [] scrut
-     (binds, CtorApp con conArgs) <- toCtorApp sub scrut'
+mono sub args c (Case scrut w ty alts) =
+  do scrut' <- mono sub [] c scrut
+     (binds, CtorApp con conArgs) <- toCtorApp sub c scrut'
      e' <- caseReduceDatacon (Case (mkCoreConApps con (unNorm <$> conArgs)) w ty alts)
      return $
        Norm (mkCoreLets binds (mkCoreApps e' (unNorm <$> args)))
-mono sub args (Cast e co) = inNorm (flip Cast co) <$> mono sub args e
-mono sub args (Tick t e) = inNorm (Tick t) <$> mono sub args e
-mono _ _ e@(Type _) = return (Norm e) -- or error
-mono _ _ e@(Coercion _) = return (Norm e) -- or error
+mono sub args c (Cast e co) = inNorm (flip Cast co) <$> mono sub args c e
+mono sub args c (Tick t e) = inNorm (Tick t) <$> mono sub args c e
+mono _ _ _ e = return (Norm e)
 
 -- Warning: I don't type-distinguish between non-normalized and normalized
 -- CoreBind.
-monoBinds :: MonadNuff m => Subst -> CoreBind -> m CoreBind
-monoBinds sub (NonRec b rhs) =
-  (NonRec b . unNorm) <$> mono sub [] rhs
-monoBinds sub (Rec bs) = Rec <$> mapM mo bs
+monoBinds :: CMNuff c m => Subst -> c -> CoreBind -> m CoreBind
+monoBinds sub c (NonRec b rhs) =
+  (NonRec b . unNorm) <$> mono sub [] c rhs
+monoBinds sub c (Rec bs) = Rec <$> mapM mo bs
  where
-   mo (b,e) = (b,) . unNorm <$> mono sub [] e
+   mo (b,e) = (b,) . unNorm <$> mono sub [] c e
 
 #if 0
 
