@@ -5,7 +5,7 @@
 
 {-# OPTIONS_GHC -Wall #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 -- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -20,11 +20,9 @@
 -- Efficient monomorphization
 ----------------------------------------------------------------------
 
-module LambdaCCC.Monomorphize where
+module LambdaCCC.Monomorphize (monomorphize,MonadNuff) where
 
--- TODO: explicit exports
-
-import Control.Arrow (first,(>>>))
+import Control.Arrow (first)
 import Control.Monad.IO.Class (MonadIO)
 import Data.Char (isSpace)
 
@@ -34,11 +32,9 @@ import Data.Char (isSpace)
 -- import Encoding (zEncodeString)
 
 import Language.KURE
-import HERMIT.Context
 import HERMIT.Core
 import HERMIT.Dictionary
 import HERMIT.GHC
-import HERMIT.Kure
 import HERMIT.Monad
 import HERMIT.Name
 
@@ -84,6 +80,9 @@ toCtorApp sub = go (10 :: Int) -- number of tries
         first (NonRec v (App repr scrut) :) <$> go (n-1) abstv'
     where
       ty = exprType scrut
+
+monomorphize :: MonadNuff m => CoreExpr -> m CoreExpr
+monomorphize = fmap unNorm . mono emptySubst []
 
 mono :: MonadNuff m => Subst -> [Norm] -> CoreExpr -> m Norm
 mono _ _ e@(Lit _) = return (Norm e)
@@ -220,9 +219,9 @@ buildDictionaryT = prefixFailMsg "buildDictionaryT failed: " $ contextfreeT $ \ 
                 _ -> mkCoreLets bnds (varToCoreExpr i)
 #else
 
-buildDictionaryT :: (HasDynFlags m, HasHermitMEnv m, LiftCoreM m, MonadCatch m, MonadIO m, MonadUnique m)
+_buildDictionaryT :: (HasDynFlags m, HasHermitMEnv m, LiftCoreM m, MonadCatch m, MonadIO m, MonadUnique m)
                  => Transform c m Type CoreExpr
-buildDictionaryT = prefixFailMsg "buildDictionaryT failed: " $ contextfreeT $ buildDictionaryM
+_buildDictionaryT = prefixFailMsg "buildDictionaryT failed: " $ contextfreeT $ buildDictionaryM
 
 buildDictionaryM :: (HasDynFlags m, HasHermitMEnv m, LiftCoreM m, MonadCatch m, MonadIO m, MonadUnique m)
                  => Type -> m CoreExpr
@@ -234,6 +233,8 @@ buildDictionaryM ty = do
     return $ case bnds of
                 [NonRec v e] | i == v -> e -- the common case that we would have gotten a single non-recursive let
                 _ -> mkCoreLets bnds (varToCoreExpr i)
+
+-- TODO: Test buildDictionary and buildDictionaryM, and then replace definition in hermit.
 
 #endif
 
