@@ -4,7 +4,7 @@ go:	Examples
 	./Examples
 
 play:
-	hermit Examples.hs -v0 -opt=LambdaCCC.Interactive
+	hermit Examples.hs -v0 -opt=LambdaCCC.Interactive Go.hss
 
 # %.o: ../dist $*.hs
 # 	ghc $*.hs
@@ -16,17 +16,17 @@ Examples: ../dist Examples.hs
 # Why the -fforce-recomp? I guess GHC doesn't notice that the plugin has
 # changed. Odd, since it does seem notice when cabal-installing.
 
-compile:
+lc:
 	cd .. ; make
 
-compile-circat:
-	cd ~/Haskell/circat ; make
-	make compile-mono
+circat:
+	cd ../../circat ; make
+	make mono
 
-compile-extras:
-	cd ~/Tabula/Haskell/hermit-extras ; make
-	make compile-mono
+extras:
+	cd ../../hermit-extras ; make
+	make mono
 
-compile-mono:
-	cd ~/Haskell/monomorph ; make
-	make compile
+mono:
+	cd ../../monomorph ; make
+	make lc
