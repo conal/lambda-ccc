@@ -1,12 +1,17 @@
-{-# LANGUAGE CPP, TupleSections, ViewPatterns, ConstraintKinds, LambdaCase #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-
--- Try removing these extensions later 
-{-# LANGUAGE ScopedTypeVariables, MultiWayIf, FlexibleContexts #-}
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE PatternGuards         #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE ViewPatterns          #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
--- {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
 {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
@@ -21,14 +26,16 @@
 -- Efficient monomorphization
 ----------------------------------------------------------------------
 
-module LambdaCCC.Monomorphize (monomorphizeE,MonadNuff) where
+module LambdaCCC.Monomorphize (monomorphizeE) where
 
 import Prelude hiding (id,(.))
 
+import Data.Traversable (mapAccumL)
 import Control.Category (id,(.))
 import Control.Arrow (first,second,arr,(>>>))
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad ((=<<))
 import qualified Data.Set as S
+import Control.Monad.IO.Class (MonadIO)
 
 import Language.KURE
 import HERMIT.Context
@@ -39,40 +46,15 @@ import HERMIT.Kure
 import HERMIT.Monad
 import HERMIT.Name
 
-import HERMIT.Extras
-  (moduledName,newIdT,apps',($*),showPprT,normaliseTypeT,fqVarName)
-
-import LambdaCCC.Misc (Unop)
-
 -- TODO: Tighten imports
 
+import HERMIT.Extras (pattern FunCo)
+
+type Unop a = a -> a
+type UnopM m a = a -> m a
+
 repName :: String -> HermitName
-repName = moduledName "Circat.Rep"
-
--- Monomorphism-normalized expressions
-newtype Norm = Norm { unNorm :: CoreExpr }
-
-inNorm :: Unop CoreExpr -> Unop Norm
-inNorm f = Norm . f . unNorm
-
-instance Injection Norm LCoreTC where
-  inject = inject . unNorm
-  project = fmap Norm . project
-
--- class Injection a u where
---   inject  :: a -> u
---   project :: u -> Maybe a
-
-
--- Constructor applied to normalized arguments, with hoisted bindings.
-data CtorApp = CtorApp DataCon [Norm]
-
--- TODO: Clarify bindings order. Note:
---
--- -- | Bind a list of binding groups over an expression. The leftmost binding
--- -- group becomes the outermost group in the resulting expression
--- mkCoreLets :: [CoreBind] -> CoreExpr -> CoreExpr
--- mkCoreLets binds body = foldr mkCoreLet body binds
+repName = mkQualified "Circat.Rep"
 
 type MonadNuff m = ( MonadIO m, MonadCatch m, MonadUnique m, MonadThings m
                    , HasDynFlags m, HasHermitMEnv m, LiftCoreM m, HasLemmas m )
@@ -83,336 +65,82 @@ type ContextNuff c = ( ReadPath c Crumb, ExtendPath c Crumb
 
 type Nuff c m = (ContextNuff c, MonadNuff m)
 
--- Transform to constructor-application form, plus outer bindings ready for
--- 'mkCoreLets'. If not already in this form, consider "abst (repr scrut')",
--- i.e., "let v = repr scrut' in abst v", where abst v is monomorphic. Normalize
--- "abst v" to abstv'. The "let v = repr scrut'" gets floated above the case,
--- treating repr as in normal form, leaving the equivalent of "let v = repr
--- scrut' in case abstv' of ...". If it helps, add a continuation argument to
--- apply to the result of case reduction.
-
-toCtorApp :: Nuff c m => Transform c m Norm ([CoreBind],CtorApp)
-toCtorApp = go (10 :: Int) -- number of tries
- where
-   go :: Nuff c m => Int -> Transform c m Norm ([CoreBind],CtorApp)
-   go 0 = fail "toCtorApp: too many tries"
-   go n = readerT $ \ case
-     Norm (collectArgs -> (Var (isDataConWorkId_maybe -> Just dcon),args)) ->
-       return ([],CtorApp dcon (Norm <$> args))
-     Norm scrut ->
-       do (abst,repr) <- abstRepr $* ty
-          v <- newIdT "w" $* ty
-          abstv' <- mono0 $* App abst (Var v)
-          first (NonRec v (App repr scrut) :) <$> (go (n-1) $* abstv')
-      where
-        ty = exprType scrut
-
--- | Monomorphizing transformation
 monomorphizeE :: Nuff c m => Rewrite c m CoreExpr
-monomorphizeE = unNorm <$> mono0
+monomorphizeE = transform (mono [])
 
-mono0 :: Nuff c m => Transform c m CoreExpr Norm
-mono0 = mono . arr (,[])
+type Rew a = forall c m . Nuff c m => c -> a -> m a
 
-mono, mono' :: Nuff c m => Transform c m (CoreExpr,[Norm]) Norm
+type Stack = [CoreExpr]                 -- argument stack
 
-mono = observeR "mono" . mono'
-
-mono' = readerT $ \ case
-  (Var v, Norm op : Norm (Type ty) : Norm dict : args') | isPrim v ty ->
-    return (normApps (mkCoreApps (Var v) [op,Type ty,dict]) args')
-  (e@(Var _), args) ->
-    do e' <- ((mono . first inlineR) <+ return (Norm e)) 
-       return (normApps (unNorm e') args)
-  (App fun arg, args) ->
-    do arg' <- mono0 $* arg
-       mono $* (fun, (arg':args))
-  (Lam v body, Norm arg : args) ->
-    mono $* (Let (NonRec v arg) body, args)
-  (Lam v body,[]) ->
-    inNorm (Lam v) <$>
-      liftContext (addLambdaBinding v) (mono0 $* body)
-  (Let binds body, args) ->
-    do binds' <- monoBinds $* binds
-       body' <- liftContext (addBindingGroup binds) mono $* (body,args)
-       return $ inNorm (Let binds') body'
-  (Case scrut w ty alts, args) ->
-    do scrut' <- mono $* (scrut,args)
-       (binds, CtorApp con conArgs) <- toCtorApp $* scrut'
-       e' <- caseReduceDataconWithR False (unNorm <$> mono0) $*
-               Case (unNorm (normConApps con conArgs)) w ty alts
-       return $
-         normLets binds (normApps e' args)
-  -- TODO: Case on Bool and maybe on I# and D#
-  (Cast e co, args) ->
-    do e' <- mono0 $* e
-       return $ normApps (Cast (unNorm e') co) args
-    -- TODO: cast-floating, perhaps in a modified mkCoreLets, which could also
-    -- mess with Norm.
-  (Tick t e, args) ->
-    inNorm (Tick t) <$> mono $* (e,args)
-  (e, args) ->
-    return $ normApps e args
-
-isPrim :: Var -> Type -> Bool
-isPrim v ty = (isDataConWorkId v || fqVarName v `S.member` primNames) &&
-              (ty == unitTy || ty == boolTy || ty == intTy || ty == doubleTy)
-
--- isDataConWorkId catches I# and D#
-
-primNames :: S.Set String
-primNames = S.fromList
-             [ "GHC."++modu++"."++name | (modu,names) <- prims , name <- names ]
+mono :: Stack -> Rew CoreExpr
+mono args c = go
  where
-   prims = [("Num",["+","-","*","negate","abs","signum","fromInteger"])]
-   -- TODO: more classes & methods
-
-normApps :: CoreExpr -> [Norm] -> Norm
-normApps e args = Norm (mkCoreApps e (unNorm <$> args))
-
-normConApps :: DataCon -> [Norm] -> Norm
-normConApps con args = Norm (mkCoreConApps con (unNorm <$> args))
-
-normLets :: [CoreBind] -> Norm -> Norm
-normLets binds body = Norm (mkCoreLets binds (unNorm body))
-
--- Warning: I don't type-distinguish between non-normalized and normalized
--- CoreBind.
-monoBinds :: Nuff c m => Rewrite c m CoreBind
-monoBinds = readerT $ \ case
-  NonRec b rhs -> (NonRec b . unNorm) <$> (mono0 $* rhs)
-  Rec bs -> Rec <$> (mapT (second (unNorm <$> mono0)) $* bs)
-
-#if 0
-
--- If you edit this type, you may need to update the GHC formalism
--- See Note [GHC Formalism] in coreSyn/CoreLint.lhs
-data Expr b
-  = Var   Id
-  | Lit   Literal
-  | App   (Expr b) (Arg b)
-  | Lam   b (Expr b)
-  | Let   (Bind b) (Expr b)
-  | Case  (Expr b) b Type [Alt b]       -- See #case_invariant#
-  | Cast  (Expr b) Coercion
-  | Tick  (Tickish Id) (Expr b)
-  | Type  Type
-  | Coercion Coercion
-  deriving (Data, Typeable)
-
--- If you edit this type, you may need to update the GHC formalism
--- See Note [GHC Formalism] in coreSyn/CoreLint.lhs
-data Bind b = NonRec b (Expr b)
-            | Rec [(b, (Expr b))]
-  deriving (Data, Typeable)
-
-#endif
-
-abstRepr :: Nuff c m => Transform c m Type (CoreExpr,CoreExpr)
-abstRepr = 
-  do -- The following check avoids an old problem in buildDictionary. Still needed?
-     ty <- id
-     guardMsg (not (isEqPred ty)) "Predicate type"  -- still needed?
-     guardMsg (closedType ty) "Type has free variables"
-     hasRepTc <- findTyConT (repName "HasRep")
-     tyStr <- showPprT $* ty
-     dict  <- prefixFailMsg ("Couldn't build HasRep dictionary for " ++ tyStr) $
-              buildDictionaryT $* mkTyConApp hasRepTc [ty]
-     repTc <- findTyConT (repName "Rep")
-     (mkEqBox -> eq,ty') <- prefixFailMsg "normaliseTypeT failed: "$
-                            normaliseTypeT Nominal $* TyConApp repTc [ty]
-     let mkMeth meth = apps' (repName meth) [ty] [dict,Type ty',eq]
-     repr <- mkMeth "repr"
-     abst <- mkMeth "abst"
-     return (repr,abst)
-
-closedType :: Type -> Bool
-closedType = isEmptyVarSet . tyVarsOfType
-
-{--------------------------------------------------------------------
-    Misc adaptations of HEMIT operations dropping context
---------------------------------------------------------------------}
-
-#if 0
-
--- Apply a named id to type and value arguments.
-apps' :: MonadNuff m => HermitName -> [Type] -> [CoreExpr] -> m CoreExpr
-apps' nm ts es = (\ i -> apps i ts es) <$> findVar' nm
-
--- Like hermit's findId, but no context, and don't include constructors
-findVar' :: MonadNuff m => HermitName -> m Id
-findVar' nm = do
-    nmd <- findInNSModGuts varNS nm
-    case nmd of
-        NamedId i -> return i
-        NamedDataCon dc -> return $ dataConWrapId dc
-        other -> fail $ "findId': impossible Named returned: " ++ show other
-
--- Like hermit's findTyCon but doesn't take a context, and assumes not a bound var
-
-findTC :: (LiftCoreM m, HasHermitMEnv m, MonadIO m, MonadThings m)
-       => HermitName -> m TyCon
-findTC nm = do
-    nmd <- findInNSModGuts tyConClassNS nm
-    case nmd of
-        NamedTyCon tc -> return tc
-        other -> fail $ "findTyCon: impossible Named returned: " ++ show other
-
--- | Get a GHC pretty-printing
-showPprM :: (HasDynFlags m, Outputable a, Monad m) => a -> m String
-showPprM a = do dynFlags <- getDynFlags
-                return (showPpr dynFlags a)
-#endif
-
-{--------------------------------------------------------------------
-    
---------------------------------------------------------------------}
-
--- Refactored from HERMIT. Contribute back
-
-#if 0
-buildDictionaryT :: (HasDynFlags m, HasHermitMEnv m, LiftCoreM m, MonadCatch m, MonadIO m, MonadUnique m)
-                 => Transform c m Type CoreExpr
-buildDictionaryT = prefixFailMsg "buildDictionaryT failed: " $ contextfreeT $ \ ty -> do
-    dflags <- getDynFlags
-    binder <- newIdH ("$d" ++ zEncodeString (filter (not . isSpace) (showPpr dflags ty))) ty
-    (i,bnds) <- buildDictionary binder
-    guardMsg (notNull bnds) "no dictionary bindings generated."
-    return $ case bnds of
-                [NonRec v e] | i == v -> e -- the common case that we would have gotten a single non-recursive let
-                _ -> mkCoreLets bnds (varToCoreExpr i)
-#elif 0
-
-_buildDictionaryT :: (HasDynFlags m, HasHermitMEnv m, LiftCoreM m, MonadCatch m, MonadIO m, MonadUnique m)
-                 => Transform c m Type CoreExpr
-_buildDictionaryT = prefixFailMsg "buildDictionaryT failed: " $ contextfreeT $ buildDictionaryM
-
-buildDictionaryM :: (HasDynFlags m, HasHermitMEnv m, LiftCoreM m, MonadCatch m, MonadIO m, MonadUnique m)
-                 => Type -> m CoreExpr
-buildDictionaryM ty = do
-    dflags <- getDynFlags
-    binder <- newIdH ("$d" ++ zEncodeString (filter (not . isSpace) (showPpr dflags ty))) ty
-    (i,bnds) <- buildDictionary binder
-    guardMsg (notNull bnds) "no dictionary bindings generated."
-    return $ case bnds of
-                [NonRec v e] | i == v -> e -- the common case that we would have gotten a single non-recursive let
-                _ -> mkCoreLets bnds (varToCoreExpr i)
-
--- TODO: Test buildDictionary and buildDictionaryM, and then replace definition in hermit.
-
-#endif
-
-#if 1
-
--- | Case of Known Constructor.
---   Eliminate a case if the scrutinee is a data constructor.
---   If first argument is True, perform substitution in RHS, if False, build let expressions.
-
-caseReduceDataconR :: forall c m. ( ExtendPath c Crumb, ReadPath c Crumb, AddBindings c
-                                  , ReadBindings c, MonadCatch m, MonadUnique m )
-                   => Bool -> Rewrite c m CoreExpr
-caseReduceDataconR subst = caseReduceDataconWithR subst id
-
-caseReduceDataconWithR :: forall c m. ( ExtendPath c Crumb, ReadPath c Crumb, AddBindings c
-                                      , ReadBindings c, MonadCatch m, MonadUnique m )
-                       => Bool -> Rewrite c m CoreExpr -> Rewrite c m CoreExpr
-caseReduceDataconWithR subst altRhsR =
-  prefixFailMsg "Case reduction failed: " $
-                           withPatFailMsg (wrongExprForm "Case e v t alts") go
+   go e | pprTrace "mono go" (ppr e) False = error "Wat!"
+   go (Type t) = mpanic (text "outer type: " <+> ppr t)
+   go (Var v) | isTyVar v = mpanic (text "type variable: " <+> ppr v)
+              | otherwise =
+     tryInline c v >>= maybe (mkCoreApps (Var v) <$> mapM mono0 args) go
+   go (Lit l) | null args = return (Lit l)
+              | otherwise = spanic "literal with arguments"
+   go (Lam v body) =
+     case args of
+       rhs : args' -> mono args' c (mkCoreLet (NonRec v rhs) body)
+       []          -> Lam v <$> go body
+   go (App fun arg) = mono (arg : args) c fun
+   go e@(Let (NonRec v rhs) body)
+     | isTyVar v = go =<< applyT letSubstR c e  -- TODO: make more efficient
+     | otherwise = Let <$> (NonRec v <$> mono0 rhs) <*> go body
+   go (Let (Rec _) _) = spanic "recursive let" 
+   go (Case scrut w ty alts) =
+     Case <$> mono0 scrut <*> pure w <*> pure ty
+          <*> mapM (onAltRhsM go) alts
+   go (Cast e co) = mono args' c (mkCast e co')
     where
-        go :: Rewrite c m CoreExpr
-        go = do
-            Case e bndr _ alts <- idR
-            let in_scope = mkInScopeSet (localFreeVarsExpr e)
-            case exprIsConApp_maybe (in_scope, idUnfolding) e of
-                Nothing                -> fail "head of scrutinee is not a data constructor."
-                Just (dc, univTys, es) -> case findAlt (DataAlt dc) alts of
-                    Nothing             -> fail "no matching alternative."
-                    Just (dc', vs, rhs) -> -- dc' is either DEFAULT or dc
-                        -- NB: It is possible that es contains one or more existentially quantified types.
-                        let fvss    = map freeVarsExpr $ map Type univTys ++ es
-                            shadows = [ v | (v,n) <- zip vs [1..], any (elemVarSet v) (drop n fvss) ]
-                        in if | any (elemVarSet bndr) fvss -> alphaCaseBinderR Nothing >>> go
-                              | null shadows               -> do let binds = zip (bndr : vs) (e : es)
-                                                                 rhs' <- altRhsR . pure rhs
-                                                                 return $ if subst
-                                                                          then foldr (uncurry substCoreExpr) rhs' binds
-                                                                          else flip mkCoreLets rhs' $ map (uncurry NonRec) binds
-                              | otherwise                  -> caseOneR (fail "scrutinee") (fail "binder") (fail "type") (\ _ -> acceptR (\ (dc'',_,_) -> dc'' == dc') >>> alphaAltVarsR shadows) >>> go
--- WARNING: The alpha-renaming to avoid variable capture has not been tested.  We need testing infrastructure!
+      (co',args') = dropCoArgs co args
+   go (Tick t e) = Tick t <$> go e
+   go (Coercion co) = return (Coercion co)
+   -- Retry with empty stack
+   mono0 = mono [] c
 
-#else
+-- TODO: Prune case expressions to stop recursion.
 
--- | Case of Known Constructor.
---   Eliminate a case if the scrutinee is a data constructor.
---   If first argument is True, perform substitution in RHS, if False, build let expressions.
-caseReduceDatacon :: forall m. (MonadCatch m, MonadUnique m)
-                  => CoreExpr -> m CoreExpr
-caseReduceDatacon (Case scrut bndr _ alts) =
-  prefixFailMsg "Case reduction failed: " $
-  withPatFailMsg (wrongExprForm "Case scrut v t alts") $
-  case exprIsConApp_maybe (in_scope, idUnfolding) scrut of
-      Nothing                 -> fail "head of scrutinee is not a data constructor."
-      Just (dc, _univTys, es) ->
-        case findAlt (DataAlt dc) alts of
-          Nothing             -> fail "no matching alternative."
-          Just (_dc', vs, rhs) ->
-            return $ mkCoreLets (zipWith NonRec (bndr : vs) (scrut : es)) rhs
+dropCoArgs :: Coercion -> Stack -> (Coercion,Stack)
+dropCoArgs = mapAccumL trim
  where
-   in_scope = mkInScopeSet (localFreeVarsExpr scrut)
-caseReduceDatacon _ = fail "Not a case"
+   trim :: Coercion -> CoreExpr -> (Coercion,CoreExpr)
+   trim (FunCo _r dom ran) arg = (ran, mkCast arg (SymCo dom))
+   trim (ForAllCo v ran) (Type t) =
+     (substCo (extendTvSubst emptySubst v t) ran, Type t)
+   trim co _ = mpanic (text "dropCoArgs found odd coercion: " <+> ppr co)
 
-#endif
+-- mapAccumL :: Traversable t => (a -> b -> (a, c)) -> a -> t b -> (a, t c)
 
+tryInline :: Nuff c m => c -> Id -> m (Maybe CoreExpr)
+tryInline c v | isPrim v  = fail "tryInline: primitive"
+              | otherwise = catchMaybe (applyT inlineR c (Var v))
 
-#if 0
-getUnfoldingsT :: (ReadBindings c, MonadCatch m)
-               => InlineConfig
-               -> Transform c m Id [(CoreExpr, BindingDepth -> Bool)]
-getUnfoldingsT config = transform $ \ c i ->
-    case lookupHermitBinding i c of
-      Nothing -> do requireAllBinders config
-                    let uncaptured = (<= 0) -- i.e. is global
-                    -- This check is necessary because idInfo panics on TyVars. Type variables should
-                    -- ALWAYS be in the context (so we should never be in this branch), but at least this
-                    -- will give a reasonable error message if something goes wrong, instead of a GHC panic.
-                    guardMsg (isId i) "type variable is not in Env (this should not happen)."
-                    case unfoldingInfo (idInfo i) of
-                      CoreUnfolding { uf_tmpl = uft } -> single (uft, uncaptured)
-                      dunf@(DFunUnfolding {})         -> single . (,uncaptured) =<< dFunExpr dunf
-                      _ -> case idDetails i of
-                            ClassOpId cls -> do
-                              let selectors = zip [ idName s | s <- classAllSelIds cls] [0..]
-                                  msg = getOccString i ++ " is not a method of " ++ getOccString cls ++ "."
-                              idx <- maybe (fail msg) return $ lookup (idName i) selectors
-                              single (mkDictSelRhs cls idx, uncaptured)
-                            _             -> fail "cannot find unfolding in Env or IdInfo."
-      Just b -> let depth = hbDepth b
-                in case hbSite b of
-                          CASEBINDER s alt -> let tys             = tyConAppArgs (idType i)
-                                                  altExprDepthM   = single . (, (<= depth+1)) =<< alt2Exp tys alt
-                                                  scrutExprDepthM = single (s, (< depth))
-                                               in case config of
-                                                    CaseBinderOnly Scrutinee   -> scrutExprDepthM
-                                                    CaseBinderOnly Alternative -> altExprDepthM
-                                                    AllBinders                 -> do
-                                                        au <- altExprDepthM <+ return []
-                                                        su <- scrutExprDepthM
-                                                        return $ au ++ su
-#else
+isPrim :: Id -> Bool
+isPrim = (`S.member` S.fromList primNames)
+ where
+   primNames = [] -- TODO: fill in
 
--- Simplified form of hermit's getUnfoldingT. Doesn't use any context.
--- I'm also ignoring capturing for now. Revisit.
+catchMaybe :: MonadCatch m => m a -> m (Maybe a)
+catchMaybe ma = fmap Just ma <+ return Nothing
 
-getUnfolding :: Id -> Maybe CoreExpr
-getUnfolding i =
-  case unfoldingInfo (idInfo i) of
-    CoreUnfolding { uf_tmpl = uft } -> return uft
-    dunf@(DFunUnfolding {})         ->
-      return $ mkCoreLams (df_bndrs dunf) $ mkCoreConApps (df_con dunf) (df_args dunf)
-    _ -> case idDetails i of
-          ClassOpId cls ->
-              mkDictSelRhs cls <$> lookup (idName i) (zip [ idName s | s <- classAllSelIds cls] [0..])
-          _             -> fail "cannot find unfolding in Env or IdInfo."  -- though Maybe
+onAltRhsM :: Functor m => UnopM m CoreExpr -> UnopM m CoreAlt
+onAltRhsM f (con,bs,rhs) = (con,bs,) <$> f rhs
 
-#endif
+mpanic :: SDoc -> a
+mpanic = pprPanic "mono"
+
+spanic :: String -> a
+spanic = mpanic . text
+
+stackable :: CoreExpr -> Bool
+stackable e = isTypeArg e || dictishTy (exprType e)
+
+dictishTy :: Type -> Bool
+dictishTy (coreView -> Just ty) = dictishTy ty
+dictishTy (ForAllTy _ ty)       = dictishTy ty
+dictishTy (FunTy dom ran)       = dictishTy dom || dictishTy ran
+dictishTy ty                    = isDictLikeTy ty
