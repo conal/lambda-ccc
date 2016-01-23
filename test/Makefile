@@ -16,7 +16,7 @@ Examples: ../dist Examples.hs
 # Why the -fforce-recomp? I guess GHC doesn't notice that the plugin has
 # changed. Odd, since it does seem notice when cabal-installing.
 
-lc:
+compile:
 	cd .. ; make
 
 circat:
@@ -29,4 +29,4 @@ extras:
 
 mono:
 	cd ../../monomorph ; make
-	make lc
+	make compile

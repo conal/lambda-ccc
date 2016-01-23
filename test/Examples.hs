@@ -61,6 +61,7 @@ import Circat.FFT
 -- import Circat.Circuit (GenBuses(..), GS, Attr, systemSuccess)
 import Circat.Complex
 
+import LambdaCCC.Lambda (reifyEP)
 import LambdaCCC.Run
 
 
@@ -75,9 +76,31 @@ type Ragged = Ra.Tree
 -- 	getIdFromTrivialExpr evalEP @ Int (varP# @ Int "x"#)
 
 main = do
+  -- print (reifyEP (negate :: Int -> Int))
+  -- print (reifyEP (\ x -> negate (negate x) :: Int))
+  -- Works above; doesn't work below
+
+  -- print (reifyEP (id :: Int -> Int))
+  print (reifyEP (id 3 :: Int))
+
+  -- print (reifyEP (negIncr :: Int -> Int))
+
+  -- Monomorphization works:
+  -- go "foo" (\ x -> x :: Int)
+
+  -- go "three" (1 + 2 :: Int)
+  -- go "nine" (sqr (1 + 2 :: Int))
+  -- go "negateI" (negate :: Int -> Int)
+  -- go "negIncr" (negIncr :: Int -> Int)
+
+  -- Doesn't:
+
+  -- go "foo" (3 :: Int)  -- I#
+  -- go "sqrI" (sqr :: Int -> Int)
+
   -- go "sqr" (sqr :: Int -> Int)
   -- go "sump" (sum :: Pair Int -> Int)
---   goSep "sumrt2" 1 (sum :: RTree N2 Int -> Int)
+  -- goSep "sumrt2" 1 (sum :: RTree N2 Int -> Int)
   -- goSep "maprt8" 4 (fmap sqr :: Unop (RTree N8 Int))
   -- goSep "dotrt8" 3 (dotG :: Pair (RTree N8 Int) -> Int)
   -- goSep "transposet4p" 4 (transpose :: RTree N4 (Pair Bool) -> Pair (RTree N4 Bool))
@@ -86,11 +109,14 @@ main = do
   -- go "lsums-p" (lsums :: Pair Int -> (Pair Int, Int))
   -- goSep "lsums-rt9" 15 (lsums :: RTree N9 Int -> (RTree N9 Int, Int))
   -- go "lsums-rt0" (lsums :: RTree N0 Int -> (RTree N0 Int, Int))
-  go "lsums-lt0" (lsums :: LTree N0 Int -> (LTree N0 Int, Int))
+  -- go "lsums-lt0" (lsums :: LTree N0 Int -> (LTree N0 Int, Int))
 
 {--------------------------------------------------------------------
     Misc definitions
 --------------------------------------------------------------------}
+
+negIncr :: Num a => a -> a
+negIncr = negate . (1 +)
 
 sqr x = x * x
 

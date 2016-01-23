@@ -42,6 +42,7 @@ Library
                     LambdaCCC.ShowUtils
                     LambdaCCC.Lambda
                     LambdaCCC.ToCCC
+                    LambdaCCC.Monomorphize
                     LambdaCCC.Reify
                     LambdaCCC.Interactive
                     LambdaCCC.Plugin
