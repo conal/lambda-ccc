@@ -48,7 +48,8 @@ import Circat.Misc ((<~))
 import HERMIT.Extras hiding (findTyConT,observeR',orL,simplifyE)
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', orL, labeled)
 
-import Monomorph.Stuff (preMonoR, monomorphizeE, simplifyE) -- , simplifyWithLetFloatingE
+import Monomorph.Stuff (preMonoR {-, monomorphizeE-}, simplifyE) -- , simplifyWithLetFloatingE
+import LambdaCCC.Monomorphize (monomorphizeE) -- , simplifyWithLetFloatingE
 
 {--------------------------------------------------------------------
     Utilities. Move to HERMIT.Extras
@@ -492,7 +493,7 @@ reifyProgR = progBindsAnyR (const $
                             nonRecAllR id reifyE)
 
 reifyMonomorph :: ReExpr
-reifyMonomorph = -- bracketR "reifyMonomorph" $
+reifyMonomorph = bracketR "reifyMonomorph" $
                  inReify (tryR unshadowE . tryR simplifyE . monomorphizeE)
 
 -- simplifyWithLetFloatingE can take much longer than simplifyE, so use it
