@@ -12,7 +12,7 @@
 {-# OPTIONS_GHC -Wall #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
-{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+-- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -50,11 +50,10 @@ import HERMIT.Name
 
 import HERMIT.Extras (pattern FunCo, fqVarName)
 
-type Unop a = a -> a
 type UnopM m a = a -> m a
 
-repName :: String -> HermitName
-repName = mkQualified "Circat.Rep"
+-- repName :: String -> HermitName
+-- repName = mkQualified "Circat.Rep"
 
 type MonadNuff m = ( MonadIO m, MonadCatch m, MonadUnique m, MonadThings m
                    , HasDynFlags m, HasHermitMEnv m, LiftCoreM m, HasLemmas m )
@@ -76,7 +75,7 @@ type Stack = [CoreExpr]                 -- argument stack
 mono :: Stack -> Rew CoreExpr
 mono args c = go
  where
-   go e | pprTrace "mono/go:" (ppr e) False = error "Wat!"
+   -- go e | pprTrace "mono/go:" (ppr e) False = error "Wat!"
    go (Var v) | isTyVar v = mpanic (text "type variable: " <+> ppr v)
               | otherwise =
      maybeInline c v >>= maybe (mkCoreApps (Var v) <$> mapM mono0 args) go
@@ -85,29 +84,46 @@ mono args c = go
        rhs : args' -> mono args' c (mkCoreLet (NonRec v rhs) body)
        []          -> Lam v <$> go body
 
-   -- Optimization: dictionary selection. Saves processing to-be-discarded
-   -- method bodies.
-   go e@(App fun arg) | not (isTypeArg arg) && isDictTy (exprType arg) =
-     maybe (mono (arg : args) c fun) go =<<
-       catchMaybe (applyT (caseReduceR False . unfoldR) c e)
-
-   -- TODO: factor out this pattern of failure and try something else.
-   -- Use with method selection and inlining.
-   -- Then combine the two app cases.
-   -- Maybe test for monomorphism.
-
---    go e@(App fun arg) | not (isTypeArg arg) && isDictTy (exprType arg) =
---      (go =<< applyT (caseReduceR False . unfoldR) c e)
---      <+ mono (arg : args) c fun    -- clean up / refactor
-
    go (App fun arg) = mono (arg : args) c fun
+
    go e@(Let (NonRec v rhs) body)
-     | isTyVar v = go =<< applyT letSubstR c e  -- TODO: make more efficient
+     | v `notElemVarSet` freeVarsExpr body =
+         -- pprTrace "go" (text "let-elim" <+> ppr v) $
+         go body
+     | exprIsTrivial rhs = go =<< applyT letSubstR' c e  -- TODO: make more efficient
      | otherwise = mkCoreLet <$> (NonRec v <$> mono0 rhs) <*> go body
+    where
+      letSubstR' = {-bracketR "letSubstR"-} letSubstR
+   -- TODO: batch up these eliminations and substitutions.
+   -- TODO: Is there a cheaper way to check whether v occurs freely in body
+   -- without having to collect all of the free variables in a set?
+
    go (Let (Rec _) _) = spanic "recursive let" 
-   go (Case scrut w ty alts) =
-     Case <$> mono0 scrut <*> pure w <*> pure ty
-          <*> mapM (onAltRhsM go) alts
+
+--    go (Case scrut w ty alts) =
+--      Case <$> mono0 scrut <*> pure w <*> pure ty
+--           <*> mapM (onAltRhsM go) alts
+
+--    go (Case scrut w ty alts) =
+--      do scrut' <- mono0 scrut
+--         maybe (Case scrut' w ty <$> mapM (onAltRhsM go) alts) go =<<
+--           catchMaybe (applyT caseReduceR' c (Case scrut' w ty alts))
+--     where
+--       caseReduceR' = bracketR "caseReduceR" (caseReduceR False)
+
+   go e@(Case scrut w ty alts) =
+     do catchMaybe (applyT caseReduceUnfoldR' c e) >>=
+          maybe (Case <$> mono0 scrut <*> pure w <*> pure ty
+                      <*> mapM (onAltRhsM go) alts)
+                go
+    where
+      caseReduceUnfoldR' =
+        {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
+
+
+   -- CAUTION! This 'mapM' replicates argument expression stack. I guess I
+   -- should only push the arguments inside if there's only one case alternative
+   -- or maybe if trivial.
 
    -- Float casts through the implied applications.
    go (Cast e (FunCo _r dom ran)) | arg:more <- args =
@@ -142,23 +158,22 @@ mono args c = go
 
 -- TODO: Prune case expressions to stop recursion.
 
-dropCoArgs :: Coercion -> Stack -> (Coercion,Stack)
-dropCoArgs = mapAccumL trim
- where
-   trim :: Coercion -> CoreExpr -> (Coercion,CoreExpr)
-   trim (FunCo _r dom ran) arg = (ran, mkCast arg (SymCo dom))
-   trim (ForAllCo v ran) (Type t) =
-     (substCo (extendTvSubst emptySubst v t) ran, Type t)
-   trim co _ = mpanic (text "dropCoArgs found odd coercion: " <+> ppr co)
 
--- TODO: Consider reworking dropCoArgs to return list of coercions (possibly
--- Refl), or even CoreExpr unops.
+--    go e@(Case scrut w ty alts) =
+--      do catchMaybe (applyT caseReduceUnfoldR' c e) >>=
+--           maybe (Case <$> mono0 scrut <*> pure w <*> pure ty
+--                       <*> mapM (onAltRhsM go) alts)
+--                 go
+--     where
+--       caseReduceUnfoldR' =
+--         {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
 
--- mapAccumL :: Traversable t => (a -> b -> (a, c)) -> a -> t b -> (a, t c)
 
 maybeInline :: Nuff c m => c -> Id -> m (Maybe CoreExpr)
 maybeInline c v | isPrim v  = return Nothing
-                | otherwise = catchMaybe (applyT inlineR c (Var v))
+                | otherwise = catchMaybe (applyT inlineR' c (Var v))
+ where
+   inlineR' = {-bracketR "inlineR"-} inlineR
 
 isPrim :: Id -> Bool
 isPrim v = fqVarName v `S.member` primNames
@@ -196,12 +211,3 @@ mpanic = pprPanic "mono"
 
 spanic :: String -> a
 spanic = mpanic . text
-
-stackable :: CoreExpr -> Bool
-stackable e = isTypeArg e || dictishTy (exprType e)
-
-dictishTy :: Type -> Bool
-dictishTy (coreView -> Just ty) = dictishTy ty
-dictishTy (ForAllTy _ ty)       = dictishTy ty
-dictishTy (FunTy dom ran)       = dictishTy dom || dictishTy ran
-dictishTy ty                    = isDictLikeTy ty
