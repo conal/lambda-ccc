@@ -72,16 +72,14 @@ type Rew a = forall c m . Nuff c m => c -> a -> m a
 
 type Stack = [CoreExpr]                 -- argument stack
 
+-- Monomorphize in the context of a stack of applications (innermost first).
 mono :: Stack -> Rew CoreExpr
 mono args c = go
  where
    go e | pprTrace "mono go" (ppr e) False = error "Wat!"
-   go (Type t) = mpanic (text "outer type: " <+> ppr t)
    go (Var v) | isTyVar v = mpanic (text "type variable: " <+> ppr v)
               | otherwise =
      tryInline c v >>= maybe (mkCoreApps (Var v) <$> mapM mono0 args) go
-   go (Lit l) | null args = return (Lit l)
-              | otherwise = spanic "literal with arguments"
    go (Lam v body) =
      case args of
        rhs : args' -> mono args' c (mkCoreLet (NonRec v rhs) body)
@@ -99,7 +97,11 @@ mono args c = go
       (co',args') = dropCoArgs co args
    go (Tick t e) = Tick t <$> go e
    go (Coercion co) = return (Coercion co)
-   -- Retry with empty stack
+   -- Type, Lit, Coercion
+   go e | null args = return e
+   go e =
+     mpanic (text "Surprisingly argumentative: " <+> ppr (mkCoreApps e args))
+   -- All arguments consumed. Retry with empty stack
    mono0 = mono [] c
 
 -- TODO: Prune case expressions to stop recursion.
@@ -112,6 +114,9 @@ dropCoArgs = mapAccumL trim
    trim (ForAllCo v ran) (Type t) =
      (substCo (extendTvSubst emptySubst v t) ran, Type t)
    trim co _ = mpanic (text "dropCoArgs found odd coercion: " <+> ppr co)
+
+-- TODO: Consider reworking dropCoArgs to return list of coercions (possibly
+-- Refl), or even CoreExpr unops.
 
 -- mapAccumL :: Traversable t => (a -> b -> (a, c)) -> a -> t b -> (a, t c)
 
