@@ -40,7 +40,7 @@ import TcType (isDoubleTy)  -- Doesn't seem to be coming in with HERMIT.GHC.
 import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary hiding (externals)
-import HERMIT.Name (HermitName)
+import HERMIT.Name (HermitName,mkQualified)
 import HERMIT.External (External)
 
 import Circat.Misc ((<~))
@@ -96,13 +96,13 @@ orL = Ex.orL observing
 --------------------------------------------------------------------}
 
 repName :: String -> HermitName
-repName = moduledName "Circat.Rep"
+repName = mkQualified "Circat.Rep"
 
 lamName :: String -> HermitName
-lamName = moduledName "LambdaCCC.Lambda"
+lamName = mkQualified "LambdaCCC.Lambda"
 
 -- ifName :: String -> HermitName
--- ifName = moduledName "Circat.If"
+-- ifName = mkQualified "Circat.If"
 
 -- findIdE :: String -> TransformH a Id
 -- findIdE = findIdT . lamName
@@ -286,7 +286,7 @@ reifyStdMeth =
   unReify >>>
   do ty <- exprTypeT
      (Var (fqVarName -> flip M.lookup stdMeths -> Just (cls,prim)), tyArgs, moreArgs) <- callSplitT
-     guardMsg (not (any isType moreArgs))
+     guardMsg (not (any isTypeArg moreArgs))
          "reifyStdMeth: types among moreArgs"
      guardMsg (all (isDictTy . exprType) moreArgs)
          "reifyStdMeth: non-dict argument"
@@ -419,7 +419,7 @@ findIdP :: String -> TransformH a Id
 findIdP = findIdT . primName
 
 primName :: String -> HermitName
-primName = moduledName "Circat.Prim"
+primName = mkQualified "Circat.Prim"
 
 -- TODO: generalize primName, lamName, etc
 
@@ -476,13 +476,11 @@ rewriteIf = do Case c wild ty [(_False,[],a'),(_True,[],a)] <- id
 
 reifyR :: ReCore
 reifyR = id -- tryR (anytdR (promoteR reifyOops))
-       . try "reifying" (promoteR reifyGutsR)
-       . try "monomorphizing" monomorphR
+       . tryR (promoteR reifyGutsR)
+       . tryR monomorphR
        . tryR (anytdR (promoteR unfoldDriver))
        . tryR preMonoR
        . tryR (anybuR (promoteR detickE)) -- for ghci break points
- where
-   try str rew = tryR rew . traceR (str ++ " ...")
 
 reifyE :: ReExpr
 reifyE = anytdE (repeatR reifyMisc)
@@ -494,7 +492,13 @@ reifyProgR = progBindsAnyR (const $
 
 reifyMonomorph :: ReExpr
 reifyMonomorph = bracketR "reifyMonomorph" $
-                 inReify (tryR unshadowE . tryR simplifyE . monomorphizeE)
+                 inReify ( tryR unshadowE
+                         . try "simplifyE" simplifyE
+                         . {- try "monomorphizeE" -} monomorphizeE
+                         . observeR "about to monomorphizeE"
+                         )
+ where
+   try str rew = tryR (bracketR str rew)
 
 -- simplifyWithLetFloatingE can take much longer than simplifyE, so use it
 -- mainly when debugging.

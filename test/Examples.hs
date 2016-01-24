@@ -76,27 +76,50 @@ type Ragged = Ra.Tree
 -- 	getIdFromTrivialExpr evalEP @ Int (varP# @ Int "x"#)
 
 main = do
-  -- print (reifyEP (negate :: Int -> Int))
-  -- print (reifyEP (\ x -> negate (negate x) :: Int))
-  -- Works above; doesn't work below
-
-  -- print (reifyEP (id :: Int -> Int))
+#if 0
   print (reifyEP (id 3 :: Int))
+  print (reifyEP (negate :: Int -> Int))
+  print (reifyEP (\ x -> negate (negate x) :: Int))
+  print (reifyEP (id :: Int -> Int))
+  print (reifyEP ((1 +) :: Int -> Int))
+  print (reifyEP (negate . (1 +) :: Int -> Int))
+  print (reifyEP (let f :: Num a => a -> a
+                      f = negate
+                  in
+                    (f :: Int -> Int)))
+#endif
 
-  -- print (reifyEP (negIncr :: Int -> Int))
+--   print (reifyEP (fromInteger :: Integer -> Int))
+
+--   print (reifyEP (let x :: Num a => a
+--                       x = 1
+--                   in
+--                     (x :: Int)))
+
+--   print (reifyEP (let f :: Num a => a -> a
+--                       f = negate . (1 +)
+--                   in
+--                     (f :: Int -> Int)))
+
+--   print (reifyEP (let f :: Num a => a -> a
+--                       f = negate . (1 +)
+--                   in
+--                     (f :: Int -> Int)))
+
+--   print (reifyEP (negIncr :: Int -> Int))
 
   -- Monomorphization works:
   -- go "foo" (\ x -> x :: Int)
 
-  -- go "three" (1 + 2 :: Int)
+--   go "three" (1 + 2 :: Int)
+
   -- go "nine" (sqr (1 + 2 :: Int))
   -- go "negateI" (negate :: Int -> Int)
   -- go "negIncr" (negIncr :: Int -> Int)
 
-  -- Doesn't:
+--   go "foo" (3 :: Int)  -- I#
 
-  -- go "foo" (3 :: Int)  -- I#
-  -- go "sqrI" (sqr :: Int -> Int)
+  go "sqrI" (sqr :: Int -> Int)
 
   -- go "sqr" (sqr :: Int -> Int)
   -- go "sump" (sum :: Pair Int -> Int)
@@ -118,6 +141,7 @@ main = do
 negIncr :: Num a => a -> a
 negIncr = negate . (1 +)
 
+sqr :: Num a => a -> a
 sqr x = x * x
 
 #if 1

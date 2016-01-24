@@ -48,7 +48,7 @@ import HERMIT.Name
 
 -- TODO: Tighten imports
 
-import HERMIT.Extras (pattern FunCo)
+import HERMIT.Extras (pattern FunCo, fqVarName)
 
 type Unop a = a -> a
 type UnopM m a = a -> m a
@@ -76,10 +76,10 @@ type Stack = [CoreExpr]                 -- argument stack
 mono :: Stack -> Rew CoreExpr
 mono args c = go
  where
-   go e | pprTrace "mono go" (ppr e) False = error "Wat!"
+   -- go e | pprTrace "mono/go:" (ppr e) False = error "Wat!"
    go (Var v) | isTyVar v = mpanic (text "type variable: " <+> ppr v)
               | otherwise =
-     tryInline c v >>= maybe (mkCoreApps (Var v) <$> mapM mono0 args) go
+     maybeInline c v >>= maybe (mkCoreApps (Var v) <$> mapM mono0 args) go
    go (Lam v body) =
      case args of
        rhs : args' -> mono args' c (mkCoreLet (NonRec v rhs) body)
@@ -87,7 +87,7 @@ mono args c = go
    go (App fun arg) = mono (arg : args) c fun
    go e@(Let (NonRec v rhs) body)
      | isTyVar v = go =<< applyT letSubstR c e  -- TODO: make more efficient
-     | otherwise = Let <$> (NonRec v <$> mono0 rhs) <*> go body
+     | otherwise = mkCoreLet <$> (NonRec v <$> mono0 rhs) <*> go body
    go (Let (Rec _) _) = spanic "recursive let" 
    go (Case scrut w ty alts) =
      Case <$> mono0 scrut <*> pure w <*> pure ty
@@ -120,14 +120,31 @@ dropCoArgs = mapAccumL trim
 
 -- mapAccumL :: Traversable t => (a -> b -> (a, c)) -> a -> t b -> (a, t c)
 
-tryInline :: Nuff c m => c -> Id -> m (Maybe CoreExpr)
-tryInline c v | isPrim v  = fail "tryInline: primitive"
-              | otherwise = catchMaybe (applyT inlineR c (Var v))
+maybeInline :: Nuff c m => c -> Id -> m (Maybe CoreExpr)
+maybeInline c v | isPrim v  = return Nothing
+                | otherwise = catchMaybe (applyT inlineR c (Var v))
 
 isPrim :: Id -> Bool
-isPrim = (`S.member` S.fromList primNames)
+isPrim v = fqVarName v `S.member` primNames
+
+-- Heading here:
+-- 
+-- Translate function names to cat class and prim
+-- primNames :: M.Map String (String,String)
+
+-- See current stdMeths in Reify for list of methods, classes, etc.
+
+primNames :: S.Set String
+primNames = S.fromList
+   [ "GHC.Num.$fNum"++ty++"_$c"++meth
+   | (tys,meths) <- prims , ty <- tys, meth <- meths ]
  where
-   primNames = [] -- TODO: fill in
+   prims = [( ["Int","Double"]
+            , ["+","-","*","negate","abs","signum","fromInteger"])]
+   -- TODO: more primitives, including boolean
+
+--   D:Num @ Int $fNumInt_$c+ $fNumInt_$c- $fNumInt_$c* $fNumInt_$cnegate
+--               $fNumInt_$cabs $fNumInt_$csignum $fNumInt_$cfromInteger
 
 catchMaybe :: MonadCatch m => m a -> m (Maybe a)
 catchMaybe ma = fmap Just ma <+ return Nothing
