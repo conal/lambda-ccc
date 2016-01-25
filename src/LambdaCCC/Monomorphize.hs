@@ -12,7 +12,7 @@
 {-# OPTIONS_GHC -Wall #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-imports #-} -- TEMP
--- {-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
+{-# OPTIONS_GHC -fno-warn-unused-binds   #-} -- TEMP
 
 ----------------------------------------------------------------------
 -- |
@@ -75,67 +75,69 @@ type Stack = [CoreExpr]                 -- argument stack
 mono :: Stack -> Rew CoreExpr
 mono args c = go
  where
-   go e | pprTrace "mono/go:" (ppr e) False = error "Wat!"
-   go (Var v) | isTyVar v = mpanic (text "type variable: " <+> ppr v) -- maybe allow
-   go (Var v) = rewOr inlineNonPrim (mkCoreApps (Var v) <$> mapM mono0 args) (Var v)
+   go e = pprTrace "mono/go:" (ppr e) $
+          case e of
+     Var v | isTyVar v -> mpanic (text "type variable: " <+> ppr v) -- maybe allow
+     Var v -> rewOr inlineNonPrim (mkCoreApps (Var v) <$> mapM mono0 args) (Var v)
+      where
+        inlineNonPrim = do guardMsg (not (isPrim v)) "mono inlineNonPrim: primitive"
+                           bracketR "inlineR" $
+                             inlineR
+
+     Lam v body ->
+       case args of
+         rhs : args' -> mono args' c (mkCoreLet (NonRec v rhs) body)
+         []          -> Lam v <$> go body
+
+     App fun arg -> mono (arg : args) c fun
+     Let (NonRec v rhs) body
+       | v `notElemVarSet` freeVarsExpr body ->
+           -- pprTrace "go" (text "let-elim" <+> ppr v) $
+           go body
+       | exprIsTrivial rhs -> go =<< applyT letSubstR' c e  -- TODO: make more efficient
+       | otherwise -> mkCoreLet <$> (NonRec v <$> mono0 rhs) <*> go body
+       where
+         letSubstR' = {-bracketR "letSubstR"-} letSubstR
+
+     -- TODO: batch up these eliminations and substitutions.
+     -- TODO: Is there a cheaper way to check whether v occurs freely in body
+     -- without having to collect all of the free variables in a set?
+
+     Let (Rec _) _ -> spanic "recursive let" 
+
+     -- Maybe bind e at the top of go instead of passing into rewOr.
+     -- Then use infix.
+     Case scrut w ty alts ->
+       rewOr caseReduceUnfoldR'
+          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts) e
+      where
+        caseReduceUnfoldR' =
+          {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
+
+     -- CAUTION! This 'mapM' replicates argument expression stack. I guess I
+     -- should only push the arguments inside if there's only one case alternative
+     -- or maybe if trivial.
+
+     -- Float casts through the implied applications.
+     Cast body (FunCo _r dom ran) | arg:more <- args ->
+       mono more c (mkCast (mkCoreApp body (mkCast arg (mkSymCo dom))) ran)
+     Cast body (ForAllCo v ran) | Type t : more <- args ->
+       mono more c (mkCast (mkCoreApp body (Type t))
+                           (substCo (extendTvSubst emptySubst v t) ran))
+     Cast body co ->
+       mkCoreApps <$> (flip mkCast co <$> mono0 body) <*> mapM mono0 args
+
+     Tick t body -> Tick t <$> go body
+     Coercion co -> return (Coercion co)
+     -- Type, Lit, Coercion
+     _ | null args -> return e
+     _ ->
+       mpanic (text "Surprisingly argumentative: " <+> ppr (mkCoreApps e args))
     where
-      inlineNonPrim = do guardMsg (not (isPrim v)) "mono inlineNonPrim: primitive"
-                         bracketR "inlineR" $
-                           inlineR
-
-   go (Lam v body) =
-     case args of
-       rhs : args' -> mono args' c (mkCoreLet (NonRec v rhs) body)
-       []          -> Lam v <$> go body
-
-   go (App fun arg) = mono (arg : args) c fun
-
-   go e@(Let (NonRec v rhs) body)
-     | v `notElemVarSet` freeVarsExpr body =
-         -- pprTrace "go" (text "let-elim" <+> ppr v) $
-         go body
-     | exprIsTrivial rhs = go =<< applyT letSubstR' c e  -- TODO: make more efficient
-     | otherwise = mkCoreLet <$> (NonRec v <$> mono0 rhs) <*> go body
-    where
-      letSubstR' = {-bracketR "letSubstR"-} letSubstR
-   -- TODO: batch up these eliminations and substitutions.
-   -- TODO: Is there a cheaper way to check whether v occurs freely in body
-   -- without having to collect all of the free variables in a set?
-
-   go (Let (Rec _) _) = spanic "recursive let" 
-
-   -- Maybe bind e at the top of go instead of passing into rewOr.
-   -- Then use infix.
-   go e@(Case scrut w ty alts) =
-     rewOr caseReduceUnfoldR'
-        (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts) e
-    where
-      caseReduceUnfoldR' =
-        {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
-
-   -- CAUTION! This 'mapM' replicates argument expression stack. I guess I
-   -- should only push the arguments inside if there's only one case alternative
-   -- or maybe if trivial.
-
-   -- Float casts through the implied applications.
-   go (Cast e (FunCo _r dom ran)) | arg:more <- args =
-     mono more c (mkCast (mkCoreApp e (mkCast arg (mkSymCo dom))) ran)
-   go (Cast e (ForAllCo v ran)) | Type t : more <- args =
-     mono more c (mkCast (mkCoreApp e (Type t))
-                         (substCo (extendTvSubst emptySubst v t) ran))
-   go (Cast e co) =
-     mkCoreApps <$> (flip mkCast co <$> mono0 e) <*> mapM mono0 args
-
-   go (Tick t e) = Tick t <$> go e
-   go (Coercion co) = return (Coercion co)
-   -- Type, Lit, Coercion
-   go e | null args = return e
-   go e =
-     mpanic (text "Surprisingly argumentative: " <+> ppr (mkCoreApps e args))
-   -- All arguments consumed. Retry with empty stack
-   mono0 = mono [] c
-   -- rewOr :: Rewrite c m a -> m a -> a -> m a
-   rewOr rew ma = catchMaybe . applyT rew c >=> maybe ma go
+      -- All arguments consumed. Retry with empty stack
+      mono0 = mono [] c
+      -- rewOr :: Rewrite c m a -> m a -> a -> m a
+      rewOr rew ma = catchMaybe . applyT rew c >=> maybe ma go
 
 -- TODO: Prune case expressions to stop recursion.
 
