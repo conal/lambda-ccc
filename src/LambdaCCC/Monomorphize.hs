@@ -50,6 +50,8 @@ import HERMIT.Name
 
 import HERMIT.Extras (pattern FunCo, fqVarName)
 
+import Monomorph.Stuff (letNonRecSubstSaferR)
+
 type UnopM m a = a -> m a
 
 -- repName :: String -> HermitName
@@ -76,44 +78,40 @@ mono :: Stack -> Rew CoreExpr
 mono args c = go
  where
    go e = -- pprTrace "mono/go:" (ppr e) $
+          applyT (observeR "mono/go") c e >>
           case e of
      Var v | isTyVar v -> mpanic (text "type variable: " <+> ppr v) -- maybe allow
-     Var v -> inlineNonPrim `rewOr` (mkCoreApps (Var v) <$> mapM mono0 args)
-      where
-        inlineNonPrim = do guardMsg (not (isPrim v)) "mono inlineNonPrim: primitive"
-                           inlineR
-
+     Var v -> inlineNonPrim v `rewOr` bail
      Lam v body ->
        case args of
          rhs : args' -> mono args' c (mkCoreLet (NonRec v rhs) body)
          []          -> Lam v <$> go body
-
      App fun arg -> mono (arg : args) c fun
+
      Let (NonRec v rhs) body
        | v `notElemVarSet` freeVarsExpr body ->
-           -- pprTrace "go" (text "let-elim" <+> ppr v) $
+           pprTrace "go" (text "let-elim" <+> ppr v) $
            go body
-       | exprIsTrivial rhs -> go =<< applyT letSubstR' c e  -- TODO: make more efficient
-       | otherwise -> mkCoreLet <$> (NonRec v <$> mono0 rhs) <*> go body
+       | otherwise ->
+          (guardMsg (exprIsTrivial rhs) "non-trivial" >> letSubstR')
+           `rewOr` (mkCoreLet <$> (NonRec v <$> mono0 rhs) <*> go body)
        where
-         letSubstR' = {-bracketR "letSubstR"-} letSubstR
+         letSubstR' = bracketR "letSubstR" letSubstR
 
      -- TODO: batch up these eliminations and substitutions. Or have GHC do them at the end.
      -- TODO: Is there a cheaper way to check whether v occurs freely in body
      -- without having to collect all of the free variables in a set?
 
-     Let (Rec _) _ -> spanic "recursive let" 
+     Let (Rec _) _ -> bail -- spanic "recursive let"
 
-     Case scrut w ty alts ->
-       caseReduceUnfoldR' `rewOr`
-          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
+     Case scrut _ _ _  ->
+       (guardMsg (not (isPoly scrut)) "Poly" >> caseReduceUnfoldR') `rewOr` bail
+          -- (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
       where
         caseReduceUnfoldR' =
           {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
 
-     -- CAUTION! This 'mapM' replicates argument expression stack. I guess I
-     -- should only push the arguments inside if there's only one case alternative
-     -- or maybe if trivial.
+     -- Still to address: monomorphic recursion.
 
      -- Float casts through the implied applications.
      Cast body (FunCo _r dom ran) | arg:more <- args ->
@@ -135,8 +133,26 @@ mono args c = go
       mono0 = mono [] c
       -- rewOr :: Rewrite c m a -> m a -> a -> m a
       rew `rewOr` ma = catchMaybe (applyT rew c e) >>= maybe ma go
+      bail = mkCoreApps e <$> mapM mono0 args
 
 -- TODO: Prune case expressions to stop recursion.
+
+isPoly :: CoreExpr -> Bool
+isPoly e = isTypeArg e || isPolyTy (exprType e)
+
+isPolyTy :: Type -> Bool
+isPolyTy (coreView -> Just ty) = isPolyTy ty
+isPolyTy (TyVarTy _)           = True
+isPolyTy (AppTy u v)           = isPolyTy u || isPolyTy v
+isPolyTy (TyConApp _ tys)      = any isPolyTy tys
+isPolyTy (FunTy u v)           = isPolyTy u || isPolyTy v
+isPolyTy (ForAllTy {})         = True
+isPolyTy (LitTy _)             = False
+
+inlineNonPrim :: Nuff c m => Var -> Rewrite c m CoreExpr
+inlineNonPrim v = bracketR "inlineNonPrim" $
+                  guardMsg (not (isPrim v)) "mono inlineNonPrim: primitive" >>
+                  inlineR
 
 isPrim :: Id -> Bool
 isPrim v = fqVarName v `S.member` primNames
