@@ -75,14 +75,13 @@ type Stack = [CoreExpr]                 -- argument stack
 mono :: Stack -> Rew CoreExpr
 mono args c = go
  where
-   go e = pprTrace "mono/go:" (ppr e) $
+   go e = -- pprTrace "mono/go:" (ppr e) $
           case e of
      Var v | isTyVar v -> mpanic (text "type variable: " <+> ppr v) -- maybe allow
-     Var v -> rewOr inlineNonPrim (mkCoreApps (Var v) <$> mapM mono0 args) (Var v)
+     Var v -> inlineNonPrim `rewOr` (mkCoreApps (Var v) <$> mapM mono0 args)
       where
         inlineNonPrim = do guardMsg (not (isPrim v)) "mono inlineNonPrim: primitive"
-                           bracketR "inlineR" $
-                             inlineR
+                           inlineR
 
      Lam v body ->
        case args of
@@ -99,17 +98,15 @@ mono args c = go
        where
          letSubstR' = {-bracketR "letSubstR"-} letSubstR
 
-     -- TODO: batch up these eliminations and substitutions.
+     -- TODO: batch up these eliminations and substitutions. Or have GHC do them at the end.
      -- TODO: Is there a cheaper way to check whether v occurs freely in body
      -- without having to collect all of the free variables in a set?
 
      Let (Rec _) _ -> spanic "recursive let" 
 
-     -- Maybe bind e at the top of go instead of passing into rewOr.
-     -- Then use infix.
      Case scrut w ty alts ->
-       rewOr caseReduceUnfoldR'
-          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts) e
+       caseReduceUnfoldR' `rewOr`
+          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
       where
         caseReduceUnfoldR' =
           {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
@@ -137,7 +134,7 @@ mono args c = go
       -- All arguments consumed. Retry with empty stack
       mono0 = mono [] c
       -- rewOr :: Rewrite c m a -> m a -> a -> m a
-      rewOr rew ma = catchMaybe . applyT rew c >=> maybe ma go
+      rew `rewOr` ma = catchMaybe (applyT rew c e) >>= maybe ma go
 
 -- TODO: Prune case expressions to stop recursion.
 
