@@ -30,9 +30,9 @@ module LambdaCCC.Monomorphize (monomorphizeE) where
 
 import Prelude hiding (id,(.))
 
-import Data.Traversable (mapAccumL)
 import Control.Category (id,(.))
 import Control.Arrow (first,second,arr,(>>>))
+import Control.Applicative (liftA2)
 import Control.Monad ((=<<),(>=>))
 import qualified Data.Set as S
 import Control.Monad.IO.Class (MonadIO)
@@ -48,7 +48,7 @@ import HERMIT.Name
 
 -- TODO: Tighten imports
 
-import HERMIT.Extras (pattern FunCo, fqVarName)
+import HERMIT.Extras (pattern FunCo, fqVarName, exprType', exprTypeT)
 
 import Monomorph.Stuff (letNonRecSubstSaferR)
 
@@ -69,7 +69,11 @@ type Nuff c m = (ContextNuff c, MonadNuff m)
 monomorphizeE :: Nuff c m => Rewrite c m CoreExpr
 monomorphizeE = transform (mono [])
 
+type Trans a b = forall c m . Nuff c m => c -> a -> m b
+
 type Rew a = forall c m . Nuff c m => c -> a -> m a
+
+-- type Rew a = Trans a a
 
 type Stack = [CoreExpr]                 -- argument stack
 
@@ -80,7 +84,7 @@ mono args c = go
    go e = -- pprTrace "mono/go:" (ppr e) $
           applyT (observeR "mono/go") c e >>
           case e of
-     Var v | isTyVar v -> mpanic (text "type variable: " <+> ppr v) -- maybe allow
+     Var v | isTyVar v -> mpanic (text "type variable:" <+> ppr v) -- maybe allow
      Var v -> inlineNonPrim v `rewOr` bail
      Lam v body ->
        case args of
@@ -105,7 +109,7 @@ mono args c = go
      Let (Rec _) _ -> bail -- spanic "recursive let"
 
      Case scrut _ _ _  ->
-       (guardMsg (not (isPoly scrut)) "Poly" >> caseReduceUnfoldR') `rewOr` bail
+       (guardMsg (isMono scrut) "Poly" >> caseReduceUnfoldR') `rewOr` bail
           -- (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
       where
         caseReduceUnfoldR' =
@@ -137,17 +141,20 @@ mono args c = go
 
 -- TODO: Prune case expressions to stop recursion.
 
-isPoly :: CoreExpr -> Bool
-isPoly e = isTypeArg e || isPolyTy (exprType e)
+isMono :: CoreExpr -> Bool
+isMono = isMonoTy . exprType'
 
-isPolyTy :: Type -> Bool
-isPolyTy (coreView -> Just ty) = isPolyTy ty
-isPolyTy (TyVarTy _)           = True
-isPolyTy (AppTy u v)           = isPolyTy u || isPolyTy v
-isPolyTy (TyConApp _ tys)      = any isPolyTy tys
-isPolyTy (FunTy u v)           = isPolyTy u || isPolyTy v
-isPolyTy (ForAllTy {})         = True
-isPolyTy (LitTy _)             = False
+isMonoTy :: Type -> Bool
+isMonoTy (coreView -> Just ty) = isMonoTy ty
+isMonoTy (TyVarTy _)           = False
+isMonoTy (AppTy u v)           = isMonoTy u && isMonoTy v
+isMonoTy (TyConApp _ tys)      = all isMonoTy tys
+isMonoTy (FunTy u v)           = isMonoTy u && isMonoTy v
+isMonoTy (ForAllTy {})         = False
+isMonoTy (LitTy _)             = True
+
+-- mono/go/case bailing. case scrutinee has poly type RTree N1 Int
+
 
 inlineNonPrim :: Nuff c m => Var -> Rewrite c m CoreExpr
 inlineNonPrim v = bracketR "inlineNonPrim" $
