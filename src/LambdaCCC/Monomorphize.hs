@@ -76,19 +76,6 @@ mono :: Stack -> Rew CoreExpr
 mono args c = go
  where
    go e | pprTrace "mono/go:" (ppr e) False = error "Wat!"
-
---    go (Var v) | isTyVar v = mpanic (text "type variable: " <+> ppr v)
---               | otherwise =
---      maybeInline c v >>= maybe (mkCoreApps (Var v) <$> mapM mono0 args) go
-
---    go (Var v) | isTyVar v = mpanic (text "type variable: " <+> ppr v) -- maybe allow
---               | isPrim v  = mkCoreApps (Var v) <$> mapM mono0 args
---               | otherwise = applyT inlineR' c (Var v) >>= go
---     where
---       inlineR' = observeFailureR ("inlining failed for var " ++ fqVarName v) $
---                  -- bracketR "inlineR" $
---                  inlineR
-
    go (Var v) | isTyVar v = mpanic (text "type variable: " <+> ppr v) -- maybe allow
    go (Var v) = rewOr inlineNonPrim (mkCoreApps (Var v) <$> mapM mono0 args) (Var v)
     where
@@ -117,26 +104,6 @@ mono args c = go
 
    go (Let (Rec _) _) = spanic "recursive let" 
 
---    go (Case scrut w ty alts) =
---      Case <$> mono0 scrut <*> pure w <*> pure ty
---           <*> mapM (onAltRhsM go) alts
-
---    go (Case scrut w ty alts) =
---      do scrut' <- mono0 scrut
---         maybe (Case scrut' w ty <$> mapM (onAltRhsM go) alts) go =<<
---           catchMaybe (applyT caseReduceR' c (Case scrut' w ty alts))
---     where
---       caseReduceR' = bracketR "caseReduceR" (caseReduceR False)
-
---    go e@(Case scrut w ty alts) =
---      do catchMaybe (applyT caseReduceUnfoldR' c e) >>=
---           maybe (Case <$> mono0 scrut <*> pure w <*> pure ty
---                       <*> mapM (onAltRhsM go) alts)
---                 go
---     where
---       caseReduceUnfoldR' =
---         {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
-
    -- Maybe bind e at the top of go instead of passing into rewOr.
    -- Then use infix.
    go e@(Case scrut w ty alts) =
@@ -159,19 +126,6 @@ mono args c = go
    go (Cast e co) =
      mkCoreApps <$> (flip mkCast co <$> mono0 e) <*> mapM mono0 args
 
---    go (Cast e co) = step e co args
---     where
---       step e (FunCo _r dom ran) (arg:more) =
---         do arg' <- mono0 arg
---            ... step (ran, mkCast arg' (SymCo dom))
---             
---    trim (ForAllCo v ran) (Type t) =
---      (substCo (extendTvSubst emptySubst v t) ran, Type t)
-
---    go (Cast e co) = mono args' c (mkCast e co')
---     where
---       (co',args') = dropCoArgs co args
-
    go (Tick t e) = Tick t <$> go e
    go (Coercion co) = return (Coercion co)
    -- Type, Lit, Coercion
@@ -185,16 +139,6 @@ mono args c = go
 
 -- TODO: Prune case expressions to stop recursion.
 
---    go e@(Case scrut w ty alts) =
---      do catchMaybe (applyT caseReduceUnfoldR' c e) >>=
---           maybe (Case <$> mono0 scrut <*> pure w <*> pure ty
---                       <*> mapM (onAltRhsM go) alts)
---                 go
---     where
---       caseReduceUnfoldR' =
---         {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
-
-
 isPrim :: Id -> Bool
 isPrim v = fqVarName v `S.member` primNames
 
@@ -204,9 +148,6 @@ isPrim v = fqVarName v `S.member` primNames
 -- primNames :: M.Map String (String,String)
 
 -- See current stdMeths in Reify for list of methods, classes, etc.
-
--- Translate function names to cat class and prim
--- primNames :: M.Map String (String,String)
 
 primNames :: S.Set String
 primNames = S.fromList
