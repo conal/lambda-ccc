@@ -50,7 +50,7 @@ import HERMIT.Name
 
 import HERMIT.Extras (pattern FunCo, fqVarName, exprType', exprTypeT)
 
-import Monomorph.Stuff (letNonRecSubstSaferR)
+import Monomorph.Stuff (pruneCaseR,standardizeCase,standardizeCon)
 
 type UnopM m a = a -> m a
 
@@ -108,12 +108,35 @@ mono args c = go
 
      Let (Rec _) _ -> bail -- spanic "recursive let"
 
-     Case scrut _ _ _  ->
-       (guardMsg (isMono scrut) "Poly" >> caseReduceUnfoldR') `rewOr` bail
-          -- (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
+--      Case scrut w ty alts ->
+--        caseReduceUnfoldR' `rewOr`
+--        standardizeCase `rewOr`
+--          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
+--       where
+--         caseReduceUnfoldR' =
+--           {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
+
+     Case scrut w ty alts ->
+       caseReduceUnfoldR' `rewOr`
+         case alts of
+           (_:_:_) -> bracketR "pruneCaseR" pruneCaseR `rewOr` bail
+           _       -> (Case <$> mono0 scrut <*> pure w <*> pure ty
+                            <*> mapM (onAltRhsM go) alts)
       where
         caseReduceUnfoldR' =
           {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
+
+
+--      Case scrut w ty alts@[_] ->
+--        (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
+--      Case {} -> (bracketR "pruneCaseR" pruneCaseR) `rewOr` bail
+
+--      Case scrut _ _ _  ->
+--        (guardMsg (isMono scrut) "Poly" >> caseReduceUnfoldR') `rewOr` bail
+--           -- (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
+--       where
+--         caseReduceUnfoldR' =
+--           {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
 
      -- Still to address: monomorphic recursion.
 
@@ -136,6 +159,7 @@ mono args c = go
       -- All arguments consumed. Retry with empty stack
       mono0 = mono [] c
       -- rewOr :: Rewrite c m a -> m a -> a -> m a
+      infixl 4 `rewOr`
       rew `rewOr` ma = catchMaybe (applyT rew c e) >>= maybe ma go
       bail = mkCoreApps e <$> mapM mono0 args
 
