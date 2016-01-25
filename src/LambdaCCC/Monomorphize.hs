@@ -33,7 +33,7 @@ import Prelude hiding (id,(.))
 import Data.Traversable (mapAccumL)
 import Control.Category (id,(.))
 import Control.Arrow (first,second,arr,(>>>))
-import Control.Monad ((=<<))
+import Control.Monad ((=<<),(>=>))
 import qualified Data.Set as S
 import Control.Monad.IO.Class (MonadIO)
 
@@ -75,10 +75,27 @@ type Stack = [CoreExpr]                 -- argument stack
 mono :: Stack -> Rew CoreExpr
 mono args c = go
  where
-   -- go e | pprTrace "mono/go:" (ppr e) False = error "Wat!"
-   go (Var v) | isTyVar v = mpanic (text "type variable: " <+> ppr v)
-              | otherwise =
-     maybeInline c v >>= maybe (mkCoreApps (Var v) <$> mapM mono0 args) go
+   go e | pprTrace "mono/go:" (ppr e) False = error "Wat!"
+
+--    go (Var v) | isTyVar v = mpanic (text "type variable: " <+> ppr v)
+--               | otherwise =
+--      maybeInline c v >>= maybe (mkCoreApps (Var v) <$> mapM mono0 args) go
+
+--    go (Var v) | isTyVar v = mpanic (text "type variable: " <+> ppr v) -- maybe allow
+--               | isPrim v  = mkCoreApps (Var v) <$> mapM mono0 args
+--               | otherwise = applyT inlineR' c (Var v) >>= go
+--     where
+--       inlineR' = observeFailureR ("inlining failed for var " ++ fqVarName v) $
+--                  -- bracketR "inlineR" $
+--                  inlineR
+
+   go (Var v) | isTyVar v = mpanic (text "type variable: " <+> ppr v) -- maybe allow
+   go (Var v) = rewOr inlineNonPrim (mkCoreApps (Var v) <$> mapM mono0 args) (Var v)
+    where
+      inlineNonPrim = do guardMsg (not (isPrim v)) "mono inlineNonPrim: primitive"
+                         bracketR "inlineR" $
+                           inlineR
+
    go (Lam v body) =
      case args of
        rhs : args' -> mono args' c (mkCoreLet (NonRec v rhs) body)
@@ -111,15 +128,23 @@ mono args c = go
 --     where
 --       caseReduceR' = bracketR "caseReduceR" (caseReduceR False)
 
+--    go e@(Case scrut w ty alts) =
+--      do catchMaybe (applyT caseReduceUnfoldR' c e) >>=
+--           maybe (Case <$> mono0 scrut <*> pure w <*> pure ty
+--                       <*> mapM (onAltRhsM go) alts)
+--                 go
+--     where
+--       caseReduceUnfoldR' =
+--         {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
+
+   -- Maybe bind e at the top of go instead of passing into rewOr.
+   -- Then use infix.
    go e@(Case scrut w ty alts) =
-     do catchMaybe (applyT caseReduceUnfoldR' c e) >>=
-          maybe (Case <$> mono0 scrut <*> pure w <*> pure ty
-                      <*> mapM (onAltRhsM go) alts)
-                go
+     rewOr caseReduceUnfoldR'
+        (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts) e
     where
       caseReduceUnfoldR' =
         {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
-
 
    -- CAUTION! This 'mapM' replicates argument expression stack. I guess I
    -- should only push the arguments inside if there's only one case alternative
@@ -155,9 +180,10 @@ mono args c = go
      mpanic (text "Surprisingly argumentative: " <+> ppr (mkCoreApps e args))
    -- All arguments consumed. Retry with empty stack
    mono0 = mono [] c
+   -- rewOr :: Rewrite c m a -> m a -> a -> m a
+   rewOr rew ma = catchMaybe . applyT rew c >=> maybe ma go
 
 -- TODO: Prune case expressions to stop recursion.
-
 
 --    go e@(Case scrut w ty alts) =
 --      do catchMaybe (applyT caseReduceUnfoldR' c e) >>=
@@ -168,12 +194,6 @@ mono args c = go
 --       caseReduceUnfoldR' =
 --         {-bracketR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
 
-
-maybeInline :: Nuff c m => c -> Id -> m (Maybe CoreExpr)
-maybeInline c v | isPrim v  = return Nothing
-                | otherwise = catchMaybe (applyT inlineR' c (Var v))
- where
-   inlineR' = {-bracketR "inlineR"-} inlineR
 
 isPrim :: Id -> Bool
 isPrim v = fqVarName v `S.member` primNames
