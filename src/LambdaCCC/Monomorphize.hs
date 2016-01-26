@@ -111,26 +111,9 @@ mono args c = go
      -- TODO: Is there a cheaper way to check whether v occurs freely in body
      -- without having to collect all of the free variables in a set?
 
---      -- Skip optimizations here. Do later.
---      Let (NonRec v rhs) body ->
---        mkCoreLet <$> (NonRec v <$> mono0 rhs) <*> go body
-
      -- No. We must at least substitute type bindings, so we can recognize monotypes.
 
      Let (Rec _) _ -> bail -- spanic "recursive let"
-
---      Case scrut w ty alts ->
---        (  watchR "pruneCaseR"     pruneCaseR
---        <+ watchR "caseFloatCaseR" caseFloatCaseR
---        -- <+ watchR "caseReduceR" (caseReduceR False) . (id <+ arr (onScrutineeR altIdOf)) . 
---        <+ watchR "caseReduceR" (caseReduceR False)
---        ) `rewOr`
---          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
-
-     -- TODO: Watch duplication. Only push args inside if fewer than two
-     -- alternatives or if they're all trivial. We could let-bind the args.
-
-     -- TODO: altId & caseReduceR: (id <+ arr (onScrut altId)) . caseReduceR
 
      Case scrut w ty alts ->
        (  nowatchR "caseReduceR False" (caseReduceR False)
@@ -139,40 +122,10 @@ mono args c = go
        <+ nowatchR "onScrutineeR abstReprScrutinee" (onScrutineeR abstReprScrutinee)
        ) `rewOr`
          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
-     -- Note: the fallback could duplicate args. Revisit.
 
---      Case scrut w ty alts ->
---        watchR "removeCase" removeCase `rewOr`
---          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
-
---      Case scrut w ty alts ->
---        caseReduceUnfoldR' `rewOr`
---        standardizeCase    `rewOr`
---          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
---       where
---         caseReduceUnfoldR' =
---           {-watchR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
-
---      Case scrut w ty alts ->
---        caseReduceUnfoldR' `rewOr`
---          case alts of
---            (_:_:_) -> watchR "pruneCaseR" pruneCaseR `rewOr` bail
---            _       -> (Case <$> mono0 scrut <*> pure w <*> pure ty
---                             <*> mapM (onAltRhsM go) alts)
---       where
---         caseReduceUnfoldR' =
---           {-watchR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
-
---      Case scrut w ty alts@[_] ->
---        (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
---      Case {} -> (watchR "pruneCaseR" pruneCaseR) `rewOr` bail
-
---      Case scrut _ _ _  ->
---        (guardMsg (isMono scrut) "Poly" >> caseReduceUnfoldR') `rewOr` bail
---           -- (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
---       where
---         caseReduceUnfoldR' =
---           {-watchR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
+     -- TODO: Watch duplication in the fall-back here. Only push args inside if
+     -- fewer than two alternatives or if they're all trivial. We could let-bind
+     -- the args.
 
      -- Still to address: monomorphic recursion.
 
@@ -301,66 +254,6 @@ mkAbstRepr :: TransformH Type (CoreExpr,CoreExpr)
 mkAbstRepr = do f <- hasRepMethodF
                 liftA2 (,) (f "abst") (f "repr")
 
-#if 0
--- Constructor applied to normalized arguments, with hoisted bindings.
-data CtorApp = CtorApp DataCon Stack
-
--- Transform to constructor-application form, plus outer bindings ready for
--- 'mkCoreLets'. If not already in this form, consider "abst (repr scrut)",
--- i.e., "let v = repr scrut' in abst v", where abst v is monomorphic. Normalize
--- "abst v" to abstv'. The "let v = repr scrut'" gets floated above the case,
--- treating repr as in normal form, leaving the equivalent of "let v = repr
--- scrut' in case abstv' of ...". If it helps, add a continuation argument to
--- apply to the result of case reduction.
-
-toCtorApp :: TransformH CoreExpr ([CoreBind],CtorApp)
-toCtorApp = -- observeR "toCtorApp" >>>
-  do scrut <- id
-     let ty = exprType' scrut
-     pprTrace "toCtorApp:" (ppr scrut <+> text "::" <+> ppr ty) (return ())
-     (abst,repr) <- mkAbstRepr $* ty
-     -- pprTrace "toCtorApp (abst,repr):" (ppr (mkCoreTup [abst,repr])) (return ())
-     let reprScrut = mkCoreApp repr scrut
-     v <- newIdT "w" $* exprType' reprScrut
-     -- abstv' <- mono [] c (App abst (Var v))
-     ca <- simplifyToCtorApp $* App abst (Var v)
-     -- repr scrut gets monomorphized later
-     return (first (NonRec v reprScrut :) ca)
-
-simplifyToCtorApp :: TransformH CoreExpr ([CoreBind],CtorApp)
-simplifyToCtorApp =
-    ready
-  . nowatchR "bashToCtorApp" bashToCtorApp
-  -- . observeR "simplifyToCtorApp"
- where
-   ready = do
-     -- TODO: Consider using callDataConT instead.
-     (Var (isDataConWorkId_maybe -> Just dcon),args) <- callT
-     return $ ([],CtorApp dcon args)
-
-bashToCtorApp :: ReExpr
-bashToCtorApp = bashExtendedWithE [inlineR]
-
--- TODO: Replace bashToCtorApp with something much more directed.
--- I think it'll add let bindings.
-
-mkAbstRepr :: TransformH Type (CoreExpr,CoreExpr)
-mkAbstRepr = do f <- hasRepMethodF
-                liftA2 (,) (f "abst") (f "repr")
-
-removeCase :: ReExpr
-removeCase =
-  prefixFailMsg "removeCase failed: " $
-  withPatFailMsg (wrongExprForm "Case e v t alts") $
-  do Case scrut w ty alts <- id
-     (binds, CtorApp con conArgs) <- toCtorApp $* scrut
-     e' <- nowatchR "caseReduceDataconR" (caseReduceDataconR False)
-             $* (Case (mkCoreConApps con conArgs) w ty alts)
-     return $
-       mkCoreLets binds e'
-
-#endif
-
 pruneCaseR :: ReExpr
 
 pruneCaseR = prefixFailMsg "pruneCaseR failed: " $
@@ -369,13 +262,6 @@ pruneCaseR = prefixFailMsg "pruneCaseR failed: " $
      let alts' = catMaybes (liveAlt (exprType scrut) <$> alts)
      guardMsg (length alts' < length alts) "No impossible alternatives"
      return (Case scrut wild ty alts')
-
--- pruneCaseR = prefixFailMsg "pruneCaseR failed: " $
---              withPatFailMsg (wrongExprForm "Case scrut v ty alts") $
---   do Case scrut wild ty alts <- id
---      let alts' = filter (isJust . liveAlt (exprType scrut)) alts
---      guardMsg (length alts' < length alts) "No impossible alternatives"
---      return (Case scrut wild ty alts')
 
 altIdCaseR :: ReExpr
 altIdCaseR = watchR "altIdCaseR" $
