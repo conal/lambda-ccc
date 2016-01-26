@@ -48,8 +48,8 @@ import Circat.Misc ((<~))
 import HERMIT.Extras hiding (findTyConT,observeR',orL,simplifyE)
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', orL, labeled)
 
-import Monomorph.Stuff (preMonoR {-, monomorphizeE-}, simplifyE) -- , simplifyWithLetFloatingE
-import LambdaCCC.Monomorphize (monomorphizeE) -- , simplifyWithLetFloatingE
+import Monomorph.Stuff (preMonoR, castFloatR, simplifyE) -- , simplifyWithLetFloatingE
+import LambdaCCC.Monomorphize (monomorphizeE)
 
 {--------------------------------------------------------------------
     Utilities. Move to HERMIT.Extras
@@ -493,12 +493,15 @@ reifyProgR = progBindsAnyR (const $
 reifyMonomorph :: ReExpr
 reifyMonomorph = bracketR "reifyMonomorph" $
                  inReify ( tryR unshadowE
-                         . try "simplifyE" simplifyE
+                         . tryR (anybuE (repeatR castFloatR))
+                         -- . try "simplifyE" simplifyE
                          . {- try "monomorphizeE" -} monomorphizeE
-                         . observeR "about to monomorphizeE"
+                         -- . observeR "about to monomorphizeE"
                          )
- where
-   try str rew = tryR (bracketR str rew)
+--  where
+--    try str rew = tryR (bracketR str rew)
+
+-- TODO: Weave cast floating into monomorphize, defining mkLam, mkApp, mkCase, etc.
 
 -- simplifyWithLetFloatingE can take much longer than simplifyE, so use it
 -- mainly when debugging.
@@ -523,7 +526,6 @@ externals =
     [ externC' "reify" reifyR
     , externC' "reifyE" reifyE
     -- TEMP:
-    , externC' "monomorph" monomorphR
     , externC' "rewrite-if" rewriteIf
     , externC' "reify-misc" reifyMisc
     , externC' "reify-eval" reifyEval
@@ -547,4 +549,6 @@ externals =
     , externC' "optimize-cast" optimizeCastR
     , externC' "unreify" unReify
     , externC' "uneval" unEval
+
+    , externC' "monomorph" monomorphR
     ]
