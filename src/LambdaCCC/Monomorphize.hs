@@ -36,7 +36,7 @@ import Control.Applicative (liftA2)
 import Control.Monad ((=<<),(>=>))
 import qualified Data.Set as S
 import Control.Monad.IO.Class (MonadIO)
-import Data.Maybe (isJust)
+import Data.Maybe (catMaybes,isJust)
 
 import Language.KURE
 import HERMIT.Context
@@ -55,14 +55,18 @@ import PrelNames (eqPrimTyConKey,eqReprPrimTyConKey)
 -- TODO: Tighten imports
 
 import HERMIT.Extras
-  (pattern FunCo, fqVarName, exprType', exprTypeT, ReExpr,($*),externC',onScrutineeR)
+  (pattern FunCo, fqVarName, exprType', exprTypeT, ReExpr
+  , ($*), externC', onScrutineeR, bashExtendedWithE, newIdT
+  )
 
 -- import Monomorph.Stuff (pruneCaseR,standardizeCase,standardizeCon,hasRepMethodF)
+import Monomorph.Stuff (hasRepMethodF)
 
 type Unop a = a -> a
 
-watchR :: String -> Unop ReExpr
+watchR, nowatchR :: String -> Unop ReExpr
 watchR = bracketR
+nowatchR = const id
 
 type UnopM m a = a -> m a
 
@@ -107,24 +111,30 @@ mono args c = go
      -- TODO: Is there a cheaper way to check whether v occurs freely in body
      -- without having to collect all of the free variables in a set?
 
+--      -- Skip optimizations here. Do later.
+--      Let (NonRec v rhs) body ->
+--        mkCoreLet <$> (NonRec v <$> mono0 rhs) <*> go body
+
+     -- No. We must at least substitute type bindings, so we can recognize monotypes.
+
      Let (Rec _) _ -> bail -- spanic "recursive let"
 
-     Case scrut w ty alts ->
-       (  watchR "pruneCaseR"     pruneCaseR
-       <+ watchR "caseFloatCaseR" caseFloatCaseR
-       -- <+ watchR "caseReduceR" (caseReduceR False) . (id <+ arr (onScrutineeR altIdOf)) . 
-       <+ watchR "caseReduceR" (caseReduceR False)
-       ) `rewOr`
-         (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
+--      Case scrut w ty alts ->
+--        (  watchR "pruneCaseR"     pruneCaseR
+--        <+ watchR "caseFloatCaseR" caseFloatCaseR
+--        -- <+ watchR "caseReduceR" (caseReduceR False) . (id <+ arr (onScrutineeR altIdOf)) . 
+--        <+ watchR "caseReduceR" (caseReduceR False)
+--        ) `rewOr`
+--          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
 
      -- TODO: Watch duplication. Only push args inside if fewer than two
      -- alternatives or if they're all trivial. We could let-bind the args.
 
      -- TODO: altId & caseReduceR: (id <+ arr (onScrut altId)) . caseReduceR
 
---      Case scrut w ty alts ->
---        (watchR "removeCase" removeCase) `rewOr`
---          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
+     Case scrut w ty alts ->
+       watchR "removeCase" removeCase `rewOr`
+         (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
 
 --      Case scrut w ty alts ->
 --        caseReduceUnfoldR' `rewOr`
@@ -206,9 +216,21 @@ inlineNonPrim args = watchR "inlineNonPrim" $
   do Var v <- id
      guardMsg (not (isPrim v)) "inlineNonPrim: primitive"
      guardMsg (all isMonoTy [ty | Type ty <- args]) "Non-monotype arguments"  -- [1,2]
+     -- pprTrace "isRepDict test on type" (ppr (varType v)) (return ())
+     guardMsg (not (isRepDict (varType v))) "HasRep dictionary"
      -- pprTrace "inlineNonPrim" (ppr (varType v) $+$ sep (ppr <$> args)) (return ())
      inlineR
-   
+ where
+   isRepDict :: Type -> Bool
+   -- isRepDict ty | pprTrace "isRepDict" (ppr ty) False = error "wat"
+   isRepDict (coreView -> Just ty) = isRepDict ty
+   isRepDict (TyConApp tc _args)   =
+     -- pprTrace "isRepDict TyConApp tc name" (text (qualifiedName (tyConName tc))) $
+     qualifiedName (tyConName tc) == "Circat.Rep.HasRep"
+   isRepDict (ForAllTy _ ty)       = isRepDict ty
+   isRepDict (FunTy _dom ran)      = isRepDict ran
+   isRepDict _                     = False
+
 -- [1] Should I also check that the whole application is monomorphic?
 -- 
 -- [2] Maybe re-implement more efficiently, without building the application.
@@ -252,7 +274,7 @@ mpanic = pprPanic "mono"
 spanic :: String -> a
 spanic = mpanic . text
 
-#if 0
+#if 1
 -- Constructor applied to normalized arguments, with hoisted bindings.
 data CtorApp = CtorApp DataCon Stack
 
@@ -264,19 +286,36 @@ data CtorApp = CtorApp DataCon Stack
 -- scrut' in case abstv' of ...". If it helps, add a continuation argument to
 -- apply to the result of case reduction.
 
-toCtorApp :: Trans CoreExpr ([CoreBind],CtorApp)
-toCtorApp c = go (10 :: Int) -- number of tries
+toCtorApp :: TransformH CoreExpr ([CoreBind],CtorApp)
+toCtorApp = -- observeR "toCtorApp" >>>
+  do scrut <- id
+     let ty = exprType' scrut
+     pprTrace "toCtorApp:" (ppr scrut <+> text "::" <+> ppr ty) (return ())
+     (abst,repr) <- mkAbstRepr $* ty
+     -- pprTrace "toCtorApp (abst,repr):" (ppr (mkCoreTup [abst,repr])) (return ())
+     let reprScrut = mkCoreApp repr scrut
+     v <- newIdT "w" $* exprType' reprScrut
+     -- abstv' <- mono [] c (App abst (Var v))
+     ca <- simplifyToCtorApp $* App abst (Var v)
+     -- repr scrut gets monomorphized later
+     return (first (NonRec v reprScrut :) ca)
+
+simplifyToCtorApp :: TransformH CoreExpr ([CoreBind],CtorApp)
+simplifyToCtorApp =
+    ready
+  . nowatchR "bashToCtorApp" bashToCtorApp
+  -- . observeR "simplifyToCtorApp"
  where
-   go 0 _ = fail "toCtorApp: too many tries"
-   go _ (collectArgs -> (Var (isDataConWorkId_maybe -> Just dcon),args)) =
+   ready = do
+     -- TODO: Consider using callDataConT instead.
+     (Var (isDataConWorkId_maybe -> Just dcon),args) <- callT
      return $ ([],CtorApp dcon args)
-   go n scrut =
-     do (abst,repr) <- applyT mkAbstRepr c ty
-        v <- newIdH "w" ty
-        abstv' <- mono [] c (App abst (Var v))
-        first (NonRec v (App repr scrut) :) <$> go (n-1) abstv'
-    where
-      ty = exprType scrut
+
+bashToCtorApp :: ReExpr
+bashToCtorApp = bashExtendedWithE [inlineR]
+
+-- TODO: Replace bashToCtorApp with something much more directed.
+-- I think it'll add let bindings.
 
 mkAbstRepr :: TransformH Type (CoreExpr,CoreExpr)
 mkAbstRepr = do f <- hasRepMethodF
@@ -287,8 +326,8 @@ removeCase =
   prefixFailMsg "removeCase failed: " $
   withPatFailMsg (wrongExprForm "Case e v t alts") $
   do Case scrut w ty alts <- id
-     (binds, CtorApp con conArgs) <- transform toCtorApp $* scrut
-     e' <- watchR "caseReduceDataconR" (caseReduceDataconR False)
+     (binds, CtorApp con conArgs) <- toCtorApp $* scrut
+     e' <- nowatchR "caseReduceDataconR" (caseReduceDataconR False)
              $* (Case (mkCoreConApps con conArgs) w ty alts)
      return $
        mkCoreLets binds e'
@@ -296,12 +335,20 @@ removeCase =
 #endif
 
 pruneCaseR :: ReExpr
+
 pruneCaseR = prefixFailMsg "pruneCaseR failed: " $
              withPatFailMsg (wrongExprForm "Case scrut v ty alts") $
   do Case scrut wild ty alts <- id
-     let alts' = filter (liveAlt (exprType scrut)) alts
+     let alts' = catMaybes (liveAlt (exprType scrut) <$> alts)
      guardMsg (length alts' < length alts) "No impossible alternatives"
      return (Case scrut wild ty alts')
+
+-- pruneCaseR = prefixFailMsg "pruneCaseR failed: " $
+--              withPatFailMsg (wrongExprForm "Case scrut v ty alts") $
+--   do Case scrut wild ty alts <- id
+--      let alts' = filter (isJust . liveAlt (exprType scrut)) alts
+--      guardMsg (length alts' < length alts) "No impossible alternatives"
+--      return (Case scrut wild ty alts')
 
 altIdCaseR :: ReExpr
 altIdCaseR = watchR "altIdCaseR" $
@@ -328,13 +375,23 @@ altIdOf wild (alt,vs,_) =
    mkAltConExpr DEFAULT      = Var wild
 
 -- | Can a given case constructor produce the given type?
-liveAlt :: Type -> CoreAlt -> Bool
-liveAlt ty (DataAlt dc,_,_) = liveDc ty dc
-liveAlt _  _                = True
+liveAlt :: Type -> CoreAlt -> Maybe CoreAlt
+liveAlt ty al@(DataAlt dc,_,_)
+  | Just _sub <- liveDc ty dc = Just al
+  | otherwise                 = Nothing
+liveAlt _  al                 = Just al
+
+-- tvSubstToSubst :: TvSubst -> Subst
+-- tvSubstToSubst (TvSubst in_scope tenv)  Subst in_scope _ tenv _
+
+-- TODO: Apply substitution in the body of the returned CoreAlt. I may have to
+-- write my own pattern matcher that yields coercions for type variables, to
+-- include in the Subst. See the notes on the Subst data type in GHC's
+-- CoreSubst module.
 
 -- | Can a given case Alt match the given type?
-liveDc :: Type -> DataCon -> Bool
-liveDc ty dc = isJust (unifyTys ((ty,dcResTy) : coEqns))
+liveDc :: Type -> DataCon -> Maybe TvSubst
+liveDc ty dc = unifyTys ((ty,dcResTy) : coEqns)
  where
    (coEqns,dcResTy) = extractCoEqns (dataConRepType dc)
 
