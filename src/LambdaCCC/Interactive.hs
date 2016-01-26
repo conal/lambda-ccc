@@ -23,12 +23,15 @@ module LambdaCCC.Interactive where
 import GhcPlugins (Plugin)
 import HERMIT.Plugin (hermitPlugin,pass,interactive)
 
-import qualified Monomorph.Stuff as Mo
+import qualified Monomorph.Stuff as St
 import Monomorph.Plugin (tweakPretty)
 
 import qualified LambdaCCC.Reify as Re
+import qualified LambdaCCC.Monomorphize as Mo
 
 plugin :: Plugin
-plugin = hermitPlugin (pass 0 . (tweakPretty >>) . interactive (Re.externals ++ Mo.externals))
+plugin = hermitPlugin ( pass 0
+                      . (tweakPretty >>)
+                      . interactive (Re.externals ++ Mo.externals ++ St.externals) )
 
 -- plugin = hermitPlugin (\ opts -> pass 0 (tweakPretty >> interactive (Re.externals ++ Mo.externals) opts))
