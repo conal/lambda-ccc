@@ -87,7 +87,7 @@ mono :: Stack -> Rew CoreExpr
 mono args c = go
  where
    go e = -- pprTrace "mono/go:" (ppr e) $
-          applyT (observeR "mono/go") c e >>
+          -- applyT (observeR "mono/go") c e >>
           case e of
      Var v | not (isId v) -> mpanic (text "not a value variable:" <+> ppr v)
      Var _ -> inlineNonPrim args `rewOr` bail
@@ -99,7 +99,7 @@ mono args c = go
 
      Let (NonRec v rhs) body
        | v `notElemVarSet` freeVarsExpr body ->
-           pprTrace "go" (text "let-elim" <+> ppr v) $
+           -- pprTrace "go" (text "let-elim" <+> ppr v) $
            go body
        | otherwise ->
           (guardMsg (exprIsTrivial rhs) "non-trivial" >> letSubstR')
@@ -133,8 +133,17 @@ mono args c = go
      -- TODO: altId & caseReduceR: (id <+ arr (onScrut altId)) . caseReduceR
 
      Case scrut w ty alts ->
-       watchR "removeCase" removeCase `rewOr`
+       (  nowatchR "caseReduceR False" (caseReduceR False)
+       <+ nowatchR "letFloatCaseR" letFloatCaseR
+       <+ nowatchR "caseFloatCaseR" caseFloatCaseR
+       <+ nowatchR "onScrutineeR abstReprScrutinee" (onScrutineeR abstReprScrutinee)
+       ) `rewOr`
          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
+     -- Note: the fallback could duplicate args. Revisit.
+
+--      Case scrut w ty alts ->
+--        watchR "removeCase" removeCase `rewOr`
+--          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
 
 --      Case scrut w ty alts ->
 --        caseReduceUnfoldR' `rewOr`
@@ -153,7 +162,6 @@ mono args c = go
 --       where
 --         caseReduceUnfoldR' =
 --           {-watchR "caseReduceUnfoldR"-} (caseReduceUnfoldR False)
-
 
 --      Case scrut w ty alts@[_] ->
 --        (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
@@ -212,7 +220,7 @@ isMonoTy (LitTy _)             = True
 -- make the application monomorphic. The implied applications (to args) do not
 -- happen here.
 inlineNonPrim :: [CoreExpr] -> ReExpr
-inlineNonPrim args = watchR "inlineNonPrim" $
+inlineNonPrim args = -- watchR "inlineNonPrim" $
   do Var v <- id
      guardMsg (not (isPrim v)) "inlineNonPrim: primitive"
      guardMsg (all isMonoTy [ty | Type ty <- args]) "Non-monotype arguments"  -- [1,2]
@@ -274,7 +282,26 @@ mpanic = pprPanic "mono"
 spanic :: String -> a
 spanic = mpanic . text
 
-#if 1
+-- Prepare a scrutinee
+abstReprScrutinee :: ReExpr
+abstReprScrutinee =
+  do scrut <- id
+     let ty = exprType' scrut
+     -- pprTrace "abstReprScrutinee:" (ppr scrut <+> text "::" <+> ppr ty) (return ())
+     (abst,repr) <- mkAbstRepr $* ty
+     -- pprTrace "toCtorApp (abst,repr):" (ppr (mkCoreTup [abst,repr])) (return ())
+     let reprScrut = mkCoreApp repr scrut
+     v <- newIdT "w" $* exprType' reprScrut
+     -- abstv' <- mono [] c (App abst (Var v))
+     abstv' <- nowatchR "bash abstv" (bashExtendedWithE [inlineR]) $* App abst (Var v)
+     -- repr scrut gets monomorphized later
+     return (Let (NonRec v reprScrut) abstv')
+
+mkAbstRepr :: TransformH Type (CoreExpr,CoreExpr)
+mkAbstRepr = do f <- hasRepMethodF
+                liftA2 (,) (f "abst") (f "repr")
+
+#if 0
 -- Constructor applied to normalized arguments, with hoisted bindings.
 data CtorApp = CtorApp DataCon Stack
 
