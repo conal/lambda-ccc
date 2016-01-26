@@ -1,14 +1,26 @@
-set-pp-coercion Show
-set-pp-type Show
+set-pp-renderer ascii
+set-pp-width 80
+
+-- set-pp-type     Omit
+set-pp-type     Show
+
+-- set-pp-coercion Omit
+set-pp-coercion Kind
+-- set-pp-coercion Show
+
 pre-mono
 
-any-td unfold-driver
+-- any-td unfold-driver
 
 rhs-of 'main
 
 application-of 'reifyEP
 
 -- app-arg
+
+-- unfold
+-- lam-body
+
 
 -- unfold-poly -- loops! I think it's the simplify after the unfold
 
