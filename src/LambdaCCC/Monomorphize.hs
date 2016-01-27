@@ -207,18 +207,22 @@ isPrim v = fqVarName v `S.member` primNames
 
 -- See current stdMeths in Reify for list of methods, classes, etc.
 
-repMethNames :: S.Set String
-repMethNames = S.fromList (("Circat.Rep." ++) <$> ["abst","repr"])
-
 primNames :: S.Set String
-primNames = repMethNames `S.union`
-  S.fromList
-    [ "GHC.Num.$fNum"++ty++"_$c"++meth
-    | (tys,meths) <- prims , ty <- tys, meth <- meths ]
+primNames = S.fromList $
+     repMeths
+  ++ [ "GHC.Num.$fNum"++ty++"_$c"++meth
+     | (tys,meths) <- primMeths , ty <- tys, meth <- meths ]
+  ++ primFuns
  where
-   prims = [( ["Int","Double"]
-            , ["+","-","*","negate","abs","signum","fromInteger"])]
-   -- TODO: more primitives, including boolean
+   repMeths  = ("Circat.Rep." ++) <$> ["abst","repr"]
+   primMeths = [( ["Int","Double"]
+                , ["+","-","*","negate","abs","signum","fromInteger"])]
+     -- TODO: more primitives, including boolean
+   primFuns =
+     [ "GHC.Classes.not", "GHC.Classes.&&", "GHC.Classes.||", "Circat.Misc.xor"
+     , "GHC.Tuple.(,)", "GHC.Tuple.fst", "GHC.Tuple.snd"
+     , "Data.Either.Left", "Data.Either.Right"
+     ]
 
 --   D:Num @ Int $fNumInt_$c+ $fNumInt_$c- $fNumInt_$c* $fNumInt_$cnegate
 --               $fNumInt_$cabs $fNumInt_$csignum $fNumInt_$cfromInteger
