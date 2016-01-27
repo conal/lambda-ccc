@@ -48,7 +48,7 @@ import Circat.Misc ((<~))
 import HERMIT.Extras hiding (findTyConT,observeR',orL,simplifyE)
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', orL, labeled)
 
-import Monomorph.Stuff (preMonoR, castFloatR, simplifyE) -- , simplifyWithLetFloatingE
+import Monomorph.Stuff (preMonoR{-, castFloatR-}, simplifyE) -- , simplifyWithLetFloatingE
 import LambdaCCC.Monomorphize (monomorphizeE)
 
 {--------------------------------------------------------------------
@@ -405,7 +405,8 @@ miscL = [ ---- Special applications and so must come before reifyApp
         , ("reifyLam"     , reifyLam)
         , ("reifyMonoLet" , reifyMonoLet)
         , ("reifyTupCase" , reifyTupCase)
-        , ("reifyPrim"    , reifyPrim)
+        -- , ("reifyPrim"    , reifyPrim)
+        , ("reifyPrim'"   , reifyPrim')
         ]
 
 reifyMisc :: ReExpr
@@ -426,15 +427,15 @@ primName = mkQualified "Circat.Prim"
 -- Map name to prim name and dictionary constraints
 primMap :: M.Map String String
 primMap = M.fromList
-  [ ("GHC.Classes.not"           , "NotP")
-  , ("GHC.Classes.&&"            , "AndP")
-  , ("GHC.Classes.||"            , "OrP")
-  , ("Circat.Misc.xor"           , "XorP")
-  , ("GHC.Tuple.fst"             , "ExlP")
-  , ("GHC.Tuple.snd"             , "ExrP")
-  , ("Data.Either.Left"          , "InlP")
-  , ("Data.Either.Right"         , "InrP")
-  , ("GHC.Tuple.(,)"             , "PairP")
+  [ ("GHC.Classes.not"   , "NotP")
+  , ("GHC.Classes.&&"    , "AndP")
+  , ("GHC.Classes.||"    , "OrP")
+  , ("Circat.Misc.xor"   , "XorP")
+  , ("GHC.Tuple.fst"     , "ExlP")
+  , ("GHC.Tuple.snd"     , "ExrP")
+  , ("Data.Either.Left"  , "InlP")
+  , ("Data.Either.Right" , "InrP")
+  , ("GHC.Tuple.(,)"     , "PairP")
   ]
 
 -- TODO: make primitives a map to expressions, to use during reification. Or
@@ -471,43 +472,91 @@ rewriteIf = do Case c wild ty [(_False,[],a'),(_True,[],a)] <- id
    pair p q = mkCoreTup [p,q]
 
 {--------------------------------------------------------------------
+    Another pass at primitives
+--------------------------------------------------------------------}
+
+simplePrims :: M.Map String (TransformH a CoreExpr)
+simplePrims = mk <$> primMap
+ where
+   mk name = do v <- findIdP name
+                -- type is Prim ty
+                Just (_tc,[ty]) <- return (splitTyConApp_maybe (varType v))
+                appsE1 "kPrimEP" [ty] (Var v)
+
+reifyPrim' :: ReExpr
+reifyPrim' =
+  unReify >>>
+  do Var (fqVarName -> flip M.lookup simplePrims -> Just mk) <- id
+     mk
+
+#if 0
+findId :: (BoundVars c, LiftCoreM m, HasHermitMEnv m, MonadCatch m, MonadIO m, MonadThings m)
+       => HermitName -> c -> m Id
+
+reifyPrim :: ReExpr
+reifyPrim =
+  unReify >>>
+  do ty <- exprTypeT
+     (Var (fqVarName -> flip M.lookup primMap -> Just nm), tyArgs, [])
+       <- callSplitT
+     primV <- findIdP nm
+     appsE1 "kPrimEP" [ty] (mkApps (Var primV) (Type <$> tyArgs))
+
+-- Map name to prim name and dictionary constraints
+primMap :: M.Map String String
+primMap = M.fromList
+  [ ("GHC.Classes.not"   , "NotP")
+  , ("GHC.Classes.&&"    , "AndP")
+  , ("GHC.Classes.||"    , "OrP")
+  , ("Circat.Misc.xor"   , "XorP")
+  , ("GHC.Tuple.fst"     , "ExlP")
+  , ("GHC.Tuple.snd"     , "ExrP")
+  , ("Data.Either.Left"  , "InlP")
+  , ("Data.Either.Right" , "InrP")
+  , ("GHC.Tuple.(,)"     , "PairP")
+  ]
+#endif
+
+
+{--------------------------------------------------------------------
     Run it
 --------------------------------------------------------------------}
 
 reifyR :: ReCore
 reifyR = id -- tryR (anytdR (promoteR reifyOops))
        . tryR (promoteR reifyGutsR)
+       . traceR "reifying"
        . tryR monomorphR
        . tryR (anytdR (promoteR unfoldDriver))
        . tryR preMonoR
        . tryR (anybuR (promoteR detickE)) -- for ghci break points
+       . traceR "preparation"
 
 reifyE :: ReExpr
 reifyE = anytdE (repeatR reifyMisc)
 
 reifyProgR :: ReProg
 reifyProgR = progBindsAnyR (const $
-                            -- observeR "reifyBindR" .
+                            observeR "reifyBindR" .
                             nonRecAllR id reifyE)
 
+reifyGutsR :: ReGuts
+reifyGutsR = modGutsR reifyProgR
+
 reifyMonomorph :: ReExpr
-reifyMonomorph = bracketR "reifyMonomorph" $
+reifyMonomorph = -- bracketR "reifyMonomorph" $
                  inReify ( tryR unshadowE
-                         . tryR (anybuE (repeatR castFloatR))
-                         -- . try "simplifyE" simplifyE
-                         . {- try "monomorphizeE" -} monomorphizeE
-                         -- . observeR "about to monomorphizeE"
+                         . bracketR "simplifyE" (tryR simplifyE)
+                         -- . tryR (anybuE (repeatR castFloatR))
+                         . traceR "simplifying"
+                         . monomorphizeE
+                         . observeR "monomorphizing"
                          )
---  where
---    try str rew = tryR (bracketR str rew)
 
 -- TODO: Weave cast floating into monomorphize, defining mkLam, mkApp, mkCase, etc.
 
 -- simplifyWithLetFloatingE can take much longer than simplifyE, so use it
 -- mainly when debugging.
-
-reifyGutsR :: ReGuts
-reifyGutsR = modGutsR reifyProgR
 
 monomorphR :: ReCore
 monomorphR = anytdR (promoteR reifyMonomorph)
