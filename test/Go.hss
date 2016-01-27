@@ -10,11 +10,19 @@ set-pp-coercion Kind
 
 pre-mono
 
--- any-td unfold-driver
+try (any-td unfold-driver)
 
 rhs-of 'main
 
 application-of 'reifyEP
+
+reify-monomorph
+lint-expr
+
+-- [app-arg, lam-body]
+
+reifyE
+lint-expr
 
 -- app-arg
 

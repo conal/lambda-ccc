@@ -75,7 +75,7 @@ type Ragged = Ra.Tree
 --   (GHC version 7.10.3 for x86_64-apple-darwin):
 -- 	getIdFromTrivialExpr evalEP @ Int (varP# @ Int "x"#)
 
-main = do
+main = -- do
 #if 0
   print (reifyEP (id 3 :: Int))
   print (reifyEP (negate :: Int -> Int))
@@ -114,19 +114,57 @@ main = do
 --   go "three" (1 + 2 :: Int)
 
   -- go "nine" (sqr (1 + 2 :: Int))
-  -- go "negateI" (negate :: Int -> Int)
-  -- go "negIncr" (negIncr :: Int -> Int)
+
+--   go "negateI" (negate :: Int -> Int)
+
+--   go "negIncr" (negIncr :: Int -> Int)
 
 --   go "foo" (3 :: Int)  -- I#
 
-  go "sqrI" (sqr :: Int -> Int)
+--   go "sqrI" (sqr :: Int -> Int)
 
-  -- go "sqr" (sqr :: Int -> Int)
-  -- go "sump" (sum :: Pair Int -> Int)
-  -- goSep "sumrt2" 1 (sum :: RTree N2 Int -> Int)
+--   go "sqr" (sqr :: Int -> Int)
+
+--      print (reifyEP (fmap :: Unop Int -> Unop (Pair Int)))
+
+--   print (reifyEP (sum :: Pair Int -> Int))
+
+--   print (reifyEP (sumTI :: RTree N1 Int -> Int))
+
+--      go "leftmost-r1" (leftMost :: RTree N1 Int -> Int)
+
+--      print (reifyEP (leftMost :: RTree N1 Int -> Int))
+
+--   print (reifyEP (sum :: RTree N2 Int -> Int))
+
+--   goSep "and-rt8" 1.5 (and :: RTree N8 Bool -> Bool)
+
+--   print (reifyEP not)
+
+--   print (reifyEP ((,) :: Bool -> Bool -> (Bool,Bool)))
+
+--   print (reifyEP (False,True))
+
+--   print (reifyEP (fmap not :: Unop (Pair Bool)))
+
+--   go "map-not-rt6" (fmap not :: Unop (RTree N6 Bool))
+
+--   goSep "sumrt2" 1 (sum :: RTree N2 Int -> Int)
+
   -- goSep "maprt8" 4 (fmap sqr :: Unop (RTree N8 Int))
-  -- goSep "dotrt8" 3 (dotG :: Pair (RTree N8 Int) -> Int)
-  -- goSep "transposet4p" 4 (transpose :: RTree N4 (Pair Bool) -> Pair (RTree N4 Bool))
+
+--   goSep "dotrt4" 1 (dotG :: Pair (RTree N4 Int) -> Int)
+
+--   go "foo" ((:#) :: Bool -> Bool -> Pair Bool)
+
+--   print (reifyEP ((\ (a :# b) -> a :# b) :: Unop (Pair w)))
+
+--   go "foo" ((\ (a :# b) -> a :# b) :: Unop (Pair Bool))
+
+  goSep "transpose-pp" 1 (transpose :: Unop (Pair (Pair Bool)))
+
+--   goSep "transpose-rt2p" 1 (transpose :: RTree N2 (Pair Bool) -> Pair (RTree N2 Bool))
+
   -- go "applyLin-rt23" (($@) :: MatrixT N2 N3 Int -> RTree N2 Int -> RTree N3 Int)
   -- go "composeLin-rt232" ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int)
   -- go "lsums-p" (lsums :: Pair Int -> (Pair Int, Int))
@@ -143,6 +181,14 @@ negIncr = negate . (1 +)
 
 sqr :: Num a => a -> a
 sqr x = x * x
+
+sumTI :: RTree n Int -> Int
+sumTI (RT.L a) = a
+sumTI (RT.B (u :# v)) = sumTI u + sumTI v
+
+leftMost :: RTree n a -> a
+leftMost (RT.L a) = a
+leftMost (RT.B (u :# _)) = leftMost u
 
 #if 1
 
