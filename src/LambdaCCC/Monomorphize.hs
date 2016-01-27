@@ -87,7 +87,7 @@ mono :: Stack -> Rew CoreExpr
 mono args c = go
  where
    go e = -- pprTrace "mono/go:" (ppr e) $
-          -- applyT (observeR "mono/go") c e >>
+          applyT (observeR "mono/go") c e >>
           case e of
      Var v | not (isId v) -> mpanic (text "not a value variable:" <+> ppr v)
      Var _ -> inlineNonPrim args `rewOr` bail
@@ -95,8 +95,9 @@ mono args c = go
        case args of
          rhs : args' -> mono args' c (mkCoreLet (NonRec v rhs) body)
          []          -> Lam v <$> go body
-     App fun arg -> mono (arg : args) c fun
-
+     App fun arg ->
+       abstReprCon `rewOr`    -- try at Var also?
+         mono (arg : args) c fun
      Let (NonRec v rhs) body
        | v `notElemVarSet` freeVarsExpr body ->
            -- pprTrace "go" (text "let-elim" <+> ppr v) $
@@ -119,7 +120,7 @@ mono args c = go
        (  nowatchR "caseReduceR False" (caseReduceR False)
        <+ nowatchR "letFloatCaseR" letFloatCaseR
        <+ nowatchR "caseFloatCaseR" caseFloatCaseR
-       <+ nowatchR "onScrutineeR abstReprScrutinee" (onScrutineeR abstReprScrutinee)
+       <+ nowatchR "abstReprCase" abstReprCase
        ) `rewOr`
          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
 
@@ -239,6 +240,40 @@ mpanic = pprPanic "mono"
 spanic :: String -> a
 spanic = mpanic . text
 
+-- *   Replace with `let { v1 = e1 ; ... ; vn = en } in `C v1 ... vn`
+-- *   Rewrite the heck out of `repr (C v1 ... vn)`, including inlining everything.
+-- *   Wrap with `abst`.
+
+abstReprCon :: ReExpr
+abstReprCon = -- watchR "abstReprCon" $
+              -- observeR "abstReprCon" >>>
+  do (dc,tyArgs,span isTyCoArg -> (tycos,eArgs)) <- callDataConT
+     -- pprTrace "abstReprCon un-DC" (ppr (dc,tyArgs,tycos,eArgs)) (return ())
+     vs <- mapT (newIdT "v" . exprTypeT) $* eArgs      -- TODO: better/distinct names
+     ty <- exprTypeT
+     (abst,repr) <- mkAbstRepr $* ty
+     repre' <- {- watchR "clobber repre" -} clobber $*
+                 App repr (mkCoreConApps dc (map Type tyArgs ++ tycos ++ map Var vs))
+     return (mkCoreLets (zipWith NonRec vs eArgs) (mkCoreApp abst repre'))
+
+-- mkCoreConApps :: DataCon -> [CoreExpr] -> CoreExpr
+
+-- Without the let-binding.
+
+abstReprCon' :: ReExpr
+abstReprCon' =
+  do _ <- callDataConT
+     e <- id
+     let ty = exprType' e
+     (abst,repr) <- mkAbstRepr $* ty
+     repre' <- watchR "clobber repre" clobber $* App repr e
+     return (mkCoreApp abst repre')
+
+-- callDataConT :: MonadCatch m => Transform c m CoreExpr (DataCon, [Type], [CoreExpr])
+
+abstReprCase :: ReExpr
+abstReprCase = onScrutineeR abstReprScrutinee
+
 -- Prepare a scrutinee
 abstReprScrutinee :: ReExpr
 abstReprScrutinee =
@@ -250,13 +285,18 @@ abstReprScrutinee =
      let reprScrut = mkCoreApp repr scrut
      v <- newIdT "w" $* exprType' reprScrut
      -- abstv' <- mono [] c (App abst (Var v))
-     abstv' <- nowatchR "bash abstv" (bashExtendedWithE [inlineR]) $* App abst (Var v)
+     abstv' <- nowatchR "clobber abstv" clobber $* App abst (Var v)
      -- repr scrut gets monomorphized later
      return (Let (NonRec v reprScrut) abstv')
+
+clobber :: ReExpr
+clobber = bashExtendedWithE [inlineR]
 
 mkAbstRepr :: TransformH Type (CoreExpr,CoreExpr)
 mkAbstRepr = do f <- hasRepMethodF
                 liftA2 (,) (f "abst") (f "repr")
+
+#if 0
 
 pruneCaseR :: ReExpr
 
@@ -333,6 +373,7 @@ coEqn ty
 unifyTys :: [(Type,Type)] -> Maybe TvSubst
 unifyTys = uncurry (tcUnifyTys (const BindMe)) . unzip
 
+#endif
 
 {--------------------------------------------------------------------
     Commands for interactive use
@@ -340,8 +381,11 @@ unifyTys = uncurry (tcUnifyTys (const BindMe)) . unzip
 
 externals :: [External]
 externals =
-  [ externC' "prune-case" pruneCaseR
-  , externC' "alt-id-case" altIdCaseR
+  [
+    externC' "abst-repr-case" abstReprCase
+  , externC' "abst-repr-con" abstReprCon
   ]
 
+--   , externC' "prune-case" pruneCaseR
+--   , externC' "alt-id-case" altIdCaseR
 
