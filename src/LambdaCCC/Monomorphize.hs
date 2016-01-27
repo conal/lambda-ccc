@@ -57,6 +57,7 @@ import PrelNames (eqPrimTyConKey,eqReprPrimTyConKey)
 import HERMIT.Extras
   (pattern FunCo, fqVarName, exprType', exprTypeT, ReExpr
   , ($*), externC', onScrutineeR, bashExtendedWithE, newIdT
+  , callSplitT
   )
 
 -- import Monomorph.Stuff (pruneCaseR,standardizeCase,standardizeCon,hasRepMethodF)
@@ -240,36 +241,28 @@ mpanic = pprPanic "mono"
 spanic :: String -> a
 spanic = mpanic . text
 
--- *   Replace with `let { v1 = e1 ; ... ; vn = en } in `C v1 ... vn`
--- *   Rewrite the heck out of `repr (C v1 ... vn)`, including inlining everything.
--- *   Wrap with `abst`.
+-- Given a constructor with only type and coercion arguments `e = C z1 ... zn`,
+--
+-- *   Eta-expand to `\ v1 ... vn -> e v1 ... vn`.
+-- *   Rewrite the heck out of `repr (e v1 ... vn)` to get `reprc'`, including inlining everything.
+-- *   Wrap the result with `abst` and prefix with the lambdas:
+--     `\ v1 ... vn -> abst reprc'`.
 
 abstReprCon :: ReExpr
-abstReprCon = -- watchR "abstReprCon" $
+abstReprCon = watchR "abstReprCon" $
               -- observeR "abstReprCon" >>>
-  do (dc,tyArgs,span isTyCoArg -> (tycos,eArgs)) <- callDataConT
-     -- pprTrace "abstReprCon un-DC" (ppr (dc,tyArgs,tycos,eArgs)) (return ())
-     vs <- mapT (newIdT "v" . exprTypeT) $* eArgs      -- TODO: better/distinct names
+  do e <- id
+     (Var i,_tyArgs,tycos) <- callSplitT
+     guardMsg (isDataConWorkId i) "Non-constructor"
+     guardMsg (all isTyCoArg tycos) "Value argument(s)"
+     -- pprTrace "abstReprCon un-DC" (ppr (i,_tyArgs,tycos)) (return ())
      ty <- exprTypeT
-     (abst,repr) <- mkAbstRepr $* ty
-     repre' <- {- watchR "clobber repre" -} clobber $*
-                 App repr (mkCoreConApps dc (map Type tyArgs ++ tycos ++ map Var vs))
-     return (mkCoreLets (zipWith NonRec vs eArgs) (mkCoreApp abst repre'))
-
--- mkCoreConApps :: DataCon -> [CoreExpr] -> CoreExpr
-
--- Without the let-binding.
-
-abstReprCon' :: ReExpr
-abstReprCon' =
-  do _ <- callDataConT
-     e <- id
-     let ty = exprType' e
-     (abst,repr) <- mkAbstRepr $* ty
-     repre' <- watchR "clobber repre" clobber $* App repr e
-     return (mkCoreApp abst repre')
-
--- callDataConT :: MonadCatch m => Transform c m CoreExpr (DataCon, [Type], [CoreExpr])
+     vs <- mapT (newIdT "v") $* fst (splitFunTys ty)
+     -- TODO: better/distinct var names
+     let evs = mkVarApps e vs
+     (abst,repr) <- mkAbstRepr $* exprType' evs
+     repre' <- watchR "clobber repre" clobber $* App repr evs
+     return (mkCoreLams vs (mkCoreApp abst repre'))
 
 abstReprCase :: ReExpr
 abstReprCase = onScrutineeR abstReprScrutinee
