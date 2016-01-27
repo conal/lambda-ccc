@@ -475,19 +475,22 @@ rewriteIf = do Case c wild ty [(_False,[],a'),(_True,[],a)] <- id
     Another pass at primitives
 --------------------------------------------------------------------}
 
-simplePrims :: M.Map String (TransformH a CoreExpr)
+simplePrims :: M.Map String (Type -> [Type] -> TransformH a CoreExpr)
 simplePrims = mk <$> primMap
  where
-   mk name = do v <- findIdP name
-                -- type is Prim ty
-                Just (_tc,[ty]) <- return (splitTyConApp_maybe (varType v))
-                appsE1 "kPrimEP" [ty] (Var v)
+   mk name primTy tyArgs =
+     do primV <- findIdP name
+        -- type is Prim primTy
+        -- pprTrace "simplePrims" (ppr primV <+> text "::" <+> ppr primTy) (return ())
+        appsE1 "kPrimEP" [primTy] (mkApps (Var primV) (Type <$> tyArgs))
 
 reifyPrim' :: ReExpr
 reifyPrim' =
   unReify >>>
-  do Var (fqVarName -> flip M.lookup simplePrims -> Just mk) <- id
-     mk
+  do ty <- exprTypeT
+     (Var (fqVarName -> flip M.lookup simplePrims -> Just mk), tyArgs, [])
+       <- callSplitT
+     mk ty tyArgs
 
 #if 0
 findId :: (BoundVars c, LiftCoreM m, HasHermitMEnv m, MonadCatch m, MonadIO m, MonadThings m)
@@ -590,6 +593,7 @@ externals =
     , externC' "reify-tupcase" reifyTupCase
     , externC' "reify-lit" reifyLit
     , externC' "reify-prim" reifyPrim
+    , externC' "reify-prim'" reifyPrim'
     , externC' "reify-oops" reifyOops
     , externC' "reify-monomorph" reifyMonomorph
     , externC' "reify-prog" reifyProgR
