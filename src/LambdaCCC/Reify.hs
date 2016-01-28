@@ -409,6 +409,9 @@ miscL = [ ---- Special applications and so must come before reifyApp
         , ("reifyPrim'"   , reifyPrim')
         ]
 
+-- TODO: move reifyPrim to before reifyApp. Faster?
+-- Does reifyApp eventually fail on primitives?
+
 reifyMisc :: ReExpr
 reifyMisc = orL miscL
 
@@ -491,35 +494,6 @@ reifyPrim' =
      (Var (fqVarName -> flip M.lookup simplePrims -> Just mk), tyArgs, [])
        <- callSplitT
      mk ty tyArgs
-
-#if 0
-findId :: (BoundVars c, LiftCoreM m, HasHermitMEnv m, MonadCatch m, MonadIO m, MonadThings m)
-       => HermitName -> c -> m Id
-
-reifyPrim :: ReExpr
-reifyPrim =
-  unReify >>>
-  do ty <- exprTypeT
-     (Var (fqVarName -> flip M.lookup primMap -> Just nm), tyArgs, [])
-       <- callSplitT
-     primV <- findIdP nm
-     appsE1 "kPrimEP" [ty] (mkApps (Var primV) (Type <$> tyArgs))
-
--- Map name to prim name and dictionary constraints
-primMap :: M.Map String String
-primMap = M.fromList
-  [ ("GHC.Classes.not"   , "NotP")
-  , ("GHC.Classes.&&"    , "AndP")
-  , ("GHC.Classes.||"    , "OrP")
-  , ("Circat.Misc.xor"   , "XorP")
-  , ("GHC.Tuple.fst"     , "ExlP")
-  , ("GHC.Tuple.snd"     , "ExrP")
-  , ("Data.Either.Left"  , "InlP")
-  , ("Data.Either.Right" , "InrP")
-  , ("GHC.Tuple.(,)"     , "PairP")
-  ]
-#endif
-
 
 {--------------------------------------------------------------------
     Run it
