@@ -9,34 +9,14 @@ set-pp-coercion Kind
 -- set-pp-coercion Show
 
 pre-mono
-
 try (any-td unfold-driver)
 
 rhs-of 'main
-
 application-of 'reifyEP
 
 reify-monomorph
 lint-expr
 
--- [app-arg, lam-body]
-
 reifyE
 lint-expr
 
--- app-arg
-
--- unfold
--- lam-body
-
-
--- unfold-poly -- loops! I think it's the simplify after the unfold
-
--- one-td simplify-one-step
-
--- monomorph
--- reify-guts
-
--- application-of 'reifyEP
--- -- rhs-of 'main
--- -- reifyE
