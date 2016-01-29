@@ -501,6 +501,7 @@ reifyPrim' =
 
 reifyR :: ReCore
 reifyR = id -- tryR (anytdR (promoteR reifyOops))
+       . traceR "done"
        . tryR (promoteR reifyGutsR)
        . traceR "reifying"
        . tryR monomorphR
@@ -514,7 +515,7 @@ reifyE = anytdE (repeatR reifyMisc)
 
 reifyProgR :: ReProg
 reifyProgR = progBindsAnyR (const $
-                            observeR "reifyBindR" .
+                            -- observeR "reifyBindR" .
                             nonRecAllR id reifyE)
 
 reifyGutsR :: ReGuts
@@ -523,7 +524,7 @@ reifyGutsR = modGutsR reifyProgR
 reifyMonomorph :: ReExpr
 reifyMonomorph = -- bracketR "reifyMonomorph" $
                  inReify ( tryR unshadowE
-                         . bracketR "simplifyE" (tryR simplifyE)
+                         . {- bracketR "simplifyE" -} (tryR simplifyE)
                          -- . tryR (anybuE (repeatR castFloatR))
                          . traceR "simplifying"
                          . monomorphizeE
