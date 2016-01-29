@@ -88,7 +88,7 @@ mono :: Stack -> Rew CoreExpr
 mono args c = go
  where
    go e = -- pprTrace "mono/go:" (ppr e) $
-          applyT (observeR "mono/go") c e >>
+          -- applyT (observeR "mono/go") c e >>
           case e of
      Var v | not (isId v) -> mpanic (text "not a value variable:" <+> ppr v)
      Var _ -> inlineNonPrim args `rewOr` bail
@@ -107,7 +107,7 @@ mono args c = go
           (guardMsg (exprIsTrivial rhs) "non-trivial" >> letSubstR')
            `rewOr` (mkCoreLet <$> (NonRec v <$> mono0 rhs) <*> go body)
        where
-         letSubstR' = {- watchR "letSubstR" -} letSubstR
+         letSubstR' = nowatchR "letSubstR" letSubstR
 
      -- TODO: batch up these eliminations and substitutions. Or have GHC do them at the end.
      -- TODO: Is there a cheaper way to check whether v occurs freely in body
@@ -175,7 +175,7 @@ isMonoTy (LitTy _)             = True
 -- make the application monomorphic. The implied applications (to args) do not
 -- happen here.
 inlineNonPrim :: [CoreExpr] -> ReExpr
-inlineNonPrim args = -- watchR "inlineNonPrim" $
+inlineNonPrim args = nowatchR "inlineNonPrim" $
   do Var v <- id
      guardMsg (not (isPrim v)) "inlineNonPrim: primitive"
      guardMsg (all isMonoTy [ty | Type ty <- args]) "Non-monotype arguments"  -- [1,2]
@@ -210,16 +210,15 @@ isPrim v = fqVarName v `S.member` primNames
 -- See current stdMeths in Reify for list of methods, classes, etc.
 
 primNames :: S.Set String
-primNames = S.fromList $
-     repMeths
-  ++ [ "GHC.Num.$fNum"++ty++"_$c"++meth
-     | (tys,meths) <- primMeths , ty <- tys, meth <- meths ]
-  ++ primFuns
+primNames = foldMap S.fromList [repMeths,numFuns,primFuns]
+            -- S.fromList (repMeths ++ numFuns ++ primFuns)
  where
-   repMeths  = ("Circat.Rep." ++) <$> ["abst","repr"]
-   primMeths = [( ["Int","Double"]
-                , ["+","-","*","negate","abs","signum","fromInteger"])]
-     -- TODO: more primitives, including boolean
+   repMeths = ("Circat.Rep." ++) <$> ["abst","repr"]
+   numFuns  = [ "GHC.Num.$fNum"++ty++"_$c"++meth
+              | (tys,meths) <- primMeths , ty <- tys, meth <- meths ]
+    where
+      primMeths = [( ["Int","Double"]
+                   , ["+","-","*","negate","abs","signum","fromInteger"])]
    primFuns =
      [ "GHC.Classes.not", "GHC.Classes.&&", "GHC.Classes.||", "Circat.Misc.xor"
      , "GHC.Tuple.(,)", "GHC.Tuple.fst", "GHC.Tuple.snd"
@@ -249,7 +248,7 @@ spanic = mpanic . text
 --     `\ v1 ... vn -> abst reprc'`.
 
 abstReprCon :: ReExpr
-abstReprCon = watchR "abstReprCon" $
+abstReprCon = nowatchR "abstReprCon" $
               -- observeR "abstReprCon" >>>
   do e <- id
      (Var i,_tyArgs,tycos) <- callSplitT
@@ -261,7 +260,7 @@ abstReprCon = watchR "abstReprCon" $
      -- TODO: better/distinct var names
      let evs = mkVarApps e vs
      (abst,repr) <- mkAbstRepr $* exprType' evs
-     repre' <- watchR "clobber repre" clobber $* App repr evs
+     repre' <- nowatchR "clobber repre" clobber $* App repr evs
      return (mkCoreLams vs (mkCoreApp abst repre'))
 
 abstReprCase :: ReExpr
@@ -301,7 +300,7 @@ pruneCaseR = prefixFailMsg "pruneCaseR failed: " $
      return (Case scrut wild ty alts')
 
 altIdCaseR :: ReExpr
-altIdCaseR = watchR "altIdCaseR" $
+altIdCaseR = nowatchR "altIdCaseR" $
              prefixFailMsg "altIdCaseR failed: " $
              withPatFailMsg (wrongExprForm "Case scrut v ty [alt]") $
   do Case _ wild _ [alt] <- id
