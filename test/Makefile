@@ -9,10 +9,17 @@ play:
 # %.o: ../dist $*.hs
 # 	ghc $*.hs
 
-Examples: ../dist Examples.hs
-	time ghc -fforce-recomp -fplugin=LambdaCCC.Plugin -O -dcore-lint Examples.hs
+Examples: ../dist Examples.hs Makefile
+	time ghc Examples.hs -fforce-recomp -fplugin=LambdaCCC.Plugin -O -dcore-lint # -fsimpl-tick-factor=400
 
-#  -fsimpl-tick-factor=1000
+X: ../dist X.hs Makefile
+	time ghc X.hs -fforce-recomp -fplugin=LambdaCCC.Plugin -O -dcore-lint # -fsimpl-tick-factor=400
+
+goX:	X
+	./X
+
+# 
+# -ddump-simpl -ddump-simpl-stats -ddump-to-file 
 
 # For and :: RTRee N10 Bool -> Bool
 #
@@ -42,3 +49,16 @@ extras:
 mono:
 	cd ../../monomorph ; make
 	make compile
+
+unregister-all:
+	@echo "Unregistering:"
+	@ghc-pkg unregister lambda-ccc || true
+	@ghc-pkg unregister monomorph || true
+	@ghc-pkg unregister hermit-extras || true
+	@ghc-pkg unregister circat || true
+
+recompile-all: unregister-all
+	cd ../../circat ; cabal clean && cabal install
+	cd ../../hermit-extras ; cabal clean && cabal install
+	cd ../../monomorph ; cabal clean && cabal install
+	cd .. ; cabal clean && cabal install
