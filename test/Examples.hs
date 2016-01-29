@@ -137,7 +137,9 @@ main = -- do
 
 --   print (reifyEP (sum :: RTree N2 Int -> Int))
 
---   goSep "and-rt8" 1.5 (and :: RTree N8 Bool -> Bool)
+--   print (reifyEP (and :: RTree N4 Bool -> Bool))
+
+  goSep "and-rt10" 1 (and :: RTree N10 Bool -> Bool)
 
 --   print (reifyEP not)
 
@@ -161,7 +163,7 @@ main = -- do
 
 --   go "foo" ((\ (a :# b) -> a :# b) :: Unop (Pair Bool))
 
-  goSep "transpose-pp" 1 (transpose :: Unop (Pair (Pair Bool)))
+--   goSep "transpose-pp" 1 (transpose :: Unop (Pair (Pair Bool)))
 
 --   goSep "transpose-rt2p" 1 (transpose :: RTree N2 (Pair Bool) -> Pair (RTree N2 Bool))
 
