@@ -57,11 +57,11 @@ import PrelNames (eqPrimTyConKey,eqReprPrimTyConKey)
 import HERMIT.Extras
   (pattern FunCo, fqVarName, exprType', exprTypeT, ReExpr
   , ($*), externC', onScrutineeR, bashExtendedWithE, newIdT
-  , callSplitT
+  , callSplitT, bashE
   )
 
 -- import Monomorph.Stuff (pruneCaseR,standardizeCase,standardizeCon,hasRepMethodF)
-import Monomorph.Stuff (hasRepMethodF)
+import Monomorph.Stuff (hasRepMethodF, simplifyE)
 
 type Unop a = a -> a
 
@@ -88,7 +88,7 @@ mono :: Stack -> Rew CoreExpr
 mono args c = go
  where
    go e = -- pprTrace "mono/go:" (ppr e) $
-          -- applyT (observeR "mono/go") c e >>
+          applyT (observeR "mono/go") c e >>
           case e of
      Var v | not (isId v) -> mpanic (text "not a value variable:" <+> ppr v)
      Var _ -> inlineNonPrim args `rewOr` bail
@@ -97,6 +97,7 @@ mono args c = go
          rhs : args' -> mono args' c (mkCoreLet (NonRec v rhs) body)
          []          -> Lam v <$> go body
      App fun arg ->
+       selectMethodR `rewOr`
        abstReprCon `rewOr`    -- try at Var also?
          mono (arg : args) c fun
      Let (NonRec v rhs) body
@@ -118,10 +119,10 @@ mono args c = go
      Let (Rec _) _ -> bail -- spanic "recursive let"
 
      Case scrut w ty alts ->
-       (  nowatchR "caseReduceR False" (caseReduceR False)
-       <+ nowatchR "letFloatCaseR" letFloatCaseR
-       <+ nowatchR "caseFloatCaseR" caseFloatCaseR
-       <+ nowatchR "abstReprCase" abstReprCase
+       (  watchR "caseReduceR False" (caseReduceR False)
+       <+ watchR "letFloatCaseR" letFloatCaseR
+       <+ watchR "caseFloatCaseR" caseFloatCaseR
+       <+ watchR "abstReprCase" abstReprCase
        ) `rewOr`
          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
 
@@ -175,9 +176,13 @@ isMonoTy (LitTy _)             = True
 -- make the application monomorphic. The implied applications (to args) do not
 -- happen here.
 inlineNonPrim :: [CoreExpr] -> ReExpr
-inlineNonPrim args = nowatchR "inlineNonPrim" $
+inlineNonPrim args = watchR "inlineNonPrim" $
   do Var v <- id
      guardMsg (not (isPrim v)) "inlineNonPrim: primitive"
+     case idDetails v of
+       ClassOpId {} -> fail "class op"
+       DFunId {}    -> fail "dictionary"
+       _            -> return ()
      guardMsg (all isMonoTy [ty | Type ty <- args]) "Non-monotype arguments"  -- [1,2]
      -- pprTrace "isRepDict test on type" (ppr (varType v)) (return ())
      guardMsg (not (isRepDict (varType v))) "HasRep dictionary"
@@ -201,6 +206,15 @@ inlineNonPrim args = nowatchR "inlineNonPrim" $
 
 isPrim :: Id -> Bool
 isPrim v = fqVarName v `S.member` primNames
+
+selectMethodR :: ReExpr
+selectMethodR = watchR "selectMethodR" $
+  do App _ arg <- id
+     guardMsg (not (isTypeArg arg)) "Arg is a type"
+     guardMsg (isDictTy (exprType' arg)) "Arg not a dictionary"
+     tryR bashE . unfoldPredR (\ v _ -> not (isPrim v))
+
+-- selectMethodR = fail "selectMethodR"
 
 -- Heading here:
 -- 
@@ -248,11 +262,11 @@ spanic = mpanic . text
 --     `\ v1 ... vn -> abst reprc'`.
 
 abstReprCon :: ReExpr
-abstReprCon = nowatchR "abstReprCon" $
+abstReprCon = watchR "abstReprCon" $
               -- observeR "abstReprCon" >>>
   do e <- id
      (Var i,_tyArgs,tycos) <- callSplitT
-     guardMsg (isDataConWorkId i) "Non-constructor"
+     guardMsg (isDataConId i) "Non-constructor"
      guardMsg (all isTyCoArg tycos) "Value argument(s)"
      -- pprTrace "abstReprCon un-DC" (ppr (i,_tyArgs,tycos)) (return ())
      ty <- exprTypeT
@@ -263,8 +277,16 @@ abstReprCon = nowatchR "abstReprCon" $
      repre' <- nowatchR "clobber repre" clobber $* App repr evs
      return (mkCoreLams vs (mkCoreApp abst repre'))
 
+
+isDataConId :: Id -> Bool
+isDataConId i = case idDetails i of
+                   DataConWorkId _ -> True
+                   DataConWrapId _ -> True
+                   _               -> False
+
 abstReprCase :: ReExpr
-abstReprCase = onScrutineeR abstReprScrutinee
+abstReprCase = watchR "abstReprCase" $
+               onScrutineeR abstReprScrutinee
 
 -- Prepare a scrutinee
 abstReprScrutinee :: ReExpr
@@ -376,6 +398,8 @@ externals =
   [
     externC' "abst-repr-case" abstReprCase
   , externC' "abst-repr-con" abstReprCon
+  , externC' "select-method" selectMethodR
+  , externC' "clobber" clobber
   ]
 
 --   , externC' "prune-case" pruneCaseR
