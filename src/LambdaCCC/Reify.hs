@@ -43,6 +43,8 @@ import HERMIT.Dictionary hiding (externals)
 import HERMIT.Name (HermitName,mkQualified)
 import HERMIT.External (External)
 
+import TcType (isIntegerTy)
+
 import Circat.Misc ((<~))
 
 import HERMIT.Extras hiding (findTyConT,observeR',orL,simplifyE)
@@ -156,10 +158,13 @@ unEval = unCallE1 evalS
 reifyEval :: ReExpr
 reifyEval = unEval . unReify
 
--- Generate a reify call. Fail on dictionaries.
+-- Generate a reify call. Fail on types, coercions, and dictionaries.
 reifyOf :: CoreExpr -> TransformU CoreExpr
-reifyOf e = do guardMsg (not (isDictTy (exprType' e)))
-                        "reifyOf: Given a type expr."
+reifyOf e = do guardMsg (not (isTyCoArg e)) "Type or coercion."
+               let ty = exprType' e
+               guardMsg (not (isDictTy ty)) "Dictionary."
+               guardMsg (not (isForAllTy ty)) "Polymorphic."
+               guardMsg (not (isIntegerTy ty)) "Integer." -- TODO: Generalize
                appsE reifyS [exprType' e] [e]
 
 -- reifyOf e = appsE reifyS [exprType' e] [e]
@@ -211,8 +216,10 @@ reifyLam = do Lam v e <- unReify
 reifyMonoLet :: ReExpr
 reifyMonoLet =
     unReify >>>
-    do Let (NonRec v@(isForAllTy . varType -> False) rhs) body <- idR
+    do Let (NonRec v rhs) body <- idR
        guardMsgM (worthLet rhs) "trivial let"
+       -- Instead of guarding against polymorphic rhs, let reifyOf reject.
+       -- guardMsg (not (isForAllTy (varType v))) "polymorphic let"
        rhsE  <- reifyOf rhs
        sub   <- varSubst [v]
        bodyE <- reifyOf (sub body)
@@ -395,7 +402,7 @@ miscL :: [(String,ReExpr)]
 miscL = [ ---- Special applications and so must come before reifyApp
           ("reifyEval"    , reifyEval)
         , ("reifyRepMeth" , reifyRepMeth)
-        , ("reifyStdMeth" , reifyStdMeth) 
+        , ("reifyStdMeth" , reifyStdMeth)
         , ("reifyIf"      , reifyIf)
         , ("reifyBottom"  , reifyBottom)
         , ("reifyDelay"   , reifyDelay)
@@ -511,7 +518,8 @@ reifyR = id -- tryR (anytdR (promoteR reifyOops))
        . traceR "preparation"
 
 reifyE :: ReExpr
-reifyE = anytdE (repeatR reifyMisc)
+reifyE = bracketR "reifyE" $
+         anytdE (repeatR reifyMisc)
 
 reifyProgR :: ReProg
 reifyProgR = progBindsAnyR (const $
@@ -548,6 +556,27 @@ unfoldDriver = tryR bashE . tryR simplifyE .  -- TODO: simpler simplification
 -- Note: unfoldNamesR could be made more efficient. Maybe fix it or use an more
 -- direct route with unfoldPredR and a *set* of names.
 
+{--------------------------------------------------------------------
+    Experiment in polymorphic reification
+--------------------------------------------------------------------}
+
+reifier :: ReExpr
+reifier = -- watchR "reifier" $
+  do e <- id
+     guardMsg (not (isTyCoArg e)) "Cannot reify a type or coercion"
+     case e of
+       Lam v body | isTyVar v || isDictId v -> Lam v <$> (reifier $* body)
+       _                                    -> reifyOf e
+       
+-- TODO: eta-expand as needed.
+
+-- TODO: Make a ReProg, replacing ProgCons def rest with
+-- ProgCons def (ProgCons def' rest). Similarly for let bindings, I think.
+
+{--------------------------------------------------------------------
+    Commands for interactive use
+--------------------------------------------------------------------}
+
 externals :: [External]
 externals =
     [ externC' "reify" reifyR
@@ -579,4 +608,5 @@ externals =
     , externC' "uneval" unEval
 
     , externC' "monomorph" monomorphR
+    , externC' "reifier" reifier
     ]
