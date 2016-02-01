@@ -30,11 +30,11 @@ import Prelude hiding (id,(.))
 import Data.Functor (void)
 import Control.Category (Category(..))
 import Control.Monad ((<=<))
-import Control.Arrow ((>>>))
+import Control.Arrow ((>>>),(&&&))
 import qualified Data.Map as M
 import Data.String (fromString)
 
-import HERMIT.Core (localFreeIdsExpr)
+import HERMIT.Core (localFreeIdsExpr,CoreProg(..))
 import HERMIT.GHC hiding (mkStringExpr)
 import TcType (isDoubleTy)  -- Doesn't seem to be coming in with HERMIT.GHC.
 import HERMIT.Kure -- hiding (apply)
@@ -560,18 +560,34 @@ unfoldDriver = tryR bashE . tryR simplifyE .  -- TODO: simpler simplification
     Experiment in polymorphic reification
 --------------------------------------------------------------------}
 
-reifier :: ReExpr
-reifier = -- watchR "reifier" $
-  do e <- id
-     guardMsg (not (isTyCoArg e)) "Cannot reify a type or coercion"
-     case e of
-       Lam v body | isTyVar v || isDictId v -> Lam v <$> (reifier $* body)
-       _                                    -> reifyOf e
-       
+reifyBind :: RewriteH CoreBind
+reifyBind = -- watchR "reifier" $
+  do NonRec v rhs <- id
+     rhs' <- (anytdE reifyMisc $*) =<< go rhs
+     v'   <- newIdT ("$reify_"++ uqVarName v) $* exprType' rhs'
+     return (NonRec v' rhs')
+ where
+   go e = do guardMsg (not (isTyCoArg e)) "Cannot reify a type or coercion"
+             case e of
+               Lam v body | isTyVar v || isDictId v -> Lam v <$> go body
+               _                                    -> reifyOf e
+
 -- TODO: eta-expand as needed.
 
--- TODO: Make a ReProg, replacing ProgCons def rest with
--- ProgCons def (ProgCons def' rest). Similarly for let bindings, I think.
+-- t --> EP t
+epTy :: ReType
+epTy = do ty <- id
+          tc <- findTyConT (lamName epS)
+          return (TyConApp tc [ty])
+
+-- Replace a binding with itself plus a transformed version.
+progConsAnd :: ReBind -> ReProg
+progConsAnd re = progConsT (id &&& re) id (\ (b,b') -> ProgCons b . ProgCons b')
+
+reifyProgCons :: ReProg
+reifyProgCons = progConsAnd reifyBind
+
+-- To do: similarly for let bindings, I think.
 
 {--------------------------------------------------------------------
     Commands for interactive use
@@ -608,5 +624,5 @@ externals =
     , externC' "uneval" unEval
 
     , externC' "monomorph" monomorphR
-    , externC' "reifier" reifier
+    , externC' "reify-prog-cons" reifyProgCons
     ]
