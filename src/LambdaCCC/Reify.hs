@@ -30,7 +30,7 @@ import Prelude hiding (id,(.))
 import Data.Functor (void)
 import Control.Category (Category(..))
 import Control.Monad ((<=<))
-import Control.Arrow ((>>>),(&&&))
+import Control.Arrow
 import qualified Data.Map as M
 import Data.String (fromString)
 
@@ -50,7 +50,7 @@ import Circat.Misc ((<~))
 import HERMIT.Extras hiding (findTyConT,observeR',orL,simplifyE)
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', orL, labeled)
 
-import Monomorph.Stuff (preMonoR{-, castFloatR-}, simplifyE) -- , simplifyWithLetFloatingE
+import Monomorph.Stuff ({-preMonoR, castFloatR, -} simplifyE) -- , simplifyWithLetFloatingE
 import LambdaCCC.Monomorphize (monomorphizeE)
 
 {--------------------------------------------------------------------
@@ -146,7 +146,6 @@ mkReifyId = findIdT reifyLocalS
 reifyLocalS :: HermitName
 reifyLocalS = "LambdaCCC...."
 
-
 -- reify u --> u
 unReify :: ReExpr
 unReify = unCallE1 reifyS
@@ -158,6 +157,9 @@ unEval = unCallE1 evalS
 reifyEval :: ReExpr
 reifyEval = unEval . unReify
 
+reifyName :: HermitName
+reifyName = lamName reifyS
+
 -- Generate a reify call. Fail on types, coercions, and dictionaries.
 reifyOf :: CoreExpr -> TransformU CoreExpr
 reifyOf e = do guardMsg (not (isTyCoArg e)) "Type or coercion."
@@ -165,7 +167,8 @@ reifyOf e = do guardMsg (not (isTyCoArg e)) "Type or coercion."
                guardMsg (not (isDictTy ty)) "Dictionary."
                guardMsg (not (isForAllTy ty)) "Polymorphic."
                guardMsg (not (isIntegerTy ty)) "Integer." -- TODO: Generalize
-               appsE reifyS [exprType' e] [e]
+               -- appsE reifyS [exprType' e] [e]
+               apps' reifyName [exprType' e] [e]
 
 -- reifyOf e = appsE reifyS [exprType' e] [e]
 
@@ -512,10 +515,13 @@ reifyR = id -- tryR (anytdR (promoteR reifyOops))
        . tryR (promoteR reifyGutsR)
        . traceR "reifying"
        . tryR monomorphR
-       . tryR (anytdR (promoteR unfoldDriver))
-       . tryR preMonoR
-       . tryR (anybuR (promoteR detickE)) -- for ghci break points
-       . traceR "preparation"
+       . traceR "monorphizing"
+--        . tryR (anytdR (promoteR unfoldDriver))
+--        . tryR preMonoR
+--        . tryR (anybuR (promoteR detickE)) -- for ghci break points
+--        . traceR "preparation"
+
+-- Since we've switched to a later compiler phase, maybe I don't need these first few.
 
 reifyE :: ReExpr
 reifyE = bracketR "reifyE" $
@@ -582,12 +588,87 @@ epTy = do ty <- id
 
 -- Replace a binding with itself plus a transformed version.
 progConsAnd :: ReBind -> ReProg
-progConsAnd re = progConsT (id &&& re) id (\ (b,b') -> ProgCons b . ProgCons b')
+progConsAnd re =
+  progConsT (id &&& re) id (\ (b,b') -> ProgCons b . ProgCons b')
 
 reifyProgCons :: ReProg
 reifyProgCons = progConsAnd reifyBind
 
--- To do: similarly for let bindings, I think.
+reifyProg :: ReProg
+reifyProg = augmentProgBinds reifyBind
+
+augmentProgBinds :: ReBind -> ReProg
+augmentProgBinds rew = go =<< id
+ where
+  go ProgNil = return ProgNil
+  go (ProgCons b rest) =
+    do mb_b' <- catchMaybe (rew $* b)
+       rest' <- go rest
+       return $ ProgCons b (maybe id ProgCons mb_b' rest')
+
+reifyGuts :: ReGuts
+reifyGuts = modGutsR reifyProg
+
+
+
+reifyBind' :: String -> TransformH CoreBind ([CoreBind],[CoreRule])
+reifyBind' modName = -- watchR "reifier" $
+  do b@(NonRec v rhs) <- id
+     (bndrs,rhs') <- go rhs
+     v'   <- newIdT ("$reify_"++ uqVarName v) $* exprType' rhs'
+     rule <- mkReifyRule bndrs v rhs'
+     return ([b,NonRec v' rhs'],[rule])
+  <+ arr (\ b -> ([b],[]))
+ where
+   go :: CoreExpr -> TransformH a ([Var],CoreExpr)
+   go e = do guardMsg (not (isTyCoArg e)) "Cannot reify a type or coercion"
+             case e of
+               Lam v body | isTyVar v || isDictId v ->
+                 ((v:) *** Lam v) <$> go body
+               _ ->
+                 ([],) <$> ((anytdE reifyMisc $*) =<< reifyOf e)
+   mkReifyRule :: [Var] -> Id -> CoreExpr -> TransformH a CoreRule
+   mkReifyRule vs i reRhs =
+     do reifyId <- findIdT reifyName
+        let rule = Rule { ru_name  = fsLit ("REIFY/" ++ modName ++ " " ++ uqVarName i)
+                        , ru_act   = AlwaysActive
+                        , ru_fn    = varName reifyId
+                        , ru_rough = [Just (varName i)]
+                        , ru_bndrs = vs
+                        , ru_args  = [mkCoreApps (Var i) (varToCoreExpr <$> vs)]
+                        , ru_rhs   = reRhs
+                        , ru_auto  = True
+                        , ru_local = False
+                        }
+        -- liftIO $ putStrLn (unpackFS (ru_name rule))
+        void (traceR =<< showPprT $* rule)
+        return rule
+
+-- TODO: eta-expand as needed.
+
+augmentProgBinds' :: TransformH CoreBind ([CoreBind],[CoreRule]) ->
+                     TransformH CoreProgram (CoreProgram,[CoreRule])
+augmentProgBinds' rew = arr mconcat . mapT rew
+
+-- TODO: Have reifyProg succeed iff *any* reifyBind succeeds.
+
+-- TODO: Similarly for let bindings, I think.
+
+-- reifyBind' :: TransformH CoreBind ([CoreBind],[CoreRule])
+
+reifyGuts' :: ReGuts
+reifyGuts' =
+  do guts <- id
+     let modName = moduleNameString (moduleName (mg_module guts))
+     (prog',rules) <- augmentProgBinds' (reifyBind' modName) $* mg_binds guts
+     return guts { mg_binds = prog', mg_rules = mg_rules guts ++ rules }
+
+
+-- | An always-succeeding rewrite that turns failures into 'Nothing'.
+-- Similar to 'mtryM', but works for non-monoidal types as well.
+catchMaybe :: MonadCatch m => m a -> m (Maybe a)
+catchMaybe ma = tryM Nothing (fmap Just ma)
+-- catchMaybe ma = fmap Just ma <+ return Nothing
 
 {--------------------------------------------------------------------
     Commands for interactive use
@@ -625,4 +706,6 @@ externals =
 
     , externC' "monomorph" monomorphR
     , externC' "reify-prog-cons" reifyProgCons
+    , externC' "reify-prog" reifyProg
+    , externC' "reify-module" reifyGuts'
     ]
