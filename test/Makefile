@@ -52,13 +52,13 @@ mono:
 
 unregister-all:
 	@echo "Unregistering:"
-	@ghc-pkg unregister lambda-ccc || true
-	@ghc-pkg unregister monomorph || true
-	@ghc-pkg unregister hermit-extras || true
-	@ghc-pkg unregister circat || true
+	@ghc-pkg unregister lambda-ccc    --force || true
+	@ghc-pkg unregister monomorph     --force || true
+	@ghc-pkg unregister hermit-extras --force || true
+	@ghc-pkg unregister circat        --force || true
 
 recompile-all: unregister-all
-	cd ../../circat ; cabal clean && cabal install
+	cd ../../circat	       ; cabal clean && cabal install
 	cd ../../hermit-extras ; cabal clean && cabal install
-	cd ../../monomorph ; cabal clean && cabal install
-	cd .. ; cabal clean && cabal install
+	cd ../../monomorph     ; cabal clean && cabal install
+	cd ..		       ; cabal clean && cabal install
