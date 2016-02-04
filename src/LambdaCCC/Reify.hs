@@ -34,13 +34,14 @@ import Control.Arrow
 import qualified Data.Map as M
 import Data.String (fromString)
 
-import HERMIT.Core (localFreeIdsExpr,CoreProg(..))
+import HERMIT.Context (AddBindings)
+import HERMIT.Core (localFreeIdsExpr,substCoreExpr)
 import HERMIT.GHC hiding (mkStringExpr)
 import TcType (isDoubleTy)  -- Doesn't seem to be coming in with HERMIT.GHC.
 import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary hiding (externals)
-import HERMIT.Name (HermitName,mkQualified)
+import HERMIT.Name (HermitName,mkQualified,cmpHN2Var)
 import HERMIT.External (External)
 
 import TcType (isIntegerTy)
@@ -51,7 +52,7 @@ import HERMIT.Extras hiding (findTyConT,observeR',orL,simplifyE)
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', orL, labeled)
 
 import Monomorph.Stuff ({-preMonoR, castFloatR, -} simplifyE) -- , simplifyWithLetFloatingE
-import LambdaCCC.Monomorphize (monomorphizeE)
+-- import LambdaCCC.Monomorphize (monomorphizeE)
 
 {--------------------------------------------------------------------
     Utilities. Move to HERMIT.Extras
@@ -509,6 +510,7 @@ reifyPrim' =
     Run it
 --------------------------------------------------------------------}
 
+#if 0
 reifyR :: ReCore
 reifyR = id -- tryR (anytdR (promoteR reifyOops))
        . traceR "done"
@@ -516,17 +518,19 @@ reifyR = id -- tryR (anytdR (promoteR reifyOops))
        . traceR "reifying"
        . tryR monomorphR
        . traceR "monorphizing"
---        . tryR (anytdR (promoteR unfoldDriver))
---        . tryR preMonoR
---        . tryR (anybuR (promoteR detickE)) -- for ghci break points
---        . traceR "preparation"
+       . tryR (anytdR (promoteR unfoldDriver))
+       . tryR preMonoR
+       . tryR (anybuR (promoteR detickE)) -- for ghci break points
+       . traceR "preparation"
 
 -- Since we've switched to a later compiler phase, maybe I don't need these first few.
+#endif
 
 reifyE :: ReExpr
 reifyE = bracketR "reifyE" $
          anytdE (repeatR reifyMisc)
 
+#if 0
 reifyProgR :: ReProg
 reifyProgR = progBindsAnyR (const $
                             -- observeR "reifyBindR" .
@@ -552,6 +556,7 @@ reifyMonomorph = -- bracketR "reifyMonomorph" $
 
 monomorphR :: ReCore
 monomorphR = anytdR (promoteR reifyMonomorph)
+#endif
 
 unfoldDriver :: ReExpr
 unfoldDriver = tryR bashE . tryR simplifyE .  -- TODO: simpler simplification
@@ -566,57 +571,18 @@ unfoldDriver = tryR bashE . tryR simplifyE .  -- TODO: simpler simplification
     Experiment in polymorphic reification
 --------------------------------------------------------------------}
 
-reifyBind :: RewriteH CoreBind
-reifyBind = -- watchR "reifier" $
-  do NonRec v rhs <- id
-     rhs' <- (anytdE reifyMisc $*) =<< go rhs
-     v'   <- newIdT ("$reify_"++ uqVarName v) $* exprType' rhs'
-     return (NonRec v' rhs')
- where
-   go e = do guardMsg (not (isTyCoArg e)) "Cannot reify a type or coercion"
-             case e of
-               Lam v body | isTyVar v || isDictId v -> Lam v <$> go body
-               _                                    -> reifyOf e
-
--- TODO: eta-expand as needed.
-
 -- t --> EP t
 epTy :: ReType
 epTy = do ty <- id
           tc <- findTyConT (lamName epS)
           return (TyConApp tc [ty])
 
--- Replace a binding with itself plus a transformed version.
-progConsAnd :: ReBind -> ReProg
-progConsAnd re =
-  progConsT (id &&& re) id (\ (b,b') -> ProgCons b . ProgCons b')
-
-reifyProgCons :: ReProg
-reifyProgCons = progConsAnd reifyBind
-
-reifyProg :: ReProg
-reifyProg = augmentProgBinds reifyBind
-
-augmentProgBinds :: ReBind -> ReProg
-augmentProgBinds rew = go =<< id
- where
-  go ProgNil = return ProgNil
-  go (ProgCons b rest) =
-    do mb_b' <- catchMaybe (rew $* b)
-       rest' <- go rest
-       return $ ProgCons b (maybe id ProgCons mb_b' rest')
-
-reifyGuts :: ReGuts
-reifyGuts = modGutsR reifyProg
-
-
-
-reifyBind' :: String -> TransformH CoreBind ([CoreBind],[CoreRule])
-reifyBind' modName = -- watchR "reifier" $
+reifyBind :: TransformH CoreBind ([CoreBind],[CoreRule])
+reifyBind = -- watchR "reifier" $
   do b@(NonRec v rhs) <- id
      (bndrs,rhs') <- go rhs
      v'   <- newIdT ("$reify_"++ uqVarName v) $* exprType' rhs'
-     rule <- mkReifyRule bndrs v rhs'
+     rule <- mkReifyRule bndrs v v'
      return ([b,NonRec v' rhs'],[rule])
   <+ arr (\ b -> ([b],[]))
  where
@@ -626,41 +592,42 @@ reifyBind' modName = -- watchR "reifier" $
                Lam v body | isTyVar v || isDictId v ->
                  ((v:) *** Lam v) <$> go body
                _ ->
-                 ([],) <$> ((anytdE reifyMisc $*) =<< reifyOf e)
-   mkReifyRule :: [Var] -> Id -> CoreExpr -> TransformH a CoreRule
-   mkReifyRule vs i reRhs =
+                 ([],) <$> (reifyE . reifyOf e)
+   mkReifyRule :: [Var] -> Id -> Id -> TransformH a CoreRule
+   mkReifyRule vs i reI =
      do reifyId <- findIdT reifyName
-        let rule = Rule { ru_name  = fsLit ("REIFY/" ++ modName ++ " " ++ uqVarName i)
+        let rule = Rule { ru_name  = fsLit ("reify " ++ uqVarName i)
                         , ru_act   = AlwaysActive
                         , ru_fn    = varName reifyId
                         , ru_rough = [Just (varName i)]
                         , ru_bndrs = vs
-                        , ru_args  = [mkCoreApps (Var i) (varToCoreExpr <$> vs)]
-                        , ru_rhs   = reRhs
+                        , ru_args  = [appV i]
+                        , ru_rhs   = appV reI
                         , ru_auto  = True
                         , ru_local = False
                         }
-        -- liftIO $ putStrLn (unpackFS (ru_name rule))
+        -- liftIO $ putStrLn ("Rule: " ++ unpackFS (ru_name rule))
         void (traceR =<< showPprT $* rule)
         return rule
+    where
+      appV v = mkCoreApps (Var v) (varToCoreExpr <$> vs)
 
 -- TODO: eta-expand as needed.
 
-augmentProgBinds' :: TransformH CoreBind ([CoreBind],[CoreRule]) ->
-                     TransformH CoreProgram (CoreProgram,[CoreRule])
-augmentProgBinds' rew = arr mconcat . mapT rew
+augmentProgBinds :: TransformH CoreBind ([CoreBind],[CoreRule]) ->
+                    TransformH CoreProgram (CoreProgram,[CoreRule])
+augmentProgBinds rew = arr mconcat . mapT rew
 
 -- TODO: Have reifyProg succeed iff *any* reifyBind succeeds.
 
 -- TODO: Similarly for let bindings, I think.
 
--- reifyBind' :: TransformH CoreBind ([CoreBind],[CoreRule])
+-- reifyBind :: TransformH CoreBind ([CoreBind],[CoreRule])
 
-reifyGuts' :: ReGuts
-reifyGuts' =
+reifyGuts :: ReGuts
+reifyGuts =
   do guts <- id
-     let modName = moduleNameString (moduleName (mg_module guts))
-     (prog',rules) <- augmentProgBinds' (reifyBind' modName) $* mg_binds guts
+     (prog',rules) <- augmentProgBinds reifyBind $* mg_binds guts
      return guts { mg_binds = prog', mg_rules = mg_rules guts ++ rules }
 
 
@@ -670,14 +637,62 @@ catchMaybe :: MonadCatch m => m a -> m (Maybe a)
 catchMaybe ma = tryM Nothing (fmap Just ma)
 -- catchMaybe ma = fmap Just ma <+ return Nothing
 
+-- Abstract out sub-expressions satisfying a given predicate
+abstractPredM :: TransformH CoreExpr Bool -> RewriteH CoreExpr
+abstractPredM p = prunetdE (letIntroR "z" . accepterR p)
+
+-- let-float when the RHS satisfies a given predicate
+letFloatsPredM :: TransformH CoreExpr Bool -> RewriteH CoreExpr
+letFloatsPredM p = walkE innermostR (accepterRhs p . letFloatExprR)
+
+accepterRhs :: (Monad m, ReadCrumb c, ExtendCrumb c, AddBindings c) =>
+               Transform c m CoreExpr Bool -> Rewrite c m CoreExpr
+accepterRhs p = letT (nonRecT mempty p (\ () b -> b)) id (\ b _ -> b) >> id
+
+abstractReifies :: ReExpr
+abstractReifies = abstractPredM (arr isReify)
+
+floatReifies :: ReExpr
+floatReifies = letFloatsPredM (arr isReify)
+
+-- | Convert outer reify let bindings into a multi-beta-redex. Assumes (and
+-- doesn't check) that none of the variables appear in any of the RHSs.
+reifyBetaExpandPlusR :: ReExpr
+reifyBetaExpandPlusR = prefixFailMsg ("reifyBetaExpandPlusR failed: ") $
+                       go [] [] =<< id
+ where
+   go :: [Var] -> [CoreExpr] -> CoreExpr -> TransformH a CoreExpr
+   go vs es (Let (NonRec v e) body) | isReify e = go (v:vs) (e:es) body
+   go vs es body =
+     do guardMsg (not (null vs)) "No reify bindings"
+        fun <- letIntroR "reifier" $* mkCoreLams vs body
+        return (mkCoreApps fun es)
+
+isReify :: CoreExpr -> Bool
+isReify (collectArgs -> (Var v,[_,_])) = cmpHN2Var reifyName v
+isReify _ = False
+
+-- (\ x -> let v = r in e)  ==>  let v' = (\ x -> r) in (\ x -> e[v -> v' x))
+letFloatLamLiftR :: ReExpr
+letFloatLamLiftR = prefixFailMsg ("letFloatLamLiftR failed: ") $
+  withPatFailMsg (wrongExprForm "Lam x (Let (NonRec v r) e)") $
+  do Lam x (Let (NonRec v rhs) e) <- id
+     v' <- newIdT (uqVarName v ++ "'") $* liftTy x (varType v)
+     let sub = substCoreExpr v (App (varToCoreExpr v') (varToCoreExpr x))
+     return $ Let (NonRec v' (Lam x rhs)) (Lam x (sub e))
+ where
+   liftTy :: Var -> Unop Type
+   liftTy x | isTyVar x = ForAllTy x
+            | otherwise = FunTy (varType x)
+
+
 {--------------------------------------------------------------------
     Commands for interactive use
 --------------------------------------------------------------------}
 
 externals :: [External]
 externals =
-    [ externC' "reify" reifyR
-    , externC' "reifyE" reifyE
+    [ externC' "reifyE" reifyE
     -- TEMP:
     , externC' "rewrite-if" rewriteIf
     , externC' "reify-misc" reifyMisc
@@ -696,16 +711,20 @@ externals =
     , externC' "reify-prim" reifyPrim
     , externC' "reify-prim'" reifyPrim'
     , externC' "reify-oops" reifyOops
-    , externC' "reify-monomorph" reifyMonomorph
-    , externC' "reify-prog" reifyProgR
-    , externC' "reify-guts" reifyGutsR
-    , externC' "unfold-driver" unfoldDriver
     , externC' "optimize-cast" optimizeCastR
     , externC' "unreify" unReify
     , externC' "uneval" unEval
 
-    , externC' "monomorph" monomorphR
-    , externC' "reify-prog-cons" reifyProgCons
-    , externC' "reify-prog" reifyProg
-    , externC' "reify-module" reifyGuts'
+    , externC' "reify-module" reifyGuts
+    , externC' "abstract-reifies" abstractReifies
+    , externC' "float-reifies" floatReifies
+    , externC' "reify-beta-expand-plus" reifyBetaExpandPlusR
+    , externC' "let-float-lam-lift" letFloatLamLiftR
     ]
+
+--     , externC' "reify" reifyR
+--     , externC' "reify-monomorph" reifyMonomorph
+--     , externC' "reify-prog" reifyProgR
+--     , externC' "reify-guts" reifyGutsR
+--     , externC' "unfold-driver" unfoldDriver
+--     , externC' "monomorph" monomorphR
