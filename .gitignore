@@ -9,6 +9,8 @@ tarballs
 out/
 Unused/
 
+*.dump-*
+
 test/Examples
 
 # Mac OS generates
