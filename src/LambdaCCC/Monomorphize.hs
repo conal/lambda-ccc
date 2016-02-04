@@ -90,14 +90,16 @@ mono args c = go
    go e = -- pprTrace "mono/go:" (ppr e) $
           applyT (observeR "mono/go") c e >>
           case e of
+     _ | isDictConstruction e -> return e
      Var v | not (isId v) -> mpanic (text "not a value variable:" <+> ppr v)
      Var _ -> inlineNonPrim args `rewOr` bail
      Lam v body ->
+       etaReduceR `rewOr`
        case args of
          rhs : args' -> mono args' c (mkCoreLet (NonRec v rhs) body)
          []          -> Lam v <$> go body
      App fun arg ->
-       selectMethodR `rewOr`
+       -- selectMethodR `rewOr`
        abstReprCon `rewOr`    -- try at Var also?
          mono (arg : args) c fun
      Let (NonRec v rhs) body
@@ -122,6 +124,7 @@ mono args c = go
        (  watchR "caseReduceR False" (caseReduceR False)
        <+ watchR "letFloatCaseR" letFloatCaseR
        <+ watchR "caseFloatCaseR" caseFloatCaseR
+       <+ watchR "onScrutineeR simplifyScrut" (onScrutineeR simplifyScrut)
        <+ watchR "abstReprCase" abstReprCase
        ) `rewOr`
          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
@@ -155,7 +158,27 @@ mono args c = go
       rew `rewOr` ma = catchMaybe (applyT rew c e) >>= maybe ma go
       bail = mkCoreApps e <$> mapM mono0 args
 
--- TODO: Prune case expressions to stop recursion.
+
+simplifyScrut :: ReExpr
+simplifyScrut = watchR "simplifyScrut" $
+  unfoldR <+ (tryR (caseReduceR False) . onScrutineeR simplifyScrut)
+
+toDictConR :: ReExpr
+toDictConR = watchR "toDictConR" $
+  do e <- id
+     guardMsg (not (isTypeArg e)) "Type"
+     let ty = exprType' e
+     guardMsg (isDictTy ty) "not a dictionary"
+     go
+ where
+   go = acceptR isDictConstruction
+         <+ (go . repeatR unfoldR)
+         <+ (caseReduceR False . go . onScrutineeR go)
+
+isDictConstruction :: CoreExpr -> Bool
+isDictConstruction e@(collectArgs -> (Var v,_)) =
+  isDataConId v && isDictTy (exprType' e)
+isDictConstruction _ = False
 
 isMono :: CoreExpr -> Bool
 isMono = isMonoTy . exprType'
@@ -179,10 +202,10 @@ inlineNonPrim :: [CoreExpr] -> ReExpr
 inlineNonPrim args = watchR "inlineNonPrim" $
   do Var v <- id
      guardMsg (not (isPrim v)) "inlineNonPrim: primitive"
-     case idDetails v of
-       ClassOpId {} -> fail "class op"
-       DFunId {}    -> fail "dictionary"
-       _            -> return ()
+--      case idDetails v of
+--        ClassOpId {} -> fail "class op"
+--        DFunId {}    -> fail "dictionary"
+--        _            -> return ()
      guardMsg (all isMonoTy [ty | Type ty <- args]) "Non-monotype arguments"  -- [1,2]
      -- pprTrace "isRepDict test on type" (ppr (varType v)) (return ())
      guardMsg (not (isRepDict (varType v))) "HasRep dictionary"
@@ -207,14 +230,25 @@ inlineNonPrim args = watchR "inlineNonPrim" $
 isPrim :: Id -> Bool
 isPrim v = fqVarName v `S.member` primNames
 
-selectMethodR :: ReExpr
-selectMethodR = watchR "selectMethodR" $
-  do App _ arg <- id
-     guardMsg (not (isTypeArg arg)) "Arg is a type"
-     guardMsg (isDictTy (exprType' arg)) "Arg not a dictionary"
-     tryR bashE . unfoldPredR (\ v _ -> not (isPrim v))
+-- selectMethodR :: ReExpr
+-- selectMethodR = watchR "selectMethodR" $
+--   do App _ arg <- id
+--      guardMsg (not (isTypeArg arg)) "Arg is a type"
+--      guardMsg (isDictTy (exprType' arg)) "Arg not a dictionary"
+--      tryR bashE . unfoldPredR (\ v _ -> not (isPrim v))
 
 -- selectMethodR = fail "selectMethodR"
+
+-- selectMethodR :: ReExpr
+-- selectMethodR = watchR "selectMethodR" $
+--   do App _ arg <- id
+--      guardMsg (not (isTypeArg arg)) "Arg is a type"
+--      guardMsg (isDictTy (exprType' arg)) "Arg not a dictionary"
+--      -- tryR bashE . unfoldPredR (\ v _ -> not (isPrim v))
+--      go
+--  where
+--    go = caseReduceR False . (id <+ onScrutineeR revealDict) . repeatR unfoldR
+--    revealDict = tryR bashE . repeatR unfoldR
 
 -- Heading here:
 -- 
@@ -262,7 +296,7 @@ spanic = mpanic . text
 --     `\ v1 ... vn -> abst reprc'`.
 
 abstReprCon :: ReExpr
-abstReprCon = watchR "abstReprCon" $
+abstReprCon = nowatchR "abstReprCon" $
               -- observeR "abstReprCon" >>>
   do e <- id
      (Var i,_tyArgs,tycos) <- callSplitT
@@ -285,7 +319,7 @@ isDataConId i = case idDetails i of
                    _               -> False
 
 abstReprCase :: ReExpr
-abstReprCase = watchR "abstReprCase" $
+abstReprCase = nowatchR "abstReprCase" $
                onScrutineeR abstReprScrutinee
 
 -- Prepare a scrutinee
@@ -398,10 +432,13 @@ externals =
   [
     externC' "abst-repr-case" abstReprCase
   , externC' "abst-repr-con" abstReprCon
-  , externC' "select-method" selectMethodR
   , externC' "clobber" clobber
+  , externC' "to-dict-con" toDictConR
+  , externC' "mono" monomorphizeE
+  , externC' "simplify-scrut" simplifyScrut
   ]
 
+--   , externC' "select-method" selectMethodR
 --   , externC' "prune-case" pruneCaseR
 --   , externC' "alt-id-case" altIdCaseR
 
