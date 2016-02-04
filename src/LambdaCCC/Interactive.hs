@@ -16,9 +16,7 @@
 -- Interactive HERMIT-based plugin
 ----------------------------------------------------------------------
 
-module LambdaCCC.Interactive where
-
--- TODO: explicit exports
+module LambdaCCC.Interactive (plugin) where
 
 import GhcPlugins (Plugin)
 import HERMIT.Plugin (hermitPlugin,pass,interactive)
