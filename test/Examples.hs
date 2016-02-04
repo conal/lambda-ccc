@@ -131,15 +131,19 @@ main = -- do
 
 --   print (reifyEP (sumTI :: RTree N1 Int -> Int))
 
---      go "leftmost-r1" (leftMost :: RTree N1 Int -> Int)
+--      go "leftmost-r8" (leftMost :: RTree N8 Int -> Int)
 
---      print (reifyEP (leftMost :: RTree N1 Int -> Int))
+--      print (reifyEP (leftMost :: RTree N5 Int -> Int))
 
 --   print (reifyEP (sum :: RTree N2 Int -> Int))
 
 --   print (reifyEP (and :: RTree N4 Bool -> Bool))
 
-  goSep "and-rt10" 1 (and :: RTree N10 Bool -> Bool)
+--   goSep "and-rt5" 1 (and :: RTree N5 Bool -> Bool)
+
+--   go "add-p" (liftA2 (&&) :: Binop (Pair Bool))
+
+  go "and-rt0" (liftA2 (&&) :: Binop (RTree N0 Bool))  -- chokes
 
 --   print (reifyEP not)
 
@@ -155,7 +159,7 @@ main = -- do
 
   -- goSep "maprt8" 4 (fmap sqr :: Unop (RTree N8 Int))
 
---   goSep "dotrt4" 1 (dotG :: Pair (RTree N4 Int) -> Int)
+--   goSep "dot-prt4" 1 (dotG :: Pair (RTree N4 Int) -> Int)
 
 --   go "foo" ((:#) :: Bool -> Bool -> Pair Bool)
 
@@ -165,7 +169,7 @@ main = -- do
 
 --   goSep "transpose-pp" 1 (transpose :: Unop (Pair (Pair Bool)))
 
---   goSep "transpose-rt2p" 1 (transpose :: RTree N2 (Pair Bool) -> Pair (RTree N2 Bool))
+--   goSep "transpose-rt0p" 0 (sequenceA :: RTree N0 (Pair Bool) -> Pair (RTree N0 Bool))
 
   -- go "applyLin-rt23" (($@) :: MatrixT N2 N3 Int -> RTree N2 Int -> RTree N3 Int)
   -- go "composeLin-rt232" ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int)
