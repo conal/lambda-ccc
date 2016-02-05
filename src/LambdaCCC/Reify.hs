@@ -34,13 +34,14 @@ import Control.Arrow
 import qualified Data.Map as M
 import Data.String (fromString)
 
-import HERMIT.Context (AddBindings)
-import HERMIT.Core (localFreeIdsExpr,substCoreExpr,CoreProg(..),progToBinds)
+import HERMIT.Context (AddBindings,addBindingGroup,HermitC)
+import HERMIT.Core (localFreeIdsExpr,substCoreExpr,CoreProg(..),progToBinds,isCoArg,freeVarsExpr)
 import HERMIT.GHC hiding (mkStringExpr)
 import TcType (isDoubleTy)  -- Doesn't seem to be coming in with HERMIT.GHC.
 import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary hiding (externals)
+import HERMIT.Monad (HermitM)
 import HERMIT.Name (HermitName,mkQualified,cmpHN2Var)
 import HERMIT.External (External)
 
@@ -52,7 +53,7 @@ import HERMIT.Extras hiding (findTyConT,observeR',orL,simplifyE)
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', orL, labeled)
 
 import Monomorph.Stuff ({-preMonoR, castFloatR, -} simplifyE) -- , simplifyWithLetFloatingE
--- import LambdaCCC.Monomorphize (monomorphizeE)
+import LambdaCCC.Monomorphize (abstReprCase,abstReprCon)
 
 {--------------------------------------------------------------------
     Utilities. Move to HERMIT.Extras
@@ -79,7 +80,7 @@ watchR lab r = lintingExprR lab (labeled observing (lab,r)) -- hard error
 -- watchR :: String -> Unop ReExpr
 -- watchR lab r = labeled observing (lab,r) >>> lintExprR  -- Fail softly on core lint error.
 
-watchR :: InCoreTC a => String -> RewriteH a -> RewriteH a
+watchR :: (InCoreTC a, InCoreTC b) => String -> Unop (TransformH a b)
 watchR lab r = labeled' observing (lab,r)  -- don't lint
 #endif
 
@@ -216,12 +217,19 @@ reifyLam = do Lam v e <- unReify
 -- one level. Typically (always?) the "foo = eval foo_reified" definition gets
 -- inlined and then eliminated by the letElimR in reifyMisc.
 
+reifyTrivialLet :: ReExpr
+reifyTrivialLet = inReify $
+ do Let (NonRec v rhs) body <- id
+    if | v `notElemVarSet` freeVarsExpr body -> return body
+       | exprIsTrivial rhs                   -> letSubstR
+       | otherwise                           -> fail "Non-trivial"
+
 -- | Turn a monomorphic let into a beta-redex.
 reifyMonoLet :: ReExpr
 reifyMonoLet =
     unReify >>>
     do Let (NonRec v rhs) body <- idR
-       guardMsgM (worthLet rhs) "trivial let"
+       -- guardMsgM (worthLet rhs) "trivial let"
        -- Instead of guarding against polymorphic rhs, let reifyOf reject.
        -- guardMsg (not (isForAllTy (varType v))) "polymorphic let"
        rhsE  <- reifyOf rhs
@@ -393,6 +401,21 @@ reifyLoop =
      h'   <- reifyOf h
      appsE "loopEP" tys [dict,h']
 
+reifyCase :: ReExpr
+reifyCase = inReify $
+  do Case {} <- id
+     (    watchR "caseReduceR False" (caseReduceR False)
+       <+ watchR "letFloatCaseR" letFloatCaseR
+       <+ watchR "caseFloatCaseR" caseFloatCaseR
+       -- <+ watchR "onScrutineeR simplifyScrut" (onScrutineeR simplifyScrut)
+       <+ watchR "abstReprCase" abstReprCase )
+
+reifyCon :: ReExpr
+reifyCon = inReify abstReprCon
+
+reifyCast :: ReExpr
+reifyCast = inReify castElimR  -- fancier later
+
 -- Use in a final pass to generate helpful error messages for non-reified
 -- syntax.
 reifyOops :: ReExpr
@@ -404,20 +427,23 @@ reifyOops =
 
 miscL :: [(String,ReExpr)]
 miscL = [ ---- Special applications and so must come before reifyApp
-          ("reifyEval"    , reifyEval)
-        , ("reifyRepMeth" , reifyRepMeth)
-        , ("reifyStdMeth" , reifyStdMeth)
-        , ("reifyIf"      , reifyIf)
-        , ("reifyBottom"  , reifyBottom)
-        , ("reifyDelay"   , reifyDelay)
-        , ("reifyLoop"    , reifyLoop)
-        , ("reifyLit"     , reifyLit)
-        , ("reifyApp"     , reifyApp)
-        , ("reifyLam"     , reifyLam)
-        , ("reifyMonoLet" , reifyMonoLet)
-        , ("reifyTupCase" , reifyTupCase)
-        -- , ("reifyPrim"    , reifyPrim)
-        , ("reifyPrim'"   , reifyPrim')
+          ("reifyEval"       , reifyEval)
+        , ("reifyRepMeth"    , reifyRepMeth)
+        , ("reifyStdMeth"    , reifyStdMeth)
+        , ("reifyIf"         , reifyIf)
+        , ("reifyBottom"     , reifyBottom)
+        , ("reifyDelay"      , reifyDelay)
+        , ("reifyLoop"       , reifyLoop)
+        , ("reifyLit"        , reifyLit)
+        , ("reifyApp"        , reifyApp)
+        , ("reifyLam"        , reifyLam)
+        , ("reifyTrivialLet" , reifyTrivialLet)
+        , ("reifyMonoLet"    , reifyMonoLet)
+        , ("reifyTupCase"    , reifyTupCase)
+        , ("reifyPrim'"      , reifyPrim')
+        , ("reifyCase"       , reifyCase)
+        , ("reifyCon"        , reifyCon)
+        , ("reifyCast"       , reifyCast)
         ]
 
 -- TODO: move reifyPrim to before reifyApp. Faster?
@@ -586,8 +612,15 @@ epTy = do ty <- id
 
 -- Like letFloatTopR but on CoreBind
 letFloatTopR' :: TransformH CoreBind [CoreBind]
-letFloatTopR' =
-  arr progToBinds . letFloatTopR . arr (`ProgCons` ProgNil)
+letFloatTopR' = 
+    arr progToBinds
+  . watchR "letFloatTopR" letFloatTopR
+  . arr (`ProgCons` ProgNil)
+  . okay
+ where
+   -- RHS of inner let can be anything but a coercion
+   okay = nonRecAllR id (accepterRhs (arr (not . isCoArg)))
+          -- nonRecAllR id (letAllR (nonRecAllR id (acceptR (not . isCoArg))) id)
 
 reifyBind :: TransformH CoreBind ([CoreBind],[CoreRule])
 reifyBind = -- watchR "reifier" $
@@ -634,9 +667,22 @@ reifyBind = -- watchR "reifier" $
 -- TODO: eta-expand as needed.
 
 augmentProgBinds :: TransformH CoreBind ([CoreBind],[CoreRule]) ->
-                    TransformH CoreProgram (CoreProgram,[CoreRule])
-augmentProgBinds rew = arr mconcat
-                     . mapT rew
+                    TransformH [CoreBind] ([CoreBind],[CoreRule])
+augmentProgBinds (applyT -> rebind) = transform go
+ where
+   go :: HermitC -> [CoreBind] -> HermitM ([CoreBind],[CoreRule])
+   go _ [] = return mempty
+   go c (bindIn:bindsIn) =
+     do o@(bindsOut,_) <- rebind c bindIn
+        os <- go (addBindingGroups bindsOut c) bindsIn
+        return (o `mappend` os)
+
+-- Old version:
+-- 
+-- augmentProgBinds rew = arr mconcat . mapT rew
+
+addBindingGroups :: (AddBindings c, ReadCrumb c) => [CoreBind] -> c -> c
+addBindingGroups = flip (foldr addBindingGroup)
 
 -- TODO: Have reifyProg succeed iff *any* reifyBind succeeds.
 
@@ -672,11 +718,15 @@ accepterRhs :: (Monad m, ReadCrumb c, ExtendCrumb c, AddBindings c) =>
                Transform c m CoreExpr Bool -> Rewrite c m CoreExpr
 accepterRhs p = letT (nonRecT mempty p (\ () b -> b)) id (\ b _ -> b) >> id
 
+-- accepterRhs p = letAllR (nonRecAllR id (accepterR p)) id
+
 abstractReifies :: ReExpr
-abstractReifies = abstractPredM (arr isReify)
+abstractReifies = watchR "abstractReifies" $
+                  abstractPredM (arr isReify)
 
 floatReifies :: ReExpr
-floatReifies = letFloatsPredM (arr isReify)
+floatReifies = watchR "floatReifies" $
+               letFloatsPredM (arr isReify)
 
 -- | Convert outer reify let bindings into a multi-beta-redex. Assumes (and
 -- doesn't check) that none of the variables appear in any of the RHSs.
@@ -735,6 +785,9 @@ externals =
     , externC' "reify-lit" reifyLit
     , externC' "reify-prim" reifyPrim
     , externC' "reify-prim'" reifyPrim'
+    , externC' "reify-case" reifyCase
+    , externC' "reify-trivial-let" reifyTrivialLet
+    , externC' "reify-con" reifyCon
     , externC' "reify-oops" reifyOops
     , externC' "optimize-cast" optimizeCastR
     , externC' "unreify" unReify
