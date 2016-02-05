@@ -416,6 +416,17 @@ reifyCon = inReify abstReprCon
 reifyCast :: ReExpr
 reifyCast = inReify castElimR  -- fancier later
 
+-- Already reified, so reuse.
+reifyReified :: ReExpr
+reifyReified = unReify >>>
+  do (Var v, args) <- callT
+     guardMsg (all (\ e -> isTypeArg e || isDictTy (exprType' e)) args)
+              "Arguments must be types or dictionaries"
+     reify_v <- findIdT (fromString (reifyVarStr v))
+     return $ mkCoreApps (Var reify_v) args
+
+-- TODO: Maybe check that the type of reify_v matches.
+
 -- Use in a final pass to generate helpful error messages for non-reified
 -- syntax.
 reifyOops :: ReExpr
@@ -444,6 +455,7 @@ miscL = [ ---- Special applications and so must come before reifyApp
         , ("reifyCase"       , reifyCase)
         , ("reifyCon"        , reifyCon)
         , ("reifyCast"       , reifyCast)
+        , ("reifyReified"    , reifyReified)
         ]
 
 -- TODO: move reifyPrim to before reifyApp. Faster?
@@ -622,13 +634,16 @@ letFloatTopR' =
    okay = nonRecAllR id (accepterRhs (arr (not . isCoArg)))
           -- nonRecAllR id (letAllR (nonRecAllR id (acceptR (not . isCoArg))) id)
 
+reifyVarStr :: Id -> String
+reifyVarStr v = "$reify_"++ uqVarName v   -- revisit: use module part, too
+
 reifyBind :: TransformH CoreBind ([CoreBind],[CoreRule])
 reifyBind = -- watchR "reifier" $
   do b@(NonRec v rhs) <- id
      (bndrs,rhs') <- go (uqVarName v) rhs
      -- Lift let $reify_foo_fun to top
      rhs'' <- tryR (anybuE letFloatWithLiftR) $* rhs'
-     v'   <- newIdT ("$reify_"++ uqVarName v) $* exprType' rhs''
+     v'   <- newIdT (reifyVarStr v) $* exprType' rhs''
      rule <- mkReifyRule bndrs v v'
      newDefs <- (letFloatTopR' <+ arr (: [])) $* NonRec v' rhs''
      return (b : newDefs,[rule])
@@ -681,15 +696,12 @@ augmentProgBinds (applyT -> rebind) = transform go
 -- 
 -- augmentProgBinds rew = arr mconcat . mapT rew
 
+-- TODO: Similarly for let bindings, I think.
+
 addBindingGroups :: (AddBindings c, ReadCrumb c) => [CoreBind] -> c -> c
 addBindingGroups = flip (foldr addBindingGroup)
 
 -- TODO: Have reifyProg succeed iff *any* reifyBind succeeds.
-
-inCoreProgramR :: RewriteH CoreProg -> RewriteH CoreProgram
-inCoreProgramR = undefined
-
--- TODO: Similarly for let bindings, I think.
 
 -- reifyBind :: TransformH CoreBind ([CoreBind],[CoreRule])
 
