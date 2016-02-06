@@ -23,8 +23,6 @@
 
 module LambdaCCC.Reify where
 
--- TODO: Explicit exports
-
 import Prelude hiding (id,(.))
 
 import Data.Functor (void)
@@ -52,7 +50,7 @@ import Circat.Misc ((<~))
 import HERMIT.Extras hiding (findTyConT,observeR',catchesL,simplifyE)
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', catchesL, labeled)
 
-import Monomorph.Stuff ({-preMonoR, castFloatR, -} simplifyE) -- , simplifyWithLetFloatingE
+import Monomorph.Stuff ({-preMonoR, -} castFloatR, caseDefaultR, simplifyE) -- , simplifyWithLetFloatingE
 import LambdaCCC.Monomorphize (abstReprCase,abstReprCon)
 
 {--------------------------------------------------------------------
@@ -220,14 +218,13 @@ reifyLam = do Lam v e <- unReify
 -- one level. Typically (always?) the "foo = eval foo_reified" definition gets
 -- inlined and then eliminated by the letElimR in reifyMisc.
 
-reifyTrivialLet :: ReExpr
-reifyTrivialLet = inReify $
+letTrivialSubstR :: ReExpr
+letTrivialSubstR =
  do Let (NonRec v rhs) body <- id
     if | v `notElemVarSet` freeVarsExpr body -> return body
        | exprIsTrivial rhs || isEval rhs     -> letSubstR
        | otherwise                           -> -- traceR "reifyTrivialLet failed" >>>
                                                 fail "Non-trivial"
-
 
 -- When rhs = eval (var x), reify will make it var x. We don't introduce eval
 -- any other way.
@@ -248,17 +245,6 @@ reifyMonoLet = watchR "reifyMonoLet" $
 -- Placeholder
 worthLet :: CoreExpr -> TransformU Bool
 worthLet _ = return True
-
--- Simpler but can lead to loops. Maybe fix by following with reifyLam.
--- 
--- reifyMonoLet =
---   inReify $
---     do Let (NonRec v@(isForAllTy . varType -> False) rhs) body <- idR
---        return (Lam v body `App` rhs)
-
--- TODO: Perhaps combine reifyPolyLet and reifyMonoLet into reifyLet
-
--- The simplifyE is for beta-reducing type applications.
 
 -- Rewrite inside of reify applications
 inReify :: Unop ReExpr
@@ -346,7 +332,7 @@ reifyTupCase =
  where
    -- Reify a case alternative, yielding a reified pattern and a reified
    -- alternative body (RHS). Only unit and pair patterns. Others are
-   -- transformed away in the type-encode plugin.
+   -- transformed away.
    reifyAlt :: Var -> CoreAlt -> TransformU (CoreExpr,CoreExpr)
    reifyAlt wild (DataAlt ( isBoxedTupleTyCon . dataConTyCon -> True)
                              , vars, rhs ) =
@@ -409,20 +395,11 @@ reifyLoop =
      h'   <- reifyOf h
      appsE "loopEP" tys [dict,h']
 
-reifyCase :: ReExpr
-reifyCase = inReify $
-  do Case {} <- id
-     (    watchR "caseReduceR False" (caseReduceR False)
-       <+ watchR "letFloatCaseR" letFloatCaseR
-       <+ watchR "caseFloatCaseR" caseFloatCaseR
-       -- <+ watchR "onScrutineeR simplifyScrut" (onScrutineeR simplifyScrut)
-       <+ watchR "abstReprCase" abstReprCase )
+reifyAbstCase :: ReExpr
+reifyAbstCase = inReify $ watchR "abstReprCase" abstReprCase
 
-reifyCon :: ReExpr
-reifyCon = inReify abstReprCon
-
-reifyCast :: ReExpr
-reifyCast = inReify castElimR  -- fancier later
+reifyAbstCon :: ReExpr
+reifyAbstCon = inReify $ watchR "abstReprCon" abstReprCon
 
 callTyDictsT :: Monad m => Transform c m CoreExpr (CoreExpr, [CoreExpr])
 callTyDictsT =
@@ -439,11 +416,30 @@ reifyReified = watchR "reifyReified" $
      reify_v <- findIdT (fromString (reifyVarStr v))
      return $ mkCoreApps (Var reify_v) args
 
+-- Last resort. Not included in reifySimplify.
 reifyUnfold :: ReExpr
 reifyUnfold = watchR "reifyUnfold" $
-              inReify $ callTyDictsT >> unfoldR
+              inReify $ callTyDictsT >> anybuE detickE . unfoldR
+
+-- The detickE is an experiment for helping with a ghci issue.
+-- See journal from 2016-02-05.
 
 -- TODO: Maybe check that the type of reify_v matches.
+
+reifySimplify :: ReExpr
+reifySimplify = inReify simplifyOneStepE
+
+simplifyOneStepE :: ReExpr
+simplifyOneStepE = watchR "simplifyOneStepE" $
+     watchR "etaReduceR" etaReduceR
+  <+ watchR "letElimR" letElimR
+  <+ watchR "letTrivialSubstR" letTrivialSubstR
+  <+ watchR "castFloatR" castFloatR  -- combination and elim, too. rename.
+  <+ watchR "caseReduceR" (caseReduceR False)
+  <+ watchR "letFloatCaseR" letFloatCaseR
+  <+ watchR "caseFloatCaseR" caseFloatCaseR
+  <+ watchR "caseDefaultR" caseDefaultR
+  <+ watchR "detickE" detickE
 
 -- Use in a final pass to generate helpful error messages for non-reified
 -- syntax.
@@ -456,7 +452,8 @@ reifyOops =
 
 miscL :: [(String,ReExpr)]
 miscL = [ ---- Special applications and so must come before reifyApp
-          ("reifyEval"       , reifyEval)
+          ("reifySimplify"   , reifySimplify)
+        , ("reifyEval"       , reifyEval)
         , ("reifyRepMeth"    , reifyRepMeth)
         , ("reifyStdMeth"    , reifyStdMeth)
         , ("reifyIf"         , reifyIf)
@@ -464,16 +461,13 @@ miscL = [ ---- Special applications and so must come before reifyApp
         , ("reifyDelay"      , reifyDelay)
         , ("reifyLoop"       , reifyLoop)
         , ("reifyLit"        , reifyLit)
-        , ("reifySimplify"   , reifySimplify)
         , ("reifyApp"        , reifyApp)
         , ("reifyLam"        , reifyLam)
-        , ("reifyTrivialLet" , reifyTrivialLet)
         , ("reifyMonoLet"    , reifyMonoLet)
         , ("reifyTupCase"    , reifyTupCase)
         , ("reifyPrim'"      , reifyPrim')
-        , ("reifyCase"       , reifyCase)
-        , ("reifyCon"        , reifyCon)
-        , ("reifyCast"       , reifyCast)
+        , ("reifyAbstCase"   , reifyAbstCase)
+        , ("reifyAbstCon"    , reifyAbstCon)
         , ("reifyReified"    , reifyReified)
         , ("reifyUnfold"     , reifyUnfold)
         ]
@@ -659,13 +653,16 @@ reifyVarStr v = "$reify_"++ uqVarName v   -- revisit: use module part, too
 
 reifyBind :: TransformH CoreBind ([CoreBind],[CoreRule])
 reifyBind = -- watchR "reifier" $
-  do b@(NonRec v rhs) <- id
+--   do b@(NonRec v rhs) <- id
+  do b@(NonRec v rhs0) <- id
+     rhs <- tryR (watchR "anybuE detickE" (anybuE detickE)) $* rhs0   -- for ghci
      (bndrs,rhs') <- go (uqVarName v) rhs
      -- Lift let $reify_foo_fun to top
      rhs'' <- tryR (anybuE letFloatWithLiftR) $* rhs'
      v'   <- newIdT (reifyVarStr v) $* exprType' rhs''
      rule <- mkReifyRule bndrs v v'
      newDefs <- (letFloatTopR' <+ arr (: [])) $* NonRec v' rhs''
+     pprTrace "reifyBind" (ppr v) (return ())
      return (b : newDefs,[rule])
   <+ arr (\ b -> ([b],[]))
  where
@@ -694,7 +691,7 @@ reifyBind = -- watchR "reifier" $
                         , ru_local = False
                         }
         -- liftIO $ putStrLn ("Rule: " ++ unpackFS (ru_name rule))
-        void (traceR =<< showPprT $* rule)
+        -- void (traceR =<< showPprT $* rule)
         return rule
     where
       appV v = mkCoreApps (Var v) (varToCoreExpr <$> vs)
@@ -725,12 +722,26 @@ addBindingGroups = flip (foldr addBindingGroup)
 
 -- reifyBind :: TransformH CoreBind ([CoreBind],[CoreRule])
 
+reifyBinds :: TransformH [CoreBind] ([CoreBind],[CoreRule])
+reifyBinds = augmentProgBinds reifyBind
+
 reifyModule :: ReGuts
 reifyModule =
+  -- modGutsR (tryR (walkP anytdR progBindElimR)) >>> -- *
+  unshadowP >>>  -- For easier observation. Remove later.
   do guts <- id
-     (prog',rules) <- augmentProgBinds reifyBind $* mg_binds guts
+     (prog',rules) <- reifyBinds $* mg_binds guts
      return guts { mg_binds = prog', mg_rules = mg_rules guts ++ rules }
+  >>> unshadowP
+  -- >>> modGutsR (observeR "reifyModule result")
+ where
+   unshadowP :: ReGuts
+   unshadowP = tryR (extractR unshadowR)
 
+-- See journal from 2016-02-05.
+
+walkP :: Unop ReCore -> Unop ReProg
+walkP trav r = extractR (trav (promoteR r :: ReCore))
 
 -- | An always-succeeding rewrite that turns failures into 'Nothing'.
 -- Similar to 'mtryM', but works for non-monoidal types as well.
@@ -823,9 +834,7 @@ externals =
     , externC' "reify-lit" reifyLit
     , externC' "reify-prim" reifyPrim
     , externC' "reify-prim'" reifyPrim'
-    , externC' "reify-case" reifyCase
-    , externC' "reify-trivial-let" reifyTrivialLet
-    , externC' "reify-con" reifyCon
+    , externC' "reify-simplify" reifySimplify
     , externC' "reify-oops" reifyOops
     , externC' "optimize-cast" optimizeCastR
     , externC' "unreify" unReify
