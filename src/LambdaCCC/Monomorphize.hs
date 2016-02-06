@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE ParallelListComp      #-}
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE Rank2Types            #-}
@@ -60,7 +61,7 @@ import PrelNames (eqPrimTyConKey,eqReprPrimTyConKey)
 import HERMIT.Extras
   (pattern FunCo, fqVarName, exprType', exprTypeT, ReExpr
   , ($*), externC', onScrutineeR, bashExtendedWithE, newIdT
-  , callSplitT, bashE, detickE
+  , callSplitT, bashE -- , detickE
   )
 
 -- import Monomorph.Stuff (pruneCaseR,standardizeCase,standardizeCon,hasRepMethodF)
@@ -307,13 +308,17 @@ abstReprCon = nowatchR "abstReprCon" $
      guardMsg (all isTyCoArg tycos) "Value argument(s)"
      -- pprTrace "abstReprCon un-DC" (ppr (i,_tyArgs,tycos)) (return ())
      ty <- exprTypeT
-     vs <- mapT (newIdT "v") $* fst (splitFunTys ty)
+     vs <- mapT newIdNamedT $*
+             [("v"++show n,dom) | n <- [0::Int ..] | dom <- fst (splitFunTys ty)]
      -- TODO: better/distinct var names
      let evs = mkVarApps e vs
      (abst,repr) <- mkAbstRepr $* exprType' evs
      repre' <- nowatchR "clobber repre" clobber $* App repr evs
      return (mkCoreLams vs (mkCoreApp abst repre'))
 
+newIdNamedT :: MonadUnique m => Transform c m (String,Type) Id
+newIdNamedT = do (nm,ty) <- id
+                 newIdT nm $* ty
 
 isDataConId :: Id -> Bool
 isDataConId i = case idDetails i of
@@ -341,7 +346,7 @@ abstReprScrutinee =
      return (Let (NonRec v reprScrut) abstv')
 
 clobber :: ReExpr
-clobber = bashExtendedWithE [detickE,inlineR]
+clobber = bashExtendedWithE [{- detickE, -}inlineR]
 
 -- The detickE is an experiment for helping with a ghci issue.
 -- See journal from 2016-02-05.
