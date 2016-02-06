@@ -29,7 +29,7 @@ Library
                   , mtl
                   , containers
                   , kure >= 2.16.0
-                  , hermit >= 0.5.0.1
+                  , hermit >= 1.0.0.1
                   , ty >= 0.1.5
                   , type-unary >= 0.2.21
                   , MemoTrie
@@ -44,8 +44,6 @@ Library
                     LambdaCCC.ToCCC
                     LambdaCCC.Monomorphize
                     LambdaCCC.Reify
-                    LambdaCCC.Interactive
-                    LambdaCCC.Plugin
                     LambdaCCC.Run
                     LambdaCCC.StateTrie
                     LambdaCCC.Adder
@@ -53,6 +51,9 @@ Library
                     LambdaCCC.Bitonic
                     LambdaCCC.RadixSort
                     LambdaCCC.Counters
+--                     LambdaCCC.Interactive
+--                     LambdaCCC.Plugin
+
   Other-Modules:
                     LambdaCCC.Tests
 

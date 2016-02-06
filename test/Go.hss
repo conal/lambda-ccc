@@ -12,11 +12,22 @@ pre-mono
 try (any-td unfold-driver)
 
 rhs-of 'main
+
 application-of 'reifyEP
+
+-- [app-arg,app-fun]
+-- -- liftA2 Bool Bool Bool (RTree N0) $dApplicative
+-- unfold
+-- -- select-method
+-- application-of 'fmap
+-- [app-fun,app-fun,app-fun,app-fun]
+-- -- -- fmap (RTree N0) ($p1Applicative (RTree N0) $dApplicative)
+-- unfold
+-- -- case-expr
 
 reify-monomorph
 lint-expr
 
-reifyE
-lint-expr
+-- reifyE
+-- lint-expr
 

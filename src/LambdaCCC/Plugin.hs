@@ -13,7 +13,7 @@
 -- Maintainer  :  conal@conal.net
 -- Stability   :  experimental
 -- 
--- Interactive HERMIT-based plugin
+-- Non-interactive HERMIT-based plugin
 ----------------------------------------------------------------------
 
 module LambdaCCC.Plugin where
