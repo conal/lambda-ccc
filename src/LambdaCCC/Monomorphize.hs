@@ -26,7 +26,10 @@
 -- Efficient monomorphization
 ----------------------------------------------------------------------
 
-module LambdaCCC.Monomorphize (monomorphizeE,externals) where
+module LambdaCCC.Monomorphize
+  ( monomorphizeE, externals
+  , abstReprCon, abstReprCase
+  ) where
 
 import Prelude hiding (id,(.))
 
@@ -57,7 +60,7 @@ import PrelNames (eqPrimTyConKey,eqReprPrimTyConKey)
 import HERMIT.Extras
   (pattern FunCo, fqVarName, exprType', exprTypeT, ReExpr
   , ($*), externC', onScrutineeR, bashExtendedWithE, newIdT
-  , callSplitT, bashE
+  , callSplitT, bashE, detickE
   )
 
 -- import Monomorph.Stuff (pruneCaseR,standardizeCase,standardizeCon,hasRepMethodF)
@@ -319,7 +322,7 @@ isDataConId i = case idDetails i of
                    _               -> False
 
 abstReprCase :: ReExpr
-abstReprCase = nowatchR "abstReprCase" $
+abstReprCase = -- watchR "abstReprCase" $
                onScrutineeR abstReprScrutinee
 
 -- Prepare a scrutinee
@@ -338,7 +341,10 @@ abstReprScrutinee =
      return (Let (NonRec v reprScrut) abstv')
 
 clobber :: ReExpr
-clobber = bashExtendedWithE [inlineR]
+clobber = bashExtendedWithE [detickE,inlineR]
+
+-- The detickE is an experiment for helping with a ghci issue.
+-- See journal from 2016-02-05.
 
 mkAbstRepr :: TransformH Type (CoreExpr,CoreExpr)
 mkAbstRepr = do f <- hasRepMethodF
