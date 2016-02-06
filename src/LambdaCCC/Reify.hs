@@ -30,7 +30,7 @@ import Prelude hiding (id,(.))
 import Data.Functor (void)
 import Control.Category (Category(..))
 import Control.Monad ((<=<))
-import Control.Arrow
+import Control.Arrow ((>>>),arr,(***))
 import qualified Data.Map as M
 import Data.String (fromString)
 
@@ -49,8 +49,8 @@ import TcType (isIntegerTy)
 
 import Circat.Misc ((<~))
 
-import HERMIT.Extras hiding (findTyConT,observeR',orL,simplifyE)
-import qualified HERMIT.Extras as Ex -- (Observing, observeR', orL, labeled)
+import HERMIT.Extras hiding (findTyConT,observeR',catchesL,simplifyE)
+import qualified HERMIT.Extras as Ex -- (Observing, observeR', catchesL, labeled)
 
 import Monomorph.Stuff ({-preMonoR, castFloatR, -} simplifyE) -- , simplifyWithLetFloatingE
 import LambdaCCC.Monomorphize (abstReprCase,abstReprCon)
@@ -66,7 +66,7 @@ unshadowE = extractR unshadowR
     Observing
 --------------------------------------------------------------------}
 
--- (Observing, observeR', orL, labeled)
+-- (Observing, observeR', catchesL, labeled)
 
 observing :: Ex.Observing
 observing = False -- True
@@ -89,8 +89,8 @@ nowatchR _ = id
 
 -- nowatchR = watchR
 
-orL :: InCoreTC t => [(String,RewriteH t)] -> RewriteH t
-orL = Ex.orL observing
+catchesL :: InCoreTC t => [(String,RewriteH t)] -> RewriteH t
+catchesL = Ex.catchesL observing
 
 -- labeled :: InCoreTC t => (String, RewriteH t) -> RewriteH t
 -- labeled = Ex.labeled observing
@@ -162,6 +162,9 @@ reifyEval = unEval . unReify
 reifyName :: HermitName
 reifyName = lamName reifyS
 
+evalName :: HermitName
+evalName = lamName evalS
+
 -- Generate a reify call. Fail on types, coercions, and dictionaries.
 reifyOf :: CoreExpr -> TransformU CoreExpr
 reifyOf e = do guardMsg (not (isTyCoArg e)) "Type or coercion."
@@ -221,12 +224,17 @@ reifyTrivialLet :: ReExpr
 reifyTrivialLet = inReify $
  do Let (NonRec v rhs) body <- id
     if | v `notElemVarSet` freeVarsExpr body -> return body
-       | exprIsTrivial rhs                   -> letSubstR
-       | otherwise                           -> fail "Non-trivial"
+       | exprIsTrivial rhs || isEval rhs     -> letSubstR
+       | otherwise                           -> -- traceR "reifyTrivialLet failed" >>>
+                                                fail "Non-trivial"
+
+
+-- When rhs = eval (var x), reify will make it var x. We don't introduce eval
+-- any other way.
 
 -- | Turn a monomorphic let into a beta-redex.
 reifyMonoLet :: ReExpr
-reifyMonoLet =
+reifyMonoLet = watchR "reifyMonoLet" $
     unReify >>>
     do Let (NonRec v rhs) body <- idR
        -- guardMsgM (worthLet rhs) "trivial let"
@@ -416,14 +424,24 @@ reifyCon = inReify abstReprCon
 reifyCast :: ReExpr
 reifyCast = inReify castElimR  -- fancier later
 
--- Already reified, so reuse.
-reifyReified :: ReExpr
-reifyReified = unReify >>>
-  do (Var v, args) <- callT
+callTyDictsT :: Monad m => Transform c m CoreExpr (CoreExpr, [CoreExpr])
+callTyDictsT =
+  do va@(Var _, args) <- callT
      guardMsg (all (\ e -> isTypeArg e || isDictTy (exprType' e)) args)
               "Arguments must be types or dictionaries"
+     return va
+
+-- Already reified, so reuse.
+reifyReified :: ReExpr
+reifyReified = watchR "reifyReified" $
+               unReify >>>
+  do (Var v, args) <- callTyDictsT
      reify_v <- findIdT (fromString (reifyVarStr v))
      return $ mkCoreApps (Var reify_v) args
+
+reifyUnfold :: ReExpr
+reifyUnfold = watchR "reifyUnfold" $
+              inReify $ callTyDictsT >> unfoldR
 
 -- TODO: Maybe check that the type of reify_v matches.
 
@@ -446,6 +464,7 @@ miscL = [ ---- Special applications and so must come before reifyApp
         , ("reifyDelay"      , reifyDelay)
         , ("reifyLoop"       , reifyLoop)
         , ("reifyLit"        , reifyLit)
+        , ("reifySimplify"   , reifySimplify)
         , ("reifyApp"        , reifyApp)
         , ("reifyLam"        , reifyLam)
         , ("reifyTrivialLet" , reifyTrivialLet)
@@ -456,13 +475,14 @@ miscL = [ ---- Special applications and so must come before reifyApp
         , ("reifyCon"        , reifyCon)
         , ("reifyCast"       , reifyCast)
         , ("reifyReified"    , reifyReified)
+        , ("reifyUnfold"     , reifyUnfold)
         ]
 
 -- TODO: move reifyPrim to before reifyApp. Faster?
 -- Does reifyApp eventually fail on primitives?
 
 reifyMisc :: ReExpr
-reifyMisc = orL miscL
+reifyMisc = catchesL miscL
 
 {--------------------------------------------------------------------
     Primitives
@@ -565,7 +585,7 @@ reifyR = id -- tryR (anytdR (promoteR reifyOops))
 #endif
 
 reifyE :: ReExpr
-reifyE = -- bracketR "reifyE" $
+reifyE = watchR "reifyE" $
          anytdE (repeatR reifyMisc)
 
 #if 0
@@ -578,7 +598,7 @@ reifyGutsR :: ReGuts
 reifyGutsR = modGutsR reifyProgR
 
 reifyMonomorph :: ReExpr
-reifyMonomorph = -- bracketR "reifyMonomorph" $
+reifyMonomorph = watchR "reifyMonomorph" $
                  inReify ( tryR unshadowE
                          . {- bracketR "simplifyE" -} (tryR simplifyE)
                          -- . tryR (anybuE (repeatR castFloatR))
@@ -756,6 +776,12 @@ reifyBetaExpandPlusR nm = prefixFailMsg ("reifyBetaExpandPlusR failed: ") $
 isReify :: CoreExpr -> Bool
 isReify (collectArgs -> (Var v,[_,_])) = cmpHN2Var reifyName v
 isReify _ = False
+
+isEval :: CoreExpr -> Bool
+-- isEval e | pprTrace "isEval" (ppr e) False = error "WAT!"
+isEval (collectArgs -> (Var v,[_,_])) = -- pprTrace "isEval" (text "cmpHN2Var evalName" <+> ppr v <+> equals <+> ppr (cmpHN2Var evalName v)) $
+                                        cmpHN2Var evalName v
+isEval _ = False
 
 -- (\ x -> let v = r in e)  ==>  let v' = (\ x -> r) in (\ x -> e[v -> v' x))
 letFloatLamLiftR :: ReExpr
