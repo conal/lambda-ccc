@@ -60,26 +60,72 @@ import LambdaCCC.Monomorphize (abstReprCase,abstReprCon)
 unshadowE :: ReExpr
 unshadowE = extractR unshadowR
 
+-- TODO: Move more utilities here from the code below
+
 {--------------------------------------------------------------------
     Observing
 --------------------------------------------------------------------}
 
+pluginModuleNames :: [ModuleName]
+pluginModuleNames =
+  -- mkModuleName <$> ["LambdaCCC.Plugin","LambdaCCC.Interactive"]
+  mkModuleName <$> ["LambdaCCC.Reify"]
+
+-- It's odd to use LambdaCCC.Reify here, but when I use the plugin module name,
+-- our plugin never gets run. Same for the interactive plugin below.
+-- I don't think I'm using an expected pathway to get the flag set.
+
+getAllOpts :: (Monad m, HasDynFlags m) => m [(ModuleName,String)]
+getAllOpts = pluginModNameOpts <$> getDynFlags
+
+-- getAllOpts = do opts <- pluginModNameOpts <$> getDynFlags
+--                 pprTrace "getAllOpts" (vcat (ppOpt <$> opts)) (return ())
+--                 return opts
+--  where
+--    ppOpt (modName,str) = ppr modName <> colon <> text str
+
+-- Get our plugin options
+reifyOpts :: [(ModuleName,String)] -> [String]
+reifyOpts allOpts =
+  [opt | (nm,opt) <- allOpts, nm `elem` pluginModuleNames]
+
+-- -fplugin-opt=LambdaCCC.Plugin:verbose
+-- TODO: verbosity level
+
+getVerboseM :: (Monad m, HasDynFlags m) => m Bool
+getVerboseM = ("verbose" `elem`) . reifyOpts <$> getAllOpts
+
+getVerboseT :: (Monad m, HasDynFlags m) => Transform c m a Bool
+getVerboseT = -- pure True
+              constT getVerboseM
+
+-- pprTrace if verbosity flag
+pprTraceV :: (Monad m, HasDynFlags m)
+          => String -> SDoc -> Transform c m a ()
+pprTraceV str doc =
+  ifM getVerboseT (pprTrace str doc (return ())) (return ())
+
 -- (Observing, observeR', catchesL, labeled)
 
-observing :: Ex.Observing
-observing = False -- True
+-- observing :: Ex.Observing
+-- observing = True -- False
 
 -- #define LintDie
 
 #ifdef LintDie
 watchR, nowatchR :: String -> Unop ReExpr
-watchR lab r = lintingExprR lab (labeled observing (lab,r)) -- hard error
+watchR lab r = do observing <- getVerboseT
+                  lintingExprR lab (labeled observing (lab,r)) -- hard error
 #else
 -- watchR :: String -> Unop ReExpr
 -- watchR lab r = labeled observing (lab,r) >>> lintExprR  -- Fail softly on core lint error.
 
 watchR :: (InCoreTC a, InCoreTC b) => String -> Unop (TransformH a b)
-watchR lab r = labeled' observing (lab,r)  -- don't lint
+watchR lab r = do observing <- getVerboseT
+                  labeled' observing (lab,r)  -- don't lint
+
+-- watchR lab r = labeled' observing (lab,r)  -- don't lint
+
 #endif
 
 nowatchR :: InCoreTC a => String -> RewriteH a -> RewriteH a
@@ -88,7 +134,10 @@ nowatchR _ = id
 -- nowatchR = watchR
 
 catchesL :: InCoreTC t => [(String,RewriteH t)] -> RewriteH t
-catchesL = Ex.catchesL observing
+catchesL ps = do observing <- getVerboseT
+                 Ex.catchesL observing ps
+
+-- catchesL = Ex.catchesL observing
 
 -- labeled :: InCoreTC t => (String, RewriteH t) -> RewriteH t
 -- labeled = Ex.labeled observing
@@ -168,7 +217,7 @@ reifyOf :: CoreExpr -> TransformU CoreExpr
 reifyOf e = do guardMsg (not (isTyCoArg e)) "Type or coercion."
                let ty = exprType' e
                guardMsg (not (isDictTy ty)) "Dictionary."
-               guardMsg (not (isForAllTy ty)) "Polymorphic."
+               -- guardMsg (not (isForAllTy ty)) "Polymorphic."
                guardMsg (not (isIntegerTy ty)) "Integer." -- TODO: Generalize
                -- appsE reifyS [exprType' e] [e]
                apps' reifyName [exprType' e] [e]
@@ -209,7 +258,8 @@ varSubst vs = do vs' <- mapM varEval vs
 -- | reify (\ x -> e)  -->  lamv x' (reify (e[x := eval (var x')]))
 reifyLam :: ReExpr
 reifyLam = do Lam v e <- unReify
-              guardMsg (not (isTyVar v)) "reifyLam: doesn't handle type lambda"
+              guardMsg (not (isTyVar v || isPredTy (idType v)))
+                "reifyLam: doesn't handle type or predicate lambdas"
               sub     <- varSubst [v]
               e'      <- reifyOf (sub e)
               appsE "lamvP#" [varType v, exprType' e] [varLitE v,e']
@@ -231,7 +281,7 @@ letTrivialSubstR =
 
 -- | Turn a monomorphic let into a beta-redex.
 reifyMonoLet :: ReExpr
-reifyMonoLet = watchR "reifyMonoLet" $
+reifyMonoLet =
     unReify >>>
     do Let (NonRec v rhs) body <- idR
        -- guardMsgM (worthLet rhs) "trivial let"
@@ -395,12 +445,6 @@ reifyLoop =
      h'   <- reifyOf h
      appsE "loopEP" tys [dict,h']
 
-reifyAbstCase :: ReExpr
-reifyAbstCase = inReify $ watchR "abstReprCase" abstReprCase
-
-reifyAbstCon :: ReExpr
-reifyAbstCon = inReify $ watchR "abstReprCon" abstReprCon
-
 callTyDictsT :: Monad m => Transform c m CoreExpr (CoreExpr, [CoreExpr])
 callTyDictsT =
   do va@(Var _, args) <- callT
@@ -410,16 +454,15 @@ callTyDictsT =
 
 -- Already reified, so reuse.
 reifyReified :: ReExpr
-reifyReified = watchR "reifyReified" $
-               unReify >>>
+reifyReified = unReify >>>
   do (Var v, args) <- callTyDictsT
+     -- pprTraceV "reifyReified reifyVarStr" (text (reifyVarStr v)) (return ())
      reify_v <- findIdT (fromString (reifyVarStr v))
      return $ mkCoreApps (Var reify_v) args
 
 -- Last resort. Not included in reifySimplify.
 reifyUnfold :: ReExpr
-reifyUnfold = watchR "reifyUnfold" $
-              inReify $ callTyDictsT >> anybuE detickE . unfoldR
+reifyUnfold = inReify $ callTyDictsT >> tryR (anybuE detickE) . unfoldR
 
 -- The detickE is an experiment for helping with a ghci issue.
 -- See journal from 2016-02-05.
@@ -427,10 +470,12 @@ reifyUnfold = watchR "reifyUnfold" $
 -- TODO: Maybe check that the type of reify_v matches.
 
 reifySimplify :: ReExpr
-reifySimplify = inReify simplifyOneStepE
+reifySimplify = {- reifyMisc . -} inReify (repeatR simplifyOneStepE)
+
+-- Note: reifySimplify must also do another (eventually non-simplification) reify step
 
 simplifyOneStepE :: ReExpr
-simplifyOneStepE = watchR "simplifyOneStepE" $
+simplifyOneStepE = -- watchR "simplifyOneStepE" $
      watchR "etaReduceR" etaReduceR
   <+ watchR "letElimR" letElimR
   <+ watchR "letTrivialSubstR" letTrivialSubstR
@@ -439,7 +484,23 @@ simplifyOneStepE = watchR "simplifyOneStepE" $
   <+ watchR "letFloatCaseR" letFloatCaseR
   <+ watchR "caseFloatCaseR" caseFloatCaseR
   <+ watchR "caseDefaultR" caseDefaultR
-  <+ watchR "detickE" detickE
+  <+ watchR "detickE" detickE  -- done elsewhere. still needed here?
+  <+ watchR "abstReprCase" abstReprCase
+  <+ watchR "abstReprCon" abstReprCon
+
+simplifyReify :: ReExpr
+simplifyReify =
+  do guardMsgM (arr isReify) "not a reify application"
+     simplifyExprR
+
+-- Warning:
+--
+-- -- | Use GHC expression simplifier and succeed if different. Sadly, the check
+-- -- gives false positives, which spoils its usefulness.
+-- simplifyExprR :: ReExpr
+
+
+-- simplifyExpr :: DynFlags -> CoreExpr -> IO CoreExpr
 
 -- Use in a final pass to generate helpful error messages for non-reified
 -- syntax.
@@ -466,10 +527,9 @@ miscL = [ ---- Special applications and so must come before reifyApp
         , ("reifyMonoLet"    , reifyMonoLet)
         , ("reifyTupCase"    , reifyTupCase)
         , ("reifyPrim'"      , reifyPrim')
-        , ("reifyAbstCase"   , reifyAbstCase)
-        , ("reifyAbstCon"    , reifyAbstCon)
         , ("reifyReified"    , reifyReified)
         , ("reifyUnfold"     , reifyUnfold)
+--         , ("simplifyReify"   , simplifyReify)
         ]
 
 -- TODO: move reifyPrim to before reifyApp. Faster?
@@ -649,34 +709,53 @@ letFloatTopR' =
           -- nonRecAllR id (letAllR (nonRecAllR id (acceptR (not . isCoArg))) id)
 
 reifyVarStr :: Id -> String
-reifyVarStr v = "$reify_"++ uqVarName v   -- revisit: use module part, too
+reifyVarStr = onUQname ("$reify_"++) . varName
+
+-- reifyVarStr v = "$reify_"++ uqVarName v   -- revisit: use module part, too
+
+-- | Tweak the unqualified part of a name, keeping the module name intact,
+-- yielding a string for 'newIdT' or 'findIdT.'
+onUQname :: Unop String -> Name -> String
+onUQname f nm = modStr ++ f (unqualifiedName nm)
+ where
+   modStr = maybe "" (\m -> moduleNameString (moduleName m) ++ ".")
+              (nameModule_maybe nm)
+
+-- onUQname based on hermit's qualifiedName.
 
 reifyBind :: TransformH CoreBind ([CoreBind],[CoreRule])
 reifyBind = -- watchR "reifier" $
---   do b@(NonRec v rhs) <- id
   do b@(NonRec v rhs0) <- id
+     pprTraceV "reifyBind" (ppr v <+> text "::" <+> ppr (varType v))
+     -- pprTraceV "reifyBind" (ppr b)
+     -- pprTraceV "reifyBind reifyVarStr" (text (reifyVarStr v))
      rhs <- tryR (watchR "anybuE detickE" (anybuE detickE)) $* rhs0   -- for ghci
      (bndrs,rhs') <- go (uqVarName v) rhs
      -- Lift let $reify_foo_fun to top
      rhs'' <- tryR (anybuE letFloatWithLiftR) $* rhs'
-     v'   <- newIdT (reifyVarStr v) $* exprType' rhs''
+     v'   <- setIdExported <$> newIdT (reifyVarStr v) $* exprType' rhs''
+     -- pprTraceV "reifyBind v'" (ppr v')
      rule <- mkReifyRule bndrs v v'
      newDefs <- (letFloatTopR' <+ arr (: [])) $* NonRec v' rhs''
-     pprTrace "reifyBind" (ppr v) (return ())
      return (b : newDefs,[rule])
   <+ arr (\ b -> ([b],[]))
  where
    go :: String -> CoreExpr -> TransformH a ([Var],CoreExpr)
+   -- go _ e | pprTrace "go" (ppr e) False = error "WAT"
    go nm e = do guardMsg (not (isTyCoArg e)) "Cannot reify a type or coercion"
-                case e of
-                  Lam v body | isTyVar v || isDictId v ->
+                case (exprType' e, e) of
+                  (_, Lam v body) | isTyVar v || isDictId v ->
                     ((v:) *** Lam v) <$> go nm body
-                  _ ->
-                    ([],) <$> ( tryR ( reifyBetaExpandPlusR nm
-                                     . floatReifies
-                                     . abstractReifies )
-                              . tryR reifyE
-                              . reifyOf e )
+                  (ForAllTy {}, _)                -> etaRetry "t"
+                  (FunTy dom _, _) | isDictTy dom -> etaRetry "eta"
+                  _ -> ([],) <$> ( tryR ( reifyBetaExpandPlusR nm
+                                        . floatReifies
+                                        . abstractReifies )
+                                 . reifyE   -- can fail
+                                 . reifyOf e )
+    where
+      etaRetry etaName = go nm =<< etaExpandR etaName $* e
+
    mkReifyRule :: [Var] -> Id -> Id -> TransformH a CoreRule
    mkReifyRule vs i reI =
      do reifyId <- findIdT reifyName
@@ -691,7 +770,7 @@ reifyBind = -- watchR "reifier" $
                         , ru_local = False
                         }
         -- liftIO $ putStrLn ("Rule: " ++ unpackFS (ru_name rule))
-        -- void (traceR =<< showPprT $* rule)
+        void (traceR =<< showPprT $* rule)
         return rule
     where
       appV v = mkCoreApps (Var v) (varToCoreExpr <$> vs)
@@ -728,7 +807,8 @@ reifyBinds = augmentProgBinds reifyBind
 reifyModule :: ReGuts
 reifyModule =
   -- modGutsR (tryR (walkP anytdR progBindElimR)) >>> -- *
-  unshadowP >>>  -- For easier observation. Remove later.
+  -- tryR unshadowP >>>  -- For easier observation. Remove later.
+  traceR "reifyModule" >>>
   do guts <- id
      (prog',rules) <- reifyBinds $* mg_binds guts
      return guts { mg_binds = prog', mg_rules = mg_rules guts ++ rules }
@@ -847,6 +927,7 @@ externals =
     , externC' "reify-beta-expand-plus" (reifyBetaExpandPlusR "foo")
     , externC' "let-float-lam-lift" letFloatLamLiftR
     , externC' "let-float-with-lift" letFloatWithLiftR
+    , externC' "simplify-expr" simplifyExprR
     ]
 
 --     , externC' "reify" reifyR
