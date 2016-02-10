@@ -30,6 +30,7 @@
 module LambdaCCC.Monomorphize
   ( monomorphizeE, externals
   , abstReprCon, abstReprCase
+  , clobberR
   ) where
 
 import Prelude hiding (id,(.))
@@ -61,7 +62,7 @@ import PrelNames (eqPrimTyConKey,eqReprPrimTyConKey)
 import HERMIT.Extras
   (pattern FunCo, fqVarName, exprType', exprTypeT, ReExpr
   , ($*), externC', onScrutineeR, bashExtendedWithE, newIdT
-  , callSplitT, bashE -- , detickE
+  , callSplitT, bashE, detickE
   )
 
 -- import Monomorph.Stuff (pruneCaseR,standardizeCase,standardizeCon,hasRepMethodF)
@@ -313,7 +314,7 @@ abstReprCon = nowatchR "abstReprCon" $
      -- TODO: better/distinct var names
      let evs = mkVarApps e vs
      (abst,repr) <- mkAbstRepr $* exprType' evs
-     repre' <- nowatchR "clobber repre" clobber $* App repr evs
+     repre' <- nowatchR "clobberR repre" clobberR $* App repr evs
      return (mkCoreLams vs (mkCoreApp abst repre'))
 
 newIdNamedT :: MonadUnique m => Transform c m (String,Type) Id
@@ -341,12 +342,12 @@ abstReprScrutinee =
      let reprScrut = mkCoreApp repr scrut
      v <- newIdT "w" $* exprType' reprScrut
      -- abstv' <- mono [] c (App abst (Var v))
-     abstv' <- nowatchR "clobber abstv" clobber $* App abst (Var v)
+     abstv' <- nowatchR "clobberR abstv" clobberR $* App abst (Var v)
      -- repr scrut gets monomorphized later
      return (Let (NonRec v reprScrut) abstv')
 
-clobber :: ReExpr
-clobber = bashExtendedWithE [{- detickE, -}inlineR]
+clobberR :: ReExpr
+clobberR = bashExtendedWithE [detickE,inlineR]
 
 -- The detickE is an experiment for helping with a ghci issue.
 -- See journal from 2016-02-05.
@@ -443,7 +444,7 @@ externals =
   [
     externC' "abst-repr-case" abstReprCase
   , externC' "abst-repr-con" abstReprCon
-  , externC' "clobber" clobber
+  , externC' "clobber" clobberR
   , externC' "to-dict-con" toDictConR
   , externC' "mono" monomorphizeE
   , externC' "simplify-scrut" simplifyScrut
