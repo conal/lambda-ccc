@@ -51,8 +51,8 @@ Library
                     LambdaCCC.Bitonic
                     LambdaCCC.RadixSort
                     LambdaCCC.Counters
---                     LambdaCCC.Interactive
---                     LambdaCCC.Plugin
+                    LambdaCCC.Interactive
+                    LambdaCCC.Plugin
 
   Other-Modules:
                     LambdaCCC.Tests
