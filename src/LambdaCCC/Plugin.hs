@@ -6,7 +6,7 @@
 
 ----------------------------------------------------------------------
 -- |
--- Module      :  LambdaCCC.Interactive
+-- Module      :  LambdaCCC.Plugin
 -- Copyright   :  (c) 2016 Conal Elliott
 -- License     :  BSD3
 --
@@ -22,20 +22,23 @@ module LambdaCCC.Plugin where
 
 import Prelude hiding ((.))
 
-import Control.Category ((.))
 import GhcPlugins (Plugin)
 import Language.KURE (tryR)
 import HERMIT.Kernel (CommitMsg(..))
 import HERMIT.Plugin
+-- import HERMIT.Plugin.Builder (CorePass(..))
 
--- import Monomorph.Stuff (monomorphizeR)
 import Monomorph.Plugin (tweakPretty)
-import LambdaCCC.Reify
+import LambdaCCC.Reify (reifyModule)
 
 plugin :: Plugin
-plugin = hermitPlugin (pass 0 . const plug)
+plugin = hermitPlugin (const (firstPass plug))
  where
-   plug = tweakPretty >> apply (Always "reify-core") (tryR reifyR)
+   plug = tweakPretty >> apply (Always "reify-core") (tryR reifyModule) -- was reifyR
 
--- I'm experimenting with interleaving monomorphization and reification.
--- See reifyMono.
+-- I also tried using pass 4, which is after
+-- [Simplify,Specialising,FloatOutwards,Simplify]. I thought I needed
+-- Specialising, and then the next two to break up the large let-rec. Now I
+-- think I don't need specialization for reification. The modular, polymorphic
+-- reification works great.
+
