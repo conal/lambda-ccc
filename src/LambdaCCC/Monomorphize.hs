@@ -30,7 +30,7 @@
 module LambdaCCC.Monomorphize
   ( monomorphizeE, externals
   , abstReprCon, abstReprCase
-  , clobberR
+  , clobberR, isDictConstruction
   ) where
 
 import Prelude hiding (id,(.))
