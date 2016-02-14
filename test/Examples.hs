@@ -1,6 +1,3 @@
--- {-# OPTIONS_GHC -fforce-recomp -fplugin=LambdaCCC.Plugin -dcore-lint
---       -O -fobject-code -fno-omit-interface-pragmas -fexpose-all-unfoldings #-}
-
 {-# LANGUAGE CPP, TupleSections, GADTs, TypeOperators, Rank2Types #-}
 {-# OPTIONS_GHC -Wall #-}
 
@@ -20,20 +17,40 @@
 -- Examples / tinkering.
 ----------------------------------------------------------------------
 
+-- {-# OPTIONS_GHC -fplugin=LambdaCCC.Plugin -dcore-lint #-}
+-- {-# OPTIONS_GHC -fplugin-opt=LambdaCCC.Reify:verbose #-}
+{-# OPTIONS_GHC -dsuppress-idinfo #-}
+
+-- {-# OPTIONS_GHC -fplugin-opt=LambdaCCC.Reify:verbose -ddump-rule-firings #-}
+-- {-# OPTIONS_GHC -ddump-rule-rewrites #-}
+
 -- module Examples where
 
 -- import Prelude
 
--- -- Oddly, this import breaks unfolding needed by monomorphize in ghci.
--- import LambdaCCC.Lambda (EP,reifyEP)
+import LambdaCCC.Lambda (EP,reifyEP)
 
-import Data.Monoid (Sum(..))
 import Control.Applicative (liftA2)
 
-import TypeUnary.TyNat
-import TypeUnary.Nat (IsNat,natToZ)
-import TypeUnary.Vec hiding (transpose,iota)
-import qualified TypeUnary.Vec as V
+import LambdaCCC.Run
+
+import Circat.Rep
+
+import ShapedTypes.Nat
+import ShapedTypes.Pair
+import ShapedTypes.Vec
+
+import qualified ShapedTypes.RTree as RT
+
+import LambdaCCC.Misc (Unop,Binop)
+
+import Data.Monoid (Sum(..))
+
+-- import TypeUnary.TyNat
+-- import TypeUnary.Nat (IsNat,natToZ)
+-- import TypeUnary.Vec hiding (transpose,iota)
+-- import qualified TypeUnary.Vec as V
+
 import Control.Compose ((:.)(..),unO)
 
 -- import LambdaCCC.Lambda (reifyEP)
@@ -47,6 +64,8 @@ import qualified LambdaCCC.RadixSort as RS
 
 -- import Circat.Misc (Reversible(..))
 import Circat.Rep (bottom)
+
+{-
 import Circat.Pair (Pair(..),sortP)
 import qualified Circat.Pair as P
 import qualified Circat.RTree as RT
@@ -60,20 +79,14 @@ import Circat.FFT
 -- import qualified Circat.Mealy as Mealy
 -- import Circat.Circuit (GenBuses(..), GS, Attr, systemSuccess)
 import Circat.Complex
+-}
 
 import LambdaCCC.Lambda (reifyEP)
 import LambdaCCC.Run
 
-
 type RTree = RT.Tree
-type LTree = LT.Tree
-type Ragged = Ra.Tree
-
--- foo = reifyEP (sqr :: Int -> Int)
-
--- ghc: panic! (the 'impossible' happened)
---   (GHC version 7.10.3 for x86_64-apple-darwin):
--- 	getIdFromTrivialExpr evalEP @ Int (varP# @ Int "x"#)
+-- type LTree = LT.Tree
+-- type Ragged = Ra.Tree
 
 main = -- do
 #if 0
@@ -125,9 +138,25 @@ main = -- do
 
 --   go "sqr" (sqr :: Int -> Int)
 
+--      go "foo" (fmap not :: Unop (RTree N8 Bool))
+
 --      print (reifyEP (fmap :: Unop Int -> Unop (Pair Int)))
 
---   print (reifyEP (sum :: Pair Int -> Int))
+--      print (reifyEP (fmap (+2) :: Unop (Pair Int)))
+
+--      go "foo" (fmap (+ 2) :: Unop (Vec N1 Int))
+
+--      print (reifyEP (fmap :: Unop Int -> Unop (Vec N2 Int)))
+
+--      go "and-p" (liftA2 (&&) :: Binop (Pair Bool))
+
+--      print (reifyEP (liftA2 (&&) :: Binop (Pair Bool)))
+
+--   go "and-p" (and :: Pair Bool -> Bool)
+
+--   go "sum-p" (sum :: Pair Int -> Int)
+
+--   go "foo" (sum :: RTree N8 Int -> Int)
 
 --   print (reifyEP (sumTI :: RTree N1 Int -> Int))
 
@@ -139,11 +168,19 @@ main = -- do
 
 --   print (reifyEP (and :: RTree N4 Bool -> Bool))
 
---   goSep "and-rt5" 1 (and :: RTree N5 Bool -> Bool)
+--   goSep "foo" 4 (and :: RTree N14 Bool -> Bool)
 
---   go "add-p" (liftA2 (&&) :: Binop (Pair Bool))
+--   go "and" ((&&) :: Binop Bool)
 
-  go "and-rt0" (liftA2 (&&) :: Binop (RTree N0 Bool))  -- chokes
+--   go "foo" ((+) :: Binop Int)
+
+--   go "foo" (uncurry (&&) :: (Bool,Bool) -> Bool)
+
+--   go "and-p" (liftA2 (&&) :: Binop (Pair Bool))
+
+--   goSep "foo" 5 (liftA2 (&&) :: Binop (RTree N8 Bool))  -- chokes
+
+--   go "not" not
 
 --   print (reifyEP not)
 
@@ -169,7 +206,9 @@ main = -- do
 
 --   goSep "transpose-pp" 1 (transpose :: Unop (Pair (Pair Bool)))
 
---   goSep "transpose-rt0p" 0 (sequenceA :: RTree N0 (Pair Bool) -> Pair (RTree N0 Bool))
+--   goSep "transpose-rt3p" 2 (sequenceA :: RTree N3 (Pair Bool) -> Pair (RTree N3 Bool))
+
+  goSep "transpose-rt3rt4" 12 (sequenceA :: RTree N3 (RTree N4 Bool) -> RTree N4 (RTree N3 Bool))
 
   -- go "applyLin-rt23" (($@) :: MatrixT N2 N3 Int -> RTree N2 Int -> RTree N3 Int)
   -- go "composeLin-rt232" ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int)
@@ -181,6 +220,8 @@ main = -- do
 {--------------------------------------------------------------------
     Misc definitions
 --------------------------------------------------------------------}
+
+#if 0
 
 negIncr :: Num a => a -> a
 negIncr = negate . (1 +)
@@ -195,8 +236,6 @@ sumTI (RT.B (u :# v)) = sumTI u + sumTI v
 leftMost :: RTree n a -> a
 leftMost (RT.L a) = a
 leftMost (RT.B (u :# _)) = leftMost u
-
-#if 1
 
 dotG :: (Traversable g, Foldable g, Applicative f, Foldable f, Num a) => g (f a) -> a
 dotG = sum . fmap product . transpose

@@ -67,7 +67,7 @@ goSep name s = go' name [ranksep s]
 
 -- Run an example: reify, CCC, circuit.
 run :: Okay a => String -> [Attr] -> EP a -> IO ()
-run name attrs e = do putStrLn (name ++ " = " ++ show e)
+run name attrs e = do -- putStrLn (name ++ " = " ++ show e)
                       outGV name attrs (unitize' (toCCC e))
 {-# NOINLINE run #-}
 
@@ -85,7 +85,8 @@ goNew name = goNew' name []
 -- Diagram and Verilog
 outGV :: String -> [Attr] -> UU -> IO ()
 outGV name attrs circ =
-  do outD ("pdf","")
+  do -- putStrLn $ "outGV: Graph \n" ++ show g
+     outD ("pdf","")
      -- outD ("svg","") 
      -- outD ("png","-Gdpi=200")
      outV

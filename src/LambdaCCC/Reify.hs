@@ -28,7 +28,7 @@ import Prelude hiding (id,(.))
 import Data.Functor (void)
 import Control.Category (Category(..))
 import Control.Monad ((<=<),unless)
-import Control.Arrow ((>>>),arr,(***))
+import Control.Arrow ((>>>),(<<<),arr,(***))
 import qualified Data.Map as M
 import Data.String (fromString)
 import Data.List (isPrefixOf)
@@ -262,21 +262,20 @@ reifyApp = do App u v <- unReify
 -- TODO: Use arr instead of (constT (return ...))
 -- TODO: refactor so we unReify once and then try variations
 
-varEval :: Var -> TransformU CoreExpr
-varEval v = (evalOf <=< appsE1 varPS [varType v]) (varLitE v)
-
-varSubst :: [Var] -> TransformU (Unop CoreExpr)
-varSubst vs = do vs' <- mapM varEval vs
-                 return (subst (vs `zip` vs'))
+varSubst :: Var -> TransformH a (CoreExpr, Unop CoreExpr)
+varSubst v = do suffix <- show <$> constT getUniqueM
+                let lit = Lit (mkMachString (uqVarName v ++ suffix))
+                ev <- (evalOf <=< appsE1 varPS [varType v]) lit
+                return (lit, subst [(v,ev)])
 
 -- | reify (\ x -> e)  -->  lamv x' (reify (e[x := eval (var x')]))
 reifyLam :: ReExpr
 reifyLam = do Lam v e <- unReify
               guardMsg (not (isTyVar v)) "reifyLam: doesn't handle type lambdas"
               checkReifiableType (idType v)
-              sub     <- varSubst [v]
-              e'      <- reifyOf (sub e)
-              appsE "lamvP#" [varType v, exprType' e] [varLitE v,e']
+              (litE,sub) <- varSubst v
+              e'         <- reifyOf (sub e)
+              appsE "lamvP#" [varType v, exprType' e] [litE,e']
 
 -- TODO: Switch to HOAS.
 
@@ -294,6 +293,10 @@ letTrivialSubstR =
  where
    trivial e = exprIsTrivial e || isEval e || isDict e
 
+-- TODO: revisit the single-occurrence criterion, and maybe avoid substituting
+-- under lambdas. Hermit has some useful functionality, but take care about what
+-- it (and GHC) consider trivial.
+
 -- When rhs = eval (var x), reify will make it var x. We don't introduce eval
 -- any other way.
 
@@ -304,9 +307,9 @@ reifyLet =
      -- guardMsgM (worthLet rhs) "trivial let"
      checkReifiableType (idType v)
      rhsE  <- reifyOf rhs
-     sub   <- varSubst [v]
+     (litE,sub) <- varSubst v
      bodyE <- reifyOf (sub body)
-     appsE "letvP#" [varType v, exprType' body] [varLitE v, rhsE,bodyE]
+     appsE "letvP#" [varType v, exprType' body] [litE, rhsE,bodyE]
 
 -- | Float a let out of a reify. Try if reifyLet fails.
 reifyLetFloat :: ReExpr
@@ -525,7 +528,8 @@ anyArgR :: Unop ReExpr
 anyArgR re = appAnyR (anyArgR re) re
 
 reifySimplify :: ReExpr
-reifySimplify = {- reifyMisc . -} inReify (repeatR simplifyOneStepE)
+-- reifySimplify = inReify (repeatR simplifyOneStepE)
+reifySimplify = inReify simplifyOneStepE
 
 -- Note: reifySimplify must also do another (eventually non-simplification) reify step
 
@@ -533,7 +537,6 @@ simplifyOneStepE :: ReExpr
 simplifyOneStepE = -- watchR "simplifyOneStepE" $
      watchR "etaReduceR" etaReduceR
   <+ watchR "betaReduceR" betaReduceR  -- to Let
-  <+ watchR "unfoldBasicCombinatorR" unfoldBasicCombinatorR
   <+ watchR "letElimR" letElimR
   <+ watchR "letTrivialSubstR" letTrivialSubstR
   <+ watchR "caseReduceR" (caseReduceR False)
@@ -572,34 +575,27 @@ reifyOops =
      str <- showPprT
      appsE "reifyOopsEP#" [ty] [Lit (mkMachString str)]
 
-miscL :: [(String,ReExpr)]
-miscL = [ ---- Special applications and so must come before reifyApp
-          ("reifyEval"     , reifyEval)
-        , ("reifyRepMeth"  , reifyRepMeth)
-        , ("reifyStdMeth"  , reifyStdMeth)
-        , ("reifyIf"       , reifyIf)
-        , ("reifyBottom"   , reifyBottom)
-        , ("reifyDelay"    , reifyDelay)
-        , ("reifyLoop"     , reifyLoop)
-        , ("reifyLit"      , reifyLit)
-        , ("reifyApp"      , reifyApp)
-        , ("reifyLam"      , reifyLam)
-        , ("reifyLet"      , reifyLet)
-        , ("reifyPrim'"    , reifyPrim')
-        , ("reifyReified"  , reifyReified)
-        , ("reifySimplify" , reifySimplify)
-        -- After reifySimplify
-        , ("reifyLetFloat" , reifyLetFloat)
-        , ("reifyUnfold"   , reifyUnfold)  -- last resort
-        ]
+reifyMisc :: ReExpr
+reifyMisc = lintExprR' <<<
+       watchR "reifyEval"     reifyEval
+  <+   watchR "reifyRepMeth"  reifyRepMeth
+  <+   watchR "reifyStdMeth"  reifyStdMeth
+  <+   watchR "reifyIf"       reifyIf
+  <+   watchR "reifyBottom"   reifyBottom
+  <+   watchR "reifyDelay"    reifyDelay
+  <+   watchR "reifyLoop"     reifyLoop
+  <+   watchR "reifyLit"      reifyLit
+  <+   watchR "reifyApp"      reifyApp -- special apps must come earlier
+  <+   watchR "reifyLam"      reifyLam
+  <+   watchR "reifyLet"      reifyLet
+  <+   watchR "reifyPrim'"    reifyPrim'
+  <+   watchR "reifyReified"  reifyReified
+  <+ nowatchR "reifySimplify" reifySimplify
+  <+   watchR "reifyLetFloat" reifyLetFloat
+  <+   watchR "reifyUnfold"   reifyUnfold  -- last resort
 
 -- TODO: move reifyPrim to before reifyApp. Faster?
 -- Does reifyApp eventually fail on primitives?
-
-reifyMisc :: ReExpr
-reifyMisc = lintExprR'
-          . catchesL miscL
-          -- . simpleOptExprR
 
 -- TODO: either comment out lintExprR' when not debugging or have it turned on
 -- only in verbose mode (getVerboseT).

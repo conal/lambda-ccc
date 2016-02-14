@@ -11,3 +11,6 @@
 -- :set -i../../circat/src
 -- To help when switching between circat and lambda-ccc in Emacs.
 :set -package applicative-numbers
+
+-- For AbsTy in examples 
+:set -package circat

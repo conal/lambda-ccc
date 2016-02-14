@@ -182,7 +182,7 @@ toDictConR = watchR "toDictConR" $
 
 isDictConstruction :: CoreExpr -> Bool
 isDictConstruction e@(collectArgs -> (Var v,_)) =
-  isDataConId v && isDictTy (exprType' e)
+  isDictTy (exprType' e) && isGlobalId v
 isDictConstruction _ = False
 
 isMono :: CoreExpr -> Bool
