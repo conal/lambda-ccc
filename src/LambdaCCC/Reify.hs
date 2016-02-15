@@ -29,6 +29,7 @@ import Data.Functor (void)
 import Control.Category (Category(..))
 import Control.Monad ((<=<),unless)
 import Control.Arrow ((>>>),(<<<),arr,(***))
+import Data.Maybe (isJust)
 import qualified Data.Map as M
 import Data.String (fromString)
 import Data.List (isPrefixOf)
@@ -47,14 +48,14 @@ import HERMIT.External (External)
 -- GHC
 import TcType (isIntegerTy)
 import Kind (isUnliftedTypeKind)
-import PrelNames (ioTyConName)
+import PrelNames (ioTyConName,eitherTyConName)
 
 import Circat.Misc ((<~))
 
 import HERMIT.Extras hiding (findTyConT,observeR',catchesL,simplifyE)
 import qualified HERMIT.Extras as Ex -- (Observing, observeR', catchesL, labeled)
 
-import Monomorph.Stuff (hasRepMethod, caseDefaultR, simplifyE, castFloatR)
+import Monomorph.Stuff (hasRepMethod, caseDefaultR, simplifyE, castFloatR, betaReducePlusSaferR)
 import LambdaCCC.Monomorphize (abstReprCase,abstReprCon,isDictConstruction)
 
 {--------------------------------------------------------------------
@@ -63,6 +64,10 @@ import LambdaCCC.Monomorphize (abstReprCase,abstReprCon,isDictConstruction)
 
 unshadowE :: ReExpr
 unshadowE = extractR unshadowR
+
+-- | Like 'caseFloatAppR' but cascades through applications.
+caseFloatAppsR :: ReExpr
+caseFloatAppsR = caseFloatAppR . (appAllR caseFloatAppsR id <+ id)
 
 -- TODO: Move more utilities here from the code below
 
@@ -473,15 +478,6 @@ isReifyRule = ("reify " `isPrefixOf`) . unpackFS . ru_name
 getReifyRules :: TransformH a [CoreRule]
 getReifyRules = filter isReifyRule . map snd <$> getHermitRulesT
 
--- | (foo ... dict ty1 ... tyn) --> $foo_meth ty1 ... tyn
-extractMethodR :: ReExpr
-extractMethodR =
-  do (f@(Var _), break isDict -> (preDict,dict:postDict)) <- arr collectArgs
-     guardMsg (all isTypeArg preDict && all isTyOrDict postDict)
-              "Arguments are not all types or dictionaries"
-     reduced <- (caseReduceUnfoldR True . unfoldR) $* mkCoreApps f (preDict ++ [dict])
-     return $ mkCoreApps reduced postDict
-
 -- Already reified, so reuse.
 reifyReified :: ReExpr
 reifyReified =
@@ -512,12 +508,43 @@ inScope e = (mkInScopeSet (localFreeVarsExpr e),idUnfolding)
 -- add some context with reify rules indexed by their main argument.
 -- Incrementally adjust during module compilation as we new rules.
 
--- Last resort. Not included in reifySimplify.
+-- reifyUnfold :: ReExpr
+-- reifyUnfold = inReify $
+--   do (h@(Var f), args) <- callTyDictsT
+--      guardMsg (all isTyOrDict args) "Arguments are not all types or dictionaries"
+--      if isJust (isClassOpId_maybe f) then
+--        -- For class-ops, 
+--        -- | (foo ... dict ty1 ... tyn) --> $foo_meth ty1 ... tyn
+--        do (tys,dict:postDict) <- return (break isDict args)
+--           reduced <- ((caseReduceR True <+ caseReduceUnfoldR True) . unfoldR) -- *
+--                        $* mkCoreApps h (tys ++ [dict])
+--           return $ mkCoreApps reduced postDict
+--       else
+--        tryR (anybuE detickE) . unfoldR    
+
+-- * TODO: more dependable way to drive scrutinee to a constructor, followed by
+-- caseReduceR.
+
 reifyUnfold :: ReExpr
-reifyUnfold = inReify $ callTyDictsT >> tryR (anybuE detickE) . unfoldR
+reifyUnfold = inReify $
+  do (h@(Var f), args) <- callTyDictsT
+     guardMsg (all isTyOrDict args) "Arguments are not all types or dictionaries"
+     if isJust (isClassOpId_maybe f) then
+       -- For class-ops, 
+       -- | (foo ... dict ty1 ... tyn) --> $foo_meth ty1 ... tyn
+       do (tys,dict:postDict) <- return (break isDict args)
+          guardMsgM (nonLocal $* dict) "dictionary argument is local"
+          reduced <- unfoldR $* mkCoreApps h (tys ++ [dict])
+          return $ mkCoreApps reduced postDict
+      else
+       tryR (anybuE detickE) . unfoldR    
 
 -- The detickE is an experiment for helping with a ghci issue.
 -- See journal from 2016-02-05.
+
+nonLocal :: TransformH CoreExpr Bool
+nonLocal = (callDataConT >> return True) <+ nonLocal . (simplifyOneStepE <+ unfoldR)
+-- TODO: Maybe pare down simplifyOneStepE for use here
 
 -- Dictionary variables often get casts that become vacuous.
 -- Look for in a method argument.
@@ -528,43 +555,56 @@ anyArgR :: Unop ReExpr
 anyArgR re = appAnyR (anyArgR re) re
 
 reifySimplify :: ReExpr
--- reifySimplify = inReify (repeatR simplifyOneStepE)
 reifySimplify = inReify simplifyOneStepE
-
--- Note: reifySimplify must also do another (eventually non-simplification) reify step
+-- reifySimplify = inReify (repeatR simplifyOneStepE)
 
 simplifyOneStepE :: ReExpr
 simplifyOneStepE = -- watchR "simplifyOneStepE" $
      watchR "etaReduceR" etaReduceR
-  <+ watchR "betaReduceR" betaReduceR  -- to Let
+  -- <+ watchR "betaReduceR" betaReduceR  -- to Let
+  <+ watchR "betaReducePlusSaferR" betaReducePlusSaferR  -- to Let
   <+ watchR "letElimR" letElimR
   <+ watchR "letTrivialSubstR" letTrivialSubstR
   <+ watchR "caseReduceR" (caseReduceR False)
-  <+ watchR "caseReduceUnfoldR" (caseReduceUnfoldR False)
+  -- <+ watchR "caseReduceUnfoldR" (caseReduceUnfoldR False)
   <+ watchR "letFloatCaseR" letFloatCaseR
   <+ watchR "caseFloatCaseR" caseFloatCaseR
+  <+ watchR "caseFloatAppsR" caseFloatAppsR
   <+ watchR "caseDefaultR" caseDefaultR
   <+ watchR "pairCaseToLet" pairCaseToLet
   <+ watchR "detickE" detickE  -- done elsewhere. still needed here?
   <+ watchR "abstReprCase" abstReprCase
   <+ watchR "abstReprCon" abstReprCon
+  <+ watchR "simplifyScrutineeR" simplifyScrutineeR
   -- <+ watchR "castFloatR" castFloatR  -- combination and elim, too. rename.
   <+ watchR "recastR" recastR
   <+ watchR "argCastSimplify" argCastSimplify
-  <+ watchR "extractMethodR" extractMethodR
   <+ watchR "castFloatApps" castFloatApps
 
--- Warning:
---
--- -- | Use GHC expression simplifier and succeed if different. Sadly, the check
--- -- gives false positives, which spoils its usefulness.
--- simplifyExprR :: ReExpr
+simplifyScrutineeR :: ReExpr
+simplifyScrutineeR = -- (observeV "simplifyScrutineeR" >>>) $
+  onScrutineeR $
+    do guardMsgM (not . isStandardType <$> exprTypeT) "scrutinee has standard type"
+       simplifyOneStepE <+ unfoldGentlyR
 
--- Worse, with the addition of `simplifyReify` (which wraps GHC's
--- `simplifyExpr`), the compiler loops. I added this rule, hoping to get my
--- `reify` rules to fire, especially across modules. Apparently, `reifySimplify`
--- wants to float casts outward, and `simplifyReify` wants to float casts
--- inward.
+isStandardType :: Type -> Bool
+isStandardType (coreView -> Just ty) = isStandardType ty
+isStandardType (TyConApp tc args) | isStandardTC tc = all isStandardType args
+isStandardType (FunTy dom ran) = isStandardType dom && isStandardType ran
+isStandardType _ = False
+
+isStandardTC :: TyCon -> Bool
+isStandardTC tc = (tc `elem` [unitTyCon, boolTyCon, intTyCon])
+               || isPairTC tc
+               -- || tyConName tc == eitherTyConName    -- no eitherTyCon
+
+-- | Like 'unfoldR', but doesn't betaReducePlusR, which can duplicate reification work.
+unfoldGentlyR :: ReExpr
+unfoldGentlyR = onAppsHead inlineR
+
+onAppsHead :: Unop ReExpr
+onAppsHead re = do (h,args) <- arr collectArgs
+                   flip mkCoreApps args <$> (re $* h)
 
 -- Use in a final pass to generate helpful error messages for non-reified
 -- syntax.
@@ -1126,8 +1166,8 @@ externals =
     , externC' "let-float-reifier" letFloatReifier
     , externC' "pair-case-to-let" pairCaseToLet
     , externC' "simplify-expr" simplifyExprR
-    , externC' "extract-method" extractMethodR
     , externC' "unfold-driver" unfoldDriver
+    , externC' "simplify-scrutinee" simplifyScrutineeR
     ]
 
 --     , externC' "reify" reifyR
