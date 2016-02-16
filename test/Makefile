@@ -39,6 +39,13 @@ goX:	X
 # 
 # -ddump-simpl -ddump-simpl-stats -ddump-to-file 
 
+SH = ../../shaped-types/dist/build/ShapedTypes
+
+%.iface: $(SH)/%.hi
+	ghc --show-iface $(SH)/$*.hi > $*.iface
+
+ifaces: Pair.iface Vec.iface RPow.iface LPow.iface
+
 %.hi %.o: ../dist %.hs
 	ghc $*.hs
 

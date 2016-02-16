@@ -21,7 +21,7 @@
 -- {-# OPTIONS_GHC -fplugin-opt=LambdaCCC.Reify:verbose #-}
 {-# OPTIONS_GHC -dsuppress-idinfo #-}
 
--- {-# OPTIONS_GHC -fplugin-opt=LambdaCCC.Reify:verbose -ddump-rule-firings #-}
+-- {-# OPTIONS_GHC -ddump-rule-firings #-}
 -- {-# OPTIONS_GHC -ddump-rule-rewrites #-}
 
 -- module Examples where
@@ -40,7 +40,8 @@ import ShapedTypes.Nat
 import ShapedTypes.Pair
 import ShapedTypes.Vec
 
-import qualified ShapedTypes.RTree as RT
+import qualified ShapedTypes.RPow as R
+import qualified ShapedTypes.LPow as L
 
 import LambdaCCC.Misc (Unop,Binop)
 
@@ -84,134 +85,35 @@ import Circat.Complex
 import LambdaCCC.Lambda (reifyEP)
 import LambdaCCC.Run
 
-type RTree = RT.Tree
--- type LTree = LT.Tree
+type RTree n = Pair R.^^ n
+type LTlee n = Pair L.^^ n
+
 -- type Ragged = Ra.Tree
 
-main = -- do
-#if 0
-  print (reifyEP (id 3 :: Int))
-  print (reifyEP (negate :: Int -> Int))
-  print (reifyEP (\ x -> negate (negate x) :: Int))
-  print (reifyEP (id :: Int -> Int))
-  print (reifyEP ((1 +) :: Int -> Int))
-  print (reifyEP (negate . (1 +) :: Int -> Int))
-  print (reifyEP (let f :: Num a => a -> a
-                      f = negate
-                  in
-                    (f :: Int -> Int)))
-#endif
-
---   print (reifyEP (fromInteger :: Integer -> Int))
-
---   print (reifyEP (let x :: Num a => a
---                       x = 1
---                   in
---                     (x :: Int)))
-
---   print (reifyEP (let f :: Num a => a -> a
---                       f = negate . (1 +)
---                   in
---                     (f :: Int -> Int)))
-
---   print (reifyEP (let f :: Num a => a -> a
---                       f = negate . (1 +)
---                   in
---                     (f :: Int -> Int)))
-
---   print (reifyEP (negIncr :: Int -> Int))
-
-  -- Monomorphization works:
-  -- go "foo" (\ x -> x :: Int)
-
---   go "three" (1 + 2 :: Int)
-
-  -- go "nine" (sqr (1 + 2 :: Int))
-
---   go "negateI" (negate :: Int -> Int)
-
---   go "negIncr" (negIncr :: Int -> Int)
-
---   go "foo" (3 :: Int)  -- I#
-
---   go "sqrI" (sqr :: Int -> Int)
-
---   go "sqr" (sqr :: Int -> Int)
-
---      go "foo" (fmap not :: Unop (RTree N8 Bool))
-
---      print (reifyEP (fmap :: Unop Int -> Unop (Pair Int)))
-
---      print (reifyEP (fmap (+2) :: Unop (Pair Int)))
-
---      go "foo" (fmap (+ 2) :: Unop (Vec N1 Int))
-
---      print (reifyEP (fmap :: Unop Int -> Unop (Vec N2 Int)))
-
---      go "and-p" (liftA2 (&&) :: Binop (Pair Bool))
-
---      print (reifyEP (liftA2 (&&) :: Binop (Pair Bool)))
-
---   go "and-p" (and :: Pair Bool -> Bool)
+main = do
 
 --   go "sum-p" (sum :: Pair Int -> Int)
 
---   go "foo" (sum :: RTree N8 Int -> Int)
-
---   print (reifyEP (sumTI :: RTree N1 Int -> Int))
-
---      go "leftmost-r8" (leftMost :: RTree N8 Int -> Int)
-
---      print (reifyEP (leftMost :: RTree N5 Int -> Int))
-
---   print (reifyEP (sum :: RTree N2 Int -> Int))
-
---   print (reifyEP (and :: RTree N4 Bool -> Bool))
-
---   goSep "foo" 4 (and :: RTree N14 Bool -> Bool)
-
---   go "and" ((&&) :: Binop Bool)
-
---   go "foo" ((+) :: Binop Int)
-
---   go "foo" (uncurry (&&) :: (Bool,Bool) -> Bool)
-
 --   go "and-p" (liftA2 (&&) :: Binop (Pair Bool))
 
---   goSep "foo" 5 (liftA2 (&&) :: Binop (RTree N8 Bool))  -- chokes
+--   go "foo" (liftA2 (&&) :: Binop (RTree N1 Bool))  -- mysterious residual
 
---   go "not" not
+--   goSep "and-lv5-3" 3 (and :: (Vec N5 L.^^ N3) Bool -> Bool)
 
---   print (reifyEP not)
+--   goSep "map-rt6" 3 (fmap not :: Unop (RTree N6 Bool))
 
---   print (reifyEP ((,) :: Bool -> Bool -> (Bool,Bool)))
-
---   print (reifyEP (False,True))
-
---   print (reifyEP (fmap not :: Unop (Pair Bool)))
-
---   go "map-not-rt6" (fmap not :: Unop (RTree N6 Bool))
-
---   goSep "sumrt2" 1 (sum :: RTree N2 Int -> Int)
-
-  -- goSep "maprt8" 4 (fmap sqr :: Unop (RTree N8 Int))
-
---   goSep "dot-prt4" 1 (dotG :: Pair (RTree N4 Int) -> Int)
-
---   go "foo" ((:#) :: Bool -> Bool -> Pair Bool)
-
---   print (reifyEP ((\ (a :# b) -> a :# b) :: Unop (Pair w)))
-
---   go "foo" ((\ (a :# b) -> a :# b) :: Unop (Pair Bool))
+--   goSep "dot-prt8" 3 (dotG :: Pair (RTree N8 Int) -> Int)
 
 --   goSep "transpose-pp" 1 (transpose :: Unop (Pair (Pair Bool)))
 
 --   goSep "transpose-rt3p" 2 (sequenceA :: RTree N3 (Pair Bool) -> Pair (RTree N3 Bool))
 
-  goSep "transpose-rt3rt4" 12 (sequenceA :: RTree N3 (RTree N4 Bool) -> RTree N4 (RTree N3 Bool))
+--   goSep "transpose-rt3rt4" 12 (sequenceA :: RTree N3 (RTree N4 Bool) -> RTree N4 (RTree N3 Bool))
 
-  -- go "applyLin-rt23" (($@) :: MatrixT N2 N3 Int -> RTree N2 Int -> RTree N3 Int)
-  -- go "composeLin-rt232" ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int)
+--   goSep "applyLin-rt34" 3 (($@) :: MatrixT N3 N4 Int -> RTree N3 Int -> RTree N4 Int)
+
+--   go "composeLin-rt232" ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int)
+
   -- go "lsums-p" (lsums :: Pair Int -> (Pair Int, Int))
   -- goSep "lsums-rt9" 15 (lsums :: RTree N9 Int -> (RTree N9 Int, Int))
   -- go "lsums-rt0" (lsums :: RTree N0 Int -> (RTree N0 Int, Int))
@@ -221,8 +123,6 @@ main = -- do
     Misc definitions
 --------------------------------------------------------------------}
 
-#if 0
-
 negIncr :: Num a => a -> a
 negIncr = negate . (1 +)
 
@@ -230,12 +130,12 @@ sqr :: Num a => a -> a
 sqr x = x * x
 
 sumTI :: RTree n Int -> Int
-sumTI (RT.L a) = a
-sumTI (RT.B (u :# v)) = sumTI u + sumTI v
+sumTI (R.L a) = a
+sumTI (R.B (u :# v)) = sumTI u + sumTI v
 
 leftMost :: RTree n a -> a
-leftMost (RT.L a) = a
-leftMost (RT.B (u :# _)) = leftMost u
+leftMost (R.L a) = a
+leftMost (R.B (u :# _)) = leftMost u
 
 dotG :: (Traversable g, Foldable g, Applicative f, Foldable f, Num a) => g (f a) -> a
 dotG = sum . fmap product . transpose
@@ -249,7 +149,7 @@ u <.> v = dotG (u :# v)
 
 type Matrix  m n a = Vec    n (Vec    m a)
 type MatrixT m n a = RTree  n (RTree  m a)
-type MatrixG p q a = Ragged q (Ragged p a)
+-- type MatrixG p q a = Ragged q (Ragged p a)
 
 infixr 1 $@
 -- infixl 9 .@
@@ -269,6 +169,7 @@ mat $@ vec = (<.> vec) <$> mat
 -- no .@ mn = (\ n -> (n <.>) <$> transpose mn) <$> no
 no .@ mn = transpose ((no $@) <$> transpose mn)
 
+#if 0
 {--------------------------------------------------------------------
     Permutations
 --------------------------------------------------------------------}
@@ -277,42 +178,42 @@ invertR :: IsNat n => RTree n a -> LTree n a
 invertR = invertR' nat
 
 invertR' :: Nat n -> RTree n a -> LTree n a
-invertR' Zero     = \ (RT.L a ) -> LT.L a
-invertR' (Succ m) = \ (RT.B ts) -> LT.B (invertR' m (transpose ts))
--- invertR' (Succ m) = \ (RT.B ts) -> LT.B (transpose (invertR' m <$> ts))
+invertR' Zero     = \ (R.L a ) -> L.L a
+invertR' (Succ m) = \ (R.B ts) -> L.B (invertR' m (transpose ts))
+-- invertR' (Succ m) = \ (R.B ts) -> L.B (transpose (invertR' m <$> ts))
 
 #if 0
-RT.unB    :: RTree (S n)   a  -> Pair (RTree n a)
+R.unB    :: RTree (S n)   a  -> Pair (RTree n a)
 transpose :: Pair (RTree n a) -> RTree n (Pair a)
 invertR   :: RTree n (Pair a) -> LTree n (Pair a)
-LT.B      :: LTree n (Pair a) -> LTree (S n)   a
+L.B      :: LTree n (Pair a) -> LTree (S n)   a
 
-RT.unB       :: RTree (S n)   a  -> Pair (RTree n a)
+R.unB       :: RTree (S n)   a  -> Pair (RTree n a)
 fmap invertR :: Pair (RTree n a) -> Pair (LTree n a)
 transpose    :: Pair (LTree n a) -> LTree n (Pair a)
-LT.B         :: LTree n (Pair a) -> LTree (S n)   a
+L.B         :: LTree n (Pair a) -> LTree (S n)   a
 #endif
 
 -- We needed the IsNat n for Applicative on RTree n.
 -- The reverse transformation is easier, since we know Pair is Applicative.
 
 invertL :: LTree n a -> RTree n a
-invertL (LT.L a ) = RT.L a
-invertL (LT.B ts) = RT.B (transpose (invertL ts))
--- invertL (LT.B ts) = RT.B (invertL <$> transpose ts)
+invertL (L.L a ) = R.L a
+invertL (L.B ts) = R.B (transpose (invertL ts))
+-- invertL (L.B ts) = R.B (invertL <$> transpose ts)
 
--- invertR' (Succ m) = \ (RT.B ts) -> LT.B (transpose (invertR' m <$> ts))
+-- invertR' (Succ m) = \ (R.B ts) -> L.B (transpose (invertR' m <$> ts))
 
 #if 0
-LT.unB    :: LTree (S n)   a  -> LTree n (Pair a)
+L.unB    :: LTree (S n)   a  -> LTree n (Pair a)
 invertL   :: LTree n (Pair a) -> RTree n (Pair a)
 transpose :: RTree n (Pair a) -> Pair (RTree n a)
-RT.B      :: Pair (RTree n a) -> RTree (S n)   a
+R.B      :: Pair (RTree n a) -> RTree (S n)   a
 
-LT.unB       :: LTree (S n)   a  -> LTree n (Pair a)
+L.unB       :: LTree (S n)   a  -> LTree n (Pair a)
 transpose    :: LTree n (Pair a) -> Pair (LTree n a)
 fmap invertL :: Pair (LTree n a) -> Pair (RTree n a)
-RT.B         :: Pair (RTree n a) -> RTree (S n)   a
+R.B         :: Pair (RTree n a) -> RTree (S n)   a
 #endif
 
 #endif

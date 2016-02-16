@@ -1,0 +1,31 @@
+set-pp-renderer ascii
+set-pp-width 80
+
+set-pp-type Omit
+set-pp-coercion Omit
+
+set-pp-type Show
+set-pp-coercion Kind
+
+-- set-pp-coercion Show
+
+-- try simplify
+
+reify-module
+
+lint-module
+
+rhs-of 'main
+
+-- application-of 'run
+
+-- tickle-reifies
+
+application-of 'reifyEP
+
+-- prog
+
+
+----
+
+-- application-of 'sum
