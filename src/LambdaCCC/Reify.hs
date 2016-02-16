@@ -556,17 +556,17 @@ anyArgR re = appAnyR (anyArgR re) re
 
 reifySimplify :: ReExpr
 reifySimplify = inReify simplifyOneStepE
--- reifySimplify = inReify (repeatR simplifyOneStepE)
+
+-- I used to repeatR the simplifyOneStepE, but doing so prevents other reify
+-- rules from intervening.
 
 simplifyOneStepE :: ReExpr
 simplifyOneStepE = -- watchR "simplifyOneStepE" $
      watchR "etaReduceR" etaReduceR
-  -- <+ watchR "betaReduceR" betaReduceR  -- to Let
   <+ watchR "betaReducePlusSaferR" betaReducePlusSaferR  -- to Let
   <+ watchR "letElimR" letElimR
   <+ watchR "letTrivialSubstR" letTrivialSubstR
   <+ watchR "caseReduceR" (caseReduceR False)
-  -- <+ watchR "caseReduceUnfoldR" (caseReduceUnfoldR False)
   <+ watchR "letFloatCaseR" letFloatCaseR
   <+ watchR "caseFloatCaseR" caseFloatCaseR
   <+ watchR "caseFloatAppsR" caseFloatAppsR
@@ -576,10 +576,11 @@ simplifyOneStepE = -- watchR "simplifyOneStepE" $
   <+ watchR "abstReprCase" abstReprCase
   <+ watchR "abstReprCon" abstReprCon
   <+ watchR "simplifyScrutineeR" simplifyScrutineeR
-  -- <+ watchR "castFloatR" castFloatR  -- combination and elim, too. rename.
   <+ watchR "recastR" recastR
   <+ watchR "argCastSimplify" argCastSimplify
   <+ watchR "castFloatApps" castFloatApps
+
+  -- <+ watchR "castFloatR" castFloatR  -- combination and elim, too. rename.
 
 simplifyScrutineeR :: ReExpr
 simplifyScrutineeR = -- (observeV "simplifyScrutineeR" >>>) $
@@ -785,7 +786,7 @@ recastF (regularizeType -> a) (regularizeType -> b) =
   idRC <+ reprR <+ abstR <+ funR <+ oopsR
  where
     idRC  = do guardMsg (a =~= b) "recast id: types differ"
-               idId <- findIdT "id"
+               idId <- findIdT "Prelude.id"
                return $ Var idId `App` Type a
     reprR = do f <- hasRepMethod "repr" $* a
                (a',b') <- unJustT $* splitFunTy_maybe (exprType' f)
@@ -900,6 +901,7 @@ lamBound v t = transform (\ c -> applyT t (addLambdaBinding v c @@ Lam_Body))
 -- | Expand drivers to reveal reify calls, and transform reify calls away.
 tickleReifies :: ReExpr
 tickleReifies = -- watchR "tickleReifies" $
+  --  tryR (anytdE reifyOops) .  -- sometimes helps debugging
     tryR (anytdE (repeatR reifyMisc))
   . tryR (anytdE (repeatR unfoldDriver))
 
@@ -922,7 +924,6 @@ reifyBind = -- watchR "reifier" $
      void $ observeV "reified version" $* Let b' ruleRhs
      pprTraceV "reifyBind b'" (ppr b')
      rule <- mkReifyRule bndrs v (snd (collectBinders ruleRhs))
-
      return ([b,b'],[rule])
   <+ ( arr (\ b -> ([b],[])) . tryR (nonRecAllR id tickleReifies) )
   -- TODO: Rec
@@ -1093,7 +1094,8 @@ reifyNamePrefix :: String
 reifyNamePrefix = "$reify_"
 
 letFloatReifier :: ReExpr
-letFloatReifier = acceptR isLetReifier . (letFloatExprR <+ letFloatLamLiftR)
+letFloatReifier = -- letAllR (nonRecAllR id (tryR (anytdE reifyOops))) id . -- debugging aid
+                  acceptR isLetReifier . (letFloatExprR <+ letFloatLamLiftR)
  where
    isLetReifier (Let (NonRec v _) _) = isPrefixOf reifyNamePrefix (uqVarName v)
    isLetReifier _ = False
