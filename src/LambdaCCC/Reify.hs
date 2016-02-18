@@ -34,6 +34,8 @@ import qualified Data.Map as M
 import Data.String (fromString)
 import Data.List (isPrefixOf)
 
+import GHC.Float () -- experiment. didn't work.
+
 import HERMIT.Context (AddBindings,addLambdaBinding,addBindingGroup,HermitC,HasCoreRules(..))
 import HERMIT.Core (Crumb(..),localFreeIdsExpr,substCoreExpr,CoreProg(..),progToBinds,isCoArg,freeVarsExpr,localFreeVarsExpr)
 import HERMIT.GHC hiding (mkStringExpr)
@@ -342,7 +344,7 @@ reifyBottom =
      dict <- simpleDict ("Circat.Prim.CircuitBot") $* [ty]
      appsE "bottomEP" [ty] [dict]
 
--- TODO: Combine reifyBottom with reifyStdMeths?
+-- TODO: Combine reifyBottom with reifyStdMeth?
 
 -- TODO: factor out commonalities between reifyIf and reifyBottom.
 
@@ -418,6 +420,9 @@ pairCaseToLet =
      sndW <- wPart "snd"
      return $
        mkCoreLets [NonRec w' scrut, NonRec a fstW, NonRec b sndW] rhs
+
+reifyPairCase :: ReExpr
+reifyPairCase = inReify pairCaseToLet
 
 reifyPrim :: ReExpr
 reifyPrim =
@@ -525,6 +530,7 @@ inScope e = (mkInScopeSet (localFreeVarsExpr e),idUnfolding)
 -- * TODO: more dependable way to drive scrutinee to a constructor, followed by
 -- caseReduceR.
 
+-- Unfold under reify.
 reifyUnfold :: ReExpr
 reifyUnfold = inReify $
   do (h@(Var f), args) <- callTyDictsT
@@ -568,10 +574,10 @@ simplifyOneStepE = -- watchR "simplifyOneStepE" $
   <+ watchR "letTrivialSubstR" letTrivialSubstR
   <+ watchR "caseReduceR" (caseReduceR False)
   <+ watchR "letFloatCaseR" letFloatCaseR
+  <+ watchR "letFloatAppR" letFloatAppR  -- maybe letFloatExprR to replace these two
   <+ watchR "caseFloatCaseR" caseFloatCaseR
   <+ watchR "caseFloatAppsR" caseFloatAppsR
   <+ watchR "caseDefaultR" caseDefaultR
-  <+ watchR "pairCaseToLet" pairCaseToLet
   <+ watchR "detickE" detickE  -- done elsewhere. still needed here?
   <+ watchR "abstReprCase" abstReprCase
   <+ watchR "abstReprCon" abstReprCon
@@ -579,8 +585,9 @@ simplifyOneStepE = -- watchR "simplifyOneStepE" $
   <+ watchR "recastR" recastR
   <+ watchR "argCastSimplify" argCastSimplify
   <+ watchR "castFloatApps" castFloatApps
+  <+ watchR "castFloatR" castFloatR  -- combination and elim, too. rename.
 
-  -- <+ watchR "castFloatR" castFloatR  -- combination and elim, too. rename.
+--   <+ watchR "pairCaseToLet" pairCaseToLet
 
 simplifyScrutineeR :: ReExpr
 simplifyScrutineeR = -- (observeV "simplifyScrutineeR" >>>) $
@@ -590,18 +597,17 @@ simplifyScrutineeR = -- (observeV "simplifyScrutineeR" >>>) $
 
 isStandardType :: Type -> Bool
 isStandardType (coreView -> Just ty) = isStandardType ty
-isStandardType (TyConApp tc args) | isStandardTC tc = all isStandardType args
+isStandardType (TyConApp tc args) | isPairTC tc = all isStandardType args
 isStandardType (FunTy dom ran) = isStandardType dom && isStandardType ran
-isStandardType _ = False
-
-isStandardTC :: TyCon -> Bool
-isStandardTC tc = (tc `elem` [unitTyCon, boolTyCon, intTyCon])
-               || isPairTC tc
-               -- || tyConName tc == eitherTyConName    -- no eitherTyCon
+isStandardType ty = isPrimitiveTy ty
 
 -- | Like 'unfoldR', but doesn't betaReducePlusR, which can duplicate reification work.
 unfoldGentlyR :: ReExpr
-unfoldGentlyR = onAppsHead inlineR
+unfoldGentlyR = watchR "unfoldGentlyR" $
+                onAppsHead (acceptR okay >> inlineR)
+ where
+   okay (Var v) = not (isRepMeth (fqVarName v))
+   okay _ = False
 
 onAppsHead :: Unop ReExpr
 onAppsHead re = do (h,args) <- arr collectArgs
@@ -628,10 +634,11 @@ reifyMisc = lintExprR' <<<
   <+   watchR "reifyLit"      reifyLit
   <+   watchR "reifyApp"      reifyApp -- special apps must come earlier
   <+   watchR "reifyLam"      reifyLam
-  <+   watchR "reifyLet"      reifyLet
   <+   watchR "reifyPrim'"    reifyPrim'
   <+   watchR "reifyReified"  reifyReified
   <+ nowatchR "reifySimplify" reifySimplify
+  <+   watchR "reifyLet"      reifyLet
+  <+   watchR "reifyPairCase" reifyPairCase
   <+   watchR "reifyLetFloat" reifyLetFloat
   <+   watchR "reifyUnfold"   reifyUnfold  -- last resort
 
@@ -660,8 +667,8 @@ primMap = M.fromList
   , ("GHC.Classes.&&"    , "AndP")
   , ("GHC.Classes.||"    , "OrP")
   , ("Circat.Misc.xor"   , "XorP")
-  , ("Data.Tuple.fst"     , "ExlP")
-  , ("Data.Tuple.snd"     , "ExrP")
+  , ("Data.Tuple.fst"    , "ExlP")
+  , ("Data.Tuple.snd"    , "ExrP")
   , ("Data.Either.Left"  , "InlP")
   , ("Data.Either.Right" , "InrP")
   , ("GHC.Tuple.(,)"     , "PairP")
@@ -836,25 +843,6 @@ recastR = do Cast e (coercionKind -> Pair a b) <- id
 
 -- TODO: replace bashE
 
--- -- | Replace a cast expression with the application of a recasting function
--- recastR :: ReExpr
--- recastR = do Cast e (coercionKind -> Pair a b) <- id
---              f <- recastF a b
---              tryR betaReduceR $* App f e
-
--- -- | Replace a cast expression with the application of a recasting function
--- recastR :: ReExpr
--- recastR = do Cast e (coercionKind -> Pair a b) <- id
---              f <- tryR simp . recastF a b
---              tryR betaReduceR $* App f e
---  where
---    simp = repeatR (anytdE (repeatR rew))
---    rew = letTrivialSubstR <+ betaReduceR <+ unfoldBasicCombinatorR
-
--- TODO: Maybe defer some simplification. For now, doing it here quiets the
--- rewrite tracing. I don't use simplifyExpr, because I want to keep 'repr' and
--- 'abst' intact.
-
 {--------------------------------------------------------------------
     Experiment in polymorphic reification
 --------------------------------------------------------------------}
@@ -940,6 +928,7 @@ reifyBind = -- watchR "reifier" $
                   _ -> ([],) <$> ( reifyBetaExpandPlusR nm
                                  . tryR (floatReifies . abstractReifies)
                                  . reifyE   -- can fail
+                                 -- . observeV "Reifying"
                                  . reifyOf e
                                  )
     where
@@ -1075,6 +1064,7 @@ abstractReifies = watchR "abstractReifies" $
 floatReifies :: ReExpr
 floatReifies = watchR "floatReifies" $
                tryR unshadowE .  -- To help debugging
+               cseExprR .
                letFloatsPredM (arr isReify)
 
 -- | Convert outer reify let bindings into a multi-beta-redex. Assumes (and
@@ -1159,7 +1149,7 @@ externals =
     , externC' "uneval" unEval
     , externC' "reify-of" (reifyOf =<< id)
     , externC' "tickle-reifies" (tickleReifies :: ReExpr)
-
+    , externC' "lam-float-cast" lamFloatCastR
     , externC' "reify-module" reifyModule
     , externC' "abstract-reifies" abstractReifies
     , externC' "float-reifies" floatReifies
@@ -1170,6 +1160,7 @@ externals =
     , externC' "simplify-expr" simplifyExprR
     , externC' "unfold-driver" unfoldDriver
     , externC' "simplify-scrutinee" simplifyScrutineeR
+    , externC' "simplify-one-step" simplifyOneStepE
     ]
 
 --     , externC' "reify" reifyR
