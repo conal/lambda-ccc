@@ -33,9 +33,9 @@ import LambdaCCC.Lambda (EP,reifyEP)
 import LambdaCCC.ToCCC (toCCC)
 
 import Circat.Category (Uncurriable)
-import Circat.Circuit (Attr,mkGraph,UU,outDotG,unitize',(:>))
+import Circat.Circuit (Attr,mkGraph,UU,writeDot,unitize',(:>)) -- ,displayDot
 
-import Circat.Netlist (saveAsVerilog)
+-- import Circat.Netlist (saveAsVerilog)
 import Circat.Mealy (Mealy(..))
 
 #if defined MealyAsFun
@@ -86,14 +86,13 @@ goNew name = goNew' name []
 outGV :: String -> [Attr] -> UU -> IO ()
 outGV name attrs circ =
   do -- putStrLn $ "outGV: Graph \n" ++ show g
-     outD ("pdf","")
-     -- outD ("svg","") 
-     -- outD ("png","-Gdpi=200")
-     outV
+     writeDot attrs g
+     -- displayDot ("pdf","")
+     -- displayDot ("svg","") 
+     -- displayDot ("png","-Gdpi=200")
+     -- saveAsVerilog g
  where
-   g       = mkGraph name circ
-   outD ss = outDotG ss attrs g
-   outV    = saveAsVerilog g
+   g = mkGraph name circ
 {-# NOINLINE outGV #-}
 
 -- TODO: Move file-saving code from outD and saveVerilog to here.
