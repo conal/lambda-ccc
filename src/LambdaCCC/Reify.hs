@@ -430,23 +430,15 @@ pairCaseToLet =
 reifyPairCase :: ReExpr
 reifyPairCase = inReify pairCaseToLet
 
-reifyPrim :: ReExpr
-reifyPrim =
-  unReify >>>
-  do ty <- exprTypeT
-     (Var (fqVarName -> flip M.lookup primMap -> Just nm), tyArgs, [])
-       <- callSplitT
-     primV <- findIdP nm
-     appsE1 "kPrimEP" [ty] (mkApps (Var primV) (Type <$> tyArgs))
-
 reifyLit :: ReExpr
 reifyLit =
   unReify >>>
   do ty <- exprTypeT
      guardMsg (isPrimitiveTy ty) "reifyLit: must have primitive type"
      (void callDataConT <+
-      do (_,[_],[_dict,{-Lit-} _]) <- callNameSplitT "GHC.Num.fromInteger"
-         return ())
+      void (callNameT "GHC.Float.pi") <+
+      void (callNameT "GHC.Num.fromInteger")
+      )
      e        <- idR
      hasLitD  <- simpleDict (primName "HasLit") $* [ty]
      appsE "kLit" [ty] [hasLitD,e]
@@ -640,7 +632,7 @@ reifyMisc = lintExprR' <<<
   <+   watchR "reifyLit"      reifyLit
   <+   watchR "reifyApp"      reifyApp -- special apps must come earlier
   <+   watchR "reifyLam"      reifyLam
-  <+   watchR "reifyPrim'"    reifyPrim'
+  <+   watchR "reifyPrim"     reifyPrim
   <+   watchR "reifyReified"  reifyReified
   <+ nowatchR "reifySimplify" reifySimplify
   <+   watchR "reifyLet"      reifyLet
@@ -700,7 +692,7 @@ isPrimitiveOp (fqVarName -> name) =
 
 -- Temporary workaround. See https://github.com/ku-fpg/hermit/issues/173.
 isDoubliTy :: Type -> Bool
-isDoubliTy (TyConApp (tyConName -> qualifiedName -> "Circat.Doubli") _) = True
+isDoubliTy (TyConApp (tyConName -> qualifiedName -> "Circat.Doubli.Doubli") _) = True
 isDoubliTy _ = False
 
 isPrimitiveTy :: Type -> Bool
@@ -731,8 +723,8 @@ simplePrims = mk <$> primMap
         -- pprTrace "simplePrims" (ppr primV <+> text "::" <+> ppr primTy) (return ())
         appsE1 "kPrimEP" [primTy] (mkApps (Var primV) (Type <$> tyArgs))
 
-reifyPrim' :: ReExpr
-reifyPrim' =
+reifyPrim :: ReExpr
+reifyPrim =
   unReify >>>
   do ty <- exprTypeT
      (Var (fqVarName -> flip M.lookup simplePrims -> Just mk), tyArgs, [])
@@ -1148,7 +1140,6 @@ externals =
     , externC' "reify-let" reifyLet
     , externC' "reify-lit" reifyLit
     , externC' "reify-prim" reifyPrim
-    , externC' "reify-prim'" reifyPrim'
     , externC' "reify-simplify" reifySimplify
     , externC' "reify-reified" reifyReified
     , externC' "reify-unfold" reifyUnfold
