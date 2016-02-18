@@ -71,6 +71,12 @@ unshadowE = extractR unshadowR
 caseFloatAppsR :: ReExpr
 caseFloatAppsR = caseFloatAppR . (appAllR caseFloatAppsR id <+ id)
 
+-- Multi letFloatAppR
+letFloatAppsR :: ReExpr
+letFloatAppsR =
+  do (Let bs rhs,args@(_:_)) <- arr collectArgs
+     return $ Let bs (mkCoreApps rhs args)
+
 -- TODO: Move more utilities here from the code below
 
 {--------------------------------------------------------------------
@@ -574,7 +580,7 @@ simplifyOneStepE = -- watchR "simplifyOneStepE" $
   <+ watchR "letTrivialSubstR" letTrivialSubstR
   <+ watchR "caseReduceR" (caseReduceR False)
   <+ watchR "letFloatCaseR" letFloatCaseR
-  <+ watchR "letFloatAppR" letFloatAppR  -- maybe letFloatExprR to replace these two
+  <+ watchR "letFloatAppsR" letFloatAppsR
   <+ watchR "caseFloatCaseR" caseFloatCaseR
   <+ watchR "caseFloatAppsR" caseFloatAppsR
   <+ watchR "caseDefaultR" caseDefaultR
@@ -692,8 +698,13 @@ isPrimitiveOp (fqVarName -> name) =
      name `M.member` primMap
   || name `M.member` stdMeths
 
+-- Temporary workaround. See https://github.com/ku-fpg/hermit/issues/173.
+isDoubliTy :: Type -> Bool
+isDoubliTy (TyConApp (tyConName -> qualifiedName -> "Circat.Doubli") _) = True
+isDoubliTy _ = False
+
 isPrimitiveTy :: Type -> Bool
-isPrimitiveTy ty = any ($ ty) [isUnitTy,isBoolTy,isIntTy,isDoubleTy]
+isPrimitiveTy ty = any ($ ty) [isUnitTy,isBoolTy,isIntTy,isDoubliTy]
 
 -- | case c of { False -> a'; True -> a }  ==>  if_then_else c a a'
 -- Assuming there's a HasIf instance.
@@ -890,10 +901,10 @@ lamBound v t = transform (\ c -> applyT t (addLambdaBinding v c @@ Lam_Body))
 tickleReifies :: ReExpr
 tickleReifies = -- watchR "tickleReifies" $
   --  tryR (anytdE reifyOops) .  -- sometimes helps debugging
-    tryR (anytdE (repeatR reifyMisc))
+    tryR (prunetdE (acceptR isReify >>> reifyE))
   . tryR (anytdE (repeatR unfoldDriver))
 
--- TODO: Combine traversals.
+-- TODO: Maybe combine traversals.
 
 reifyBind :: TransformH CoreBind ([CoreBind],[CoreRule])
 reifyBind = -- watchR "reifier" $
