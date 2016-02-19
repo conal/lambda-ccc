@@ -228,6 +228,9 @@ isIO (coreView -> Just ty) = isIO ty
 isIO (TyConApp tc _) = tyConName tc == ioTyConName
 isIO _ = False
 
+reifiableExpr :: CoreExpr -> Bool
+reifiableExpr e = not (isTyCoArg e) && reifiableType (exprType' e)
+
 -- Types we know how to handle
 reifiableType :: Type -> Bool
 reifiableType (coreView -> Just ty) = reifiableType ty
@@ -351,11 +354,11 @@ reifyIf =
 
 reifyBottom :: ReExpr
 reifyBottom =
-  do App (Var (fqVarName -> "Circat.Rep.bottom")) (Type ty) <- unReify
+  unReify >>>
+  do void $ callNameT "GHC.Err.undefined"
+     ty <- exprTypeT
      dict <- simpleDict ("Circat.Prim.CircuitBot") $* [ty]
-     appsE "bottomEP" [ty] [dict]
-
--- TODO: Combine reifyBottom with reifyStdMeth?
+     appsE1 "kPrimEP" [ty] =<< apps' "Circat.Prim.BottomP" [ty] [dict]
 
 -- TODO: factor out commonalities between reifyIf and reifyBottom.
 
@@ -442,7 +445,7 @@ reifyLit =
      guardMsg (isPrimitiveTy ty) "reifyLit: must have primitive type"
      ( void callDataConT <+
        void (callNameT "GHC.Float.pi") <+
-       do (_,[_],[_dict,Lit _]) <- callNameSplitT "GHC.Num.fromInteger"
+       do (_,[_],[_dict,{-Lit-} _]) <- callNameSplitT "GHC.Num.fromInteger"
           return ())
      e        <- idR
      hasLitD  <- simpleDict (primName "HasLit") $* [ty]
@@ -469,16 +472,9 @@ reifyLoop =
 callTyDictsT :: Monad m => Transform c m CoreExpr (CoreExpr, [CoreExpr])
 callTyDictsT =
   do va@(Var _, args) <- arr collectArgs
-     guardMsg (all (\ e -> isTypeArg e || okayDict e) args)
+     guardMsg (all (not . reifiableExpr) args)
               "Arguments must be types or dictionaries"
      return va
- where
-   okayDict = isDict
-   -- okayDict = isDictTy . exprType'
-   -- okayDict = isDictConstruction
-
-isTyOrDict :: CoreExpr -> Bool
-isTyOrDict e = isTypeArg e || isDict e
 
 isReifyRule :: CoreRule -> Bool
 isReifyRule = ("reify " `isPrefixOf`) . unpackFS . ru_name
@@ -516,28 +512,10 @@ inScope e = (mkInScopeSet (localFreeVarsExpr e),idUnfolding)
 -- add some context with reify rules indexed by their main argument.
 -- Incrementally adjust during module compilation as we new rules.
 
--- reifyUnfold :: ReExpr
--- reifyUnfold = inReify $
---   do (h@(Var f), args) <- callTyDictsT
---      guardMsg (all isTyOrDict args) "Arguments are not all types or dictionaries"
---      if isJust (isClassOpId_maybe f) then
---        -- For class-ops, 
---        -- | (foo ... dict ty1 ... tyn) --> $foo_meth ty1 ... tyn
---        do (tys,dict:postDict) <- return (break isDict args)
---           reduced <- ((caseReduceR True <+ caseReduceUnfoldR True) . unfoldR) -- *
---                        $* mkCoreApps h (tys ++ [dict])
---           return $ mkCoreApps reduced postDict
---       else
---        tryR (anybuE detickE) . unfoldR    
-
--- * TODO: more dependable way to drive scrutinee to a constructor, followed by
--- caseReduceR.
-
 -- Unfold under reify.
 reifyUnfold :: ReExpr
 reifyUnfold = inReify $
   do (h@(Var v), args) <- callTyDictsT
-     guardMsg (all isTyOrDict args) "Arguments are not all types or dictionaries"
      guardMsg (fqVarName v /= "GHC.Real.fromIntegral") "I won't unfold fromIntegral" -- *
      if isJust (isClassOpId_maybe v) then
        -- For class-ops, 
@@ -694,10 +672,22 @@ isPrimOrRepMeth :: Var -> [Type] -> Bool
 isPrimOrRepMeth (fqVarName -> name) tys =
   isRepMeth name || (isPrimitiveName name && all isPrimitiveTy tys)
 
-isPrimitiveOp :: Var -> Bool
-isPrimitiveOp (fqVarName -> name) =
-     name `M.member` primMap
-  || name `M.member` stdMeths
+simplePrims :: M.Map String (Type -> [Type] -> TransformH a CoreExpr)
+simplePrims = mk <$> primMap
+ where
+   mk name primTy tyArgs =
+     do primV <- findIdP name
+        -- type is Prim primTy
+        -- pprTrace "simplePrims" (ppr primV <+> text "::" <+> ppr primTy) (return ())
+        appsE1 "kPrimEP" [primTy] (mkApps (Var primV) (Type <$> tyArgs))
+
+reifyPrim :: ReExpr
+reifyPrim =
+  unReify >>>
+  do ty <- exprTypeT
+     (Var (fqVarName -> flip M.lookup simplePrims -> Just mk), tyArgs, [])
+       <- callSplitT
+     mk ty tyArgs
 
 -- Temporary workaround. See https://github.com/ku-fpg/hermit/issues/173.
 isDoubliTy :: Type -> Bool
@@ -718,27 +708,6 @@ rewriteIf = do Case c wild ty [(_False,[],a'),(_True,[],a)] <- id
                apps' (lamName "if'") [ty] [dict,pair c (pair a a')]
  where
    pair p q = mkCoreTup [p,q]
-
-{--------------------------------------------------------------------
-    Another pass at primitives
---------------------------------------------------------------------}
-
-simplePrims :: M.Map String (Type -> [Type] -> TransformH a CoreExpr)
-simplePrims = mk <$> primMap
- where
-   mk name primTy tyArgs =
-     do primV <- findIdP name
-        -- type is Prim primTy
-        -- pprTrace "simplePrims" (ppr primV <+> text "::" <+> ppr primTy) (return ())
-        appsE1 "kPrimEP" [primTy] (mkApps (Var primV) (Type <$> tyArgs))
-
-reifyPrim :: ReExpr
-reifyPrim =
-  unReify >>>
-  do ty <- exprTypeT
-     (Var (fqVarName -> flip M.lookup simplePrims -> Just mk), tyArgs, [])
-       <- callSplitT
-     mk ty tyArgs
 
 {--------------------------------------------------------------------
     Run it
