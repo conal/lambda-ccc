@@ -34,7 +34,7 @@ module LambdaCCC.Lambda
   , xor   -- from Prim  -- TODO: maybe remove
   , intL
   , EP, appP, lamP, lettP , varP#, lamvP#, letvP#, casevP#, eitherEP,reifyOopsEP#
-  , reprEP, abstEP, ifEP, bottomEP, loopEP
+  , reprEP, abstEP, ifEP, loopEP  --, bottomEP
   -- , coerceEP
   , evalEP, reifyEP, kPrimEP, kLit -- , oops
   , IfCirc, if', CircuitLoopKon
@@ -60,11 +60,11 @@ import Data.Proof.EQ
 import TypeUnary.Nat (IsNat(..),Nat(..))
 import TypeUnary.Vec (Vec(..),Z,S)
 
-import Circat.Category (Rep,HasRep(..),RepCat(..),LoopCat(..))
+import Circat.Category (Rep,HasRep(..),RepCat(..),LoopCat(..),DelayCat(..))
 import Circat.Prim
 
 import Circat.Classes
-import Circat.Circuit ((:>))
+import Circat.Circuit ((:>),GenBuses,SourceToBuses)
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
 import LambdaCCC.ShowUtils
@@ -372,19 +372,20 @@ class HasOpInfo p where
   opInfo :: p a -> Maybe OpInfo
 
 instance HasOpInfo Prim where
-  opInfo MulP = Just $ OpInfo "*"     (7,AssocLeft )
-  opInfo AddP = Just $ OpInfo "+"     (6,AssocLeft )
-  opInfo SubP = Just $ OpInfo "-"     (6,AssocLeft )
-  opInfo AndP = Just $ OpInfo "&&"    (3,AssocRight)
-  opInfo OrP  = Just $ OpInfo "||"    (2,AssocRight)
-  opInfo XorP = Just $ OpInfo "`xor`" (2,AssocRight)
-  opInfo EqP  = Just $ OpInfo "=="    (4,AssocNone )
-  opInfo NeP  = Just $ OpInfo "/="    (4,AssocNone )
-  opInfo LtP  = Just $ OpInfo "<"     (4,AssocNone )
-  opInfo GtP  = Just $ OpInfo ">"     (4,AssocNone )
-  opInfo LeP  = Just $ OpInfo "<="    (4,AssocNone )
-  opInfo GeP  = Just $ OpInfo ">="    (4,AssocNone )
-  opInfo _    = Nothing
+  opInfo MulP    = Just $ OpInfo "*"     (7,AssocLeft )
+  opInfo DivideP = Just $ OpInfo "/"     (7,AssocLeft )
+  opInfo AddP    = Just $ OpInfo "+"     (6,AssocLeft )
+  opInfo SubP    = Just $ OpInfo "-"     (6,AssocLeft )
+  opInfo AndP    = Just $ OpInfo "&&"    (3,AssocRight)
+  opInfo OrP     = Just $ OpInfo "||"    (2,AssocRight)
+  opInfo XorP    = Just $ OpInfo "`xor`" (2,AssocRight)
+  opInfo EqP     = Just $ OpInfo "=="    (4,AssocNone )
+  opInfo NeP     = Just $ OpInfo "/="    (4,AssocNone )
+  opInfo LtP     = Just $ OpInfo "<"     (4,AssocNone )
+  opInfo GtP     = Just $ OpInfo ">"     (4,AssocNone )
+  opInfo LeP     = Just $ OpInfo "<="    (4,AssocNone )
+  opInfo GeP     = Just $ OpInfo ">="    (4,AssocNone )
+  opInfo _       = Nothing
 
 -- | Single variable binding
 data Bind = forall a. Bind (V a) a
@@ -515,25 +516,56 @@ intL = kLit
 -- TODO: change the following rules back to reifyE
 
 #if 0
-{-# RULES
- 
-"reify/not"     reifyEP not   = kPrim NotP
-"reify/(&&)"    reifyEP (&&)  = kPrim AndP
-"reify/(||)"    reifyEP (||)  = kPrim OrP
-"reify/xor"     reifyEP xor   = kPrim XorP
-"reify/(+)"     reifyEP (+)   = kPrim AddP
-"reify/(-)"     reifyEP (-)   = kPrim SubP
-"reify/(*)"     reifyEP (*)   = kPrim MulP
-"reify/exl"     reifyEP fst   = kPrim ExlP
-"reify/exr"     reifyEP snd   = kPrim ExrP
-"reify/pair"    reifyEP (,)   = kPrim PairP
-"reify/inl"     reifyEP Left  = kPrim InlP
-"reify/inr"     reifyEP Right = kPrim InrP
-"reify/if"      reifyEP muxB  = kPrim CondBP
 
-"reify/()"      reifyEP ()    = kLit  ()
-"reify/false"   reifyEP False = kLit  False
-"reify/true"    reifyEP True  = kLit  True
+-- To match instances in Circat.Circuit
+type CommonC a = (Read a, Show a, Eq a, GenBuses a, SourceToBuses a)
+
+{-# RULES
+
+"reify not"           reifyEP not           = kPrim NotP
+"reify (&&)"          reifyEP (&&)          = kPrim AndP
+"reify (||)"          reifyEP (||)          = kPrim OrP
+"reify xor"           reifyEP xor           = kPrim XorP
+
+"reify negate" reifyEP (negate :: (CommonC a, Num a) => a -> a) = kPrim NegateP
+
+-- "reify negate"        reifyEP negate        = kPrim NegateP
+
+"reify (+)"           reifyEP (+)           = kPrim AddP
+"reify (-)"           reifyEP (-)           = kPrim SubP
+"reify (*)"           reifyEP (*)           = kPrim MulP
+"reify recip"         reifyEP recip         = kPrim RecipP
+"reify (/)"           reifyEP (/)           = kPrim DivideP
+"reify sin"           reifyEP sin           = kPrim SinP
+"reify cos"           reifyEP cos           = kPrim CosP
+"reify exp"           reifyEP exp           = kPrim ExpP
+"reify fromIntegral"  reifyEP fromIntegral  = kPrim FromIP
+"reify (==)"          reifyEP (==)          = kPrim EqP
+"reify (/=)"          reifyEP (/=)          = kPrim NeP
+"reify (<)"           reifyEP (<)           = kPrim LtP
+"reify (<=)"          reifyEP (<=)          = kPrim LeP
+"reify (>)"           reifyEP (>)           = kPrim GtP
+"reify (>=)"          reifyEP (>=)          = kPrim GeP
+"reify exl"           reifyEP fst           = kPrim ExlP
+"reify exr"           reifyEP snd           = kPrim ExrP
+"reify inl"           reifyEP Left          = kPrim InlP
+"reify inr"           reifyEP Right         = kPrim InrP
+"reify pair"          reifyEP (,)           = kPrim PairP
+"reify abst"          reifyEP abst          = kPrim AbstP
+"reify repr"          reifyEP repr          = kPrim ReprP
+"reify undefined"     reifyEP undefined     = kPrim BottomP
+
+"reify pi" reifyEP pi = kLit pi
+
+"reify delay" forall s. reifyEP (delayC s) = kPrim (DelayP s)
+
+-- -- Handled by reifyIf
+-- "reify if"            reifyEP muxB          = kPrim CondBP
+
+-- Literals now handled by Reify.reifyLit
+-- "reify/()"      reifyEP ()     = kLit  ()
+-- "reify/false"   reifyEP False  = kLit  False
+-- "reify/true"    reifyEP True   = kLit  True
 
 -- TODO: Why reify/unPair' and not reify/unVecZ & reify/unVecS ?
 -- TODO: trees
@@ -691,8 +723,8 @@ reprEP = kPrim ReprP
 ifEP :: forall a. IfCat (:>) a => EP (Bool :* (a :* a) -> a)
 ifEP = kPrim IfP
 
-bottomEP :: forall a. BottomCat (:>) a => EP a
-bottomEP = kPrim BottomP @^ ConstE unitP
+-- bottomEP :: forall a. BottomCat (:>) a => EP a
+-- bottomEP = kPrim BottomP
 
 loopEP :: forall a b s. CircuitLoopKon s => EP (a :* s -> b :* s) -> EP (a -> b)
 loopEP = Loop
