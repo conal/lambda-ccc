@@ -44,7 +44,7 @@ import HERMIT.Kure -- hiding (apply)
 -- Note that HERMIT.Dictionary re-exports HERMIT.Dictionary.*
 import HERMIT.Dictionary hiding (externals,($$))
 import HERMIT.Monad (HermitM)
-import HERMIT.Name (HermitName,mkQualified,cmpHN2Var)
+import HERMIT.Name (HermitName,mkQualified,cmpHN2Var,cmpHN2Name)
 import HERMIT.External (External)
 
 -- GHC
@@ -76,6 +76,11 @@ letFloatAppsR :: ReExpr
 letFloatAppsR =
   do (Let bs rhs,args@(_:_)) <- arr collectArgs
      return $ Let bs (mkCoreApps rhs args)
+
+callNamesT :: MonadCatch m => [HermitName] -> Transform c m CoreExpr (CoreExpr, [CoreExpr])
+callNamesT nms =
+  prefixFailMsg ("callNamesT failed: not a call to one of " ++ show nms ++ ".") $
+  callPredT (\ v _ -> any (`cmpHN2Name` varName v) nms)
 
 -- TODO: Move more utilities here from the code below
 
@@ -435,10 +440,10 @@ reifyLit =
   unReify >>>
   do ty <- exprTypeT
      guardMsg (isPrimitiveTy ty) "reifyLit: must have primitive type"
-     (void callDataConT <+
-      void (callNameT "GHC.Float.pi") <+
-      void (callNameT "GHC.Num.fromInteger")
-      )
+     ( void callDataConT <+
+       void (callNameT "GHC.Float.pi") <+
+       do (_,[_],[_dict,Lit _]) <- callNameSplitT "GHC.Num.fromInteger"
+          return ())
      e        <- idR
      hasLitD  <- simpleDict (primName "HasLit") $* [ty]
      appsE "kLit" [ty] [hasLitD,e]
@@ -531,9 +536,10 @@ inScope e = (mkInScopeSet (localFreeVarsExpr e),idUnfolding)
 -- Unfold under reify.
 reifyUnfold :: ReExpr
 reifyUnfold = inReify $
-  do (h@(Var f), args) <- callTyDictsT
+  do (h@(Var v), args) <- callTyDictsT
      guardMsg (all isTyOrDict args) "Arguments are not all types or dictionaries"
-     if isJust (isClassOpId_maybe f) then
+     guardMsg (fqVarName v /= "GHC.Real.fromIntegral") "I won't unfold fromIntegral" -- *
+     if isJust (isClassOpId_maybe v) then
        -- For class-ops, 
        -- | (foo ... dict ty1 ... tyn) --> $foo_meth ty1 ... tyn
        do (tys,dict:postDict) <- return (break isDict args)
@@ -542,6 +548,8 @@ reifyUnfold = inReify $
           return $ mkCoreApps reduced postDict
       else
        tryR (anybuE detickE) . unfoldR    
+
+-- * To avoid Integer. Look for a more principled alternative.
 
 -- The detickE is an experiment for helping with a ghci issue.
 -- See journal from 2016-02-05.
@@ -639,6 +647,7 @@ reifyMisc = lintExprR' <<<
   <+   watchR "reifyPairCase" reifyPairCase
   <+   watchR "reifyLetFloat" reifyLetFloat
   <+   watchR "reifyUnfold"   reifyUnfold  -- last resort
+  <+ fail "reifyMisc: no reification rule applies"
 
 -- TODO: move reifyPrim to before reifyApp. Faster?
 -- Does reifyApp eventually fail on primitives?
