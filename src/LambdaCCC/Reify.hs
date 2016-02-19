@@ -84,6 +84,14 @@ callNamesT nms =
 
 -- TODO: Move more utilities here from the code below
 
+-- Dictionary variables often get casts that become vacuous.
+-- Look for in a method argument.
+argCastSimplify :: ReExpr
+argCastSimplify = anyArgR (anybuE (castElimR <+ castCastR))
+
+anyArgR :: Unop ReExpr
+anyArgR re = appAnyR (anyArgR re) re
+
 {--------------------------------------------------------------------
     Observing
 --------------------------------------------------------------------}
@@ -304,23 +312,6 @@ reifyLam = do Lam v e <- unReify
 -- one level. Typically (always?) the "foo = eval foo_reified" definition gets
 -- inlined and then eliminated by the letElimR in reifyMisc.
 
-letTrivialSubstR :: ReExpr
-letTrivialSubstR =
- do Let (NonRec v rhs) body <- id
-    if | v `notElemVarSet` freeVarsExpr body -> return body
-       | trivial rhs || varOccCount v body <= 1 -> letSubstR
-       | otherwise -> -- traceR "reifyTrivialLet failed" >>>
-                                                fail "Non-trivial"
- where
-   trivial e = exprIsTrivial e || isEval e || isDict e
-
--- TODO: revisit the single-occurrence criterion, and maybe avoid substituting
--- under lambdas. Hermit has some useful functionality, but take care about what
--- it (and GHC) consider trivial.
-
--- When rhs = eval (var x), reify will make it var x. We don't introduce eval
--- any other way.
-
 reifyLet :: ReExpr
 reifyLet =
   unReify >>>
@@ -359,97 +350,6 @@ reifyBottom =
      ty <- exprTypeT
      dict <- simpleDict ("Circat.Prim.CircuitBot") $* [ty]
      appsE1 "kPrimEP" [ty] =<< apps' "Circat.Prim.BottomP" [ty] [dict]
-
--- TODO: factor out commonalities between reifyIf and reifyBottom.
-
--- Translate methods to cat class and prim
-stdMeths :: M.Map String (String,String)
-stdMeths = M.fromList $ concatMap ops
-    [ ( "GHC.Classes","Eq"
-      , [("==","EqP"), ("/=","NeP")])
-    , ( "GHC.Classes","Ord"
-      , [("<","LtP"),(">","GtP"),("<=","LeP"),(">=","GeP")])
-    , ( "GHC.Num", "Num"
-      , [("negate","NegateP"),("+","AddP"),("-","SubP"),("*","MulP")])
-    , ( "GHC.Float", "Floating"
-      , [("exp","ExpP"),("cos","CosP"),("sin","SinP")])
-    , ( "GHC.Real", "Fractional"
-      , [("recip","RecipP"),("/","DivideP")])
-    -- FromIntegral has two parameters besides the category,
-    -- and so needs special treatment. (This one doesn't work.)
-    , ( "GHC.Real", "FromIntegral"
-      , [("fromIntegral","FromIP")])
-    ]
- where
-   op modu cls meth ctor =
-     ( modu++"."++meth
-     , ("Circat.Prim.Circuit"++cls, "Circat.Prim."++ctor))
-   ops (modu,cls,meths) = [op modu cls meth ctor | (meth,ctor) <- meths]
-
--- Reify standard methods, given type and dictionary argument.
--- We assume only a single type argument.
-reifyStdMeth :: ReExpr
-reifyStdMeth =
-  unReify >>>
-  do ty <- exprTypeT
-     (Var (fqVarName -> flip M.lookup stdMeths -> Just (cls,prim)), tyArgs, moreArgs) <- callSplitT
-     guardMsg (not (any isTypeArg moreArgs))
-         "reifyStdMeth: types among moreArgs"
-     guardMsg (all (isDictTy . exprType) moreArgs)
-         "reifyStdMeth: non-dict argument"
-     catDict <- simpleDict (fromString cls) $* tyArgs
-     primV <- findIdT (fromString prim)
-     appsE1 "kPrimEP" [ty] (App (mkTyApps (Var primV) tyArgs) catDict)
-
--- Reify an application of 'repr' or 'abst' to its type, dict, and coercion
--- args (four in total), leaving the final expression argument for reifyApp.
-reifyRepMeth :: ReExpr
-reifyRepMeth =
-  unReify >>>
-  do (Var v,args@(length -> 4)) <- callT
-     guardMsg (isRepMeth (fqVarName v)) "not a HasRep method"
-     (\ f -> mkApps (Var f) args) <$> findIdT (lamName (uqVarName v ++ "EP"))
-
-isRepMeth :: String -> Bool
-isRepMeth = (`elem` repMethNames) . fromString
-
-repMethNames :: [HermitName]
-repMethNames = repName <$> ["repr","abst"]
-
--- reifyTupCase :: ReExpr
--- reifyTupCase = reifyUnitCase <+ reifyPairCase
-
--- Do I need to handle unit, or will caseDefaultR do it?
-
--- | (case scrut of w { (a,b) -> rhs }) --> let { w = scrut; a = fst w; b = snd w } in rhs
-pairCaseToLet :: ReExpr
-pairCaseToLet =
-  do Case scrut w _
-       [(DataAlt (isBoxedTupleTyCon . dataConTyCon -> True), [a,b], rhs) ] <- id
-     let w' = zapVarOccInfo w
-         partArgs = [Type (varType a), Type (varType b), Var w']
-         wPart f = (\ v -> mkCoreApps (Var v) partArgs)
-                   <$> findIdT (fromString ("Data.Tuple."++f))
-     fstW <- wPart "fst"
-     sndW <- wPart "snd"
-     return $
-       mkCoreLets [NonRec w' scrut, NonRec a fstW, NonRec b sndW] rhs
-
-reifyPairCase :: ReExpr
-reifyPairCase = inReify pairCaseToLet
-
-reifyLit :: ReExpr
-reifyLit =
-  unReify >>>
-  do ty <- exprTypeT
-     guardMsg (isPrimitiveTy ty) "reifyLit: must have primitive type"
-     ( void callDataConT <+
-       void (callNameT "GHC.Float.pi") <+
-       do (_,[_],[_dict,{-Lit-} _]) <- callNameSplitT "GHC.Num.fromInteger"
-          return ())
-     e        <- idR
-     hasLitD  <- simpleDict (primName "HasLit") $* [ty]
-     appsE "kLit" [ty] [hasLitD,e]
 
 reifyDelay :: ReExpr
 reifyDelay =
@@ -536,13 +436,171 @@ nonLocal :: TransformH CoreExpr Bool
 nonLocal = (callDataConT >> return True) <+ nonLocal . (simplifyOneStepE <+ unfoldR)
 -- TODO: Maybe pare down simplifyOneStepE for use here
 
--- Dictionary variables often get casts that become vacuous.
--- Look for in a method argument.
-argCastSimplify :: ReExpr
-argCastSimplify = anyArgR (anybuE (castElimR <+ castCastR))
+reifyPairCase :: ReExpr
+reifyPairCase = inReify pairCaseToLet
 
-anyArgR :: Unop ReExpr
-anyArgR re = appAnyR (anyArgR re) re
+{--------------------------------------------------------------------
+    Primitives
+--------------------------------------------------------------------}
+
+findIdP :: String -> TransformH a Id
+findIdP = findIdT . primName
+
+primName :: String -> HermitName
+primName = mkQualified "Circat.Prim"
+
+-- TODO: generalize primName, lamName, etc
+
+-- Map name to prim name and dictionary constraints
+primMap :: M.Map String String
+primMap = M.fromList
+  [ ("GHC.Classes.not"   , "NotP")
+  , ("GHC.Classes.&&"    , "AndP")
+  , ("GHC.Classes.||"    , "OrP")
+  , ("Circat.Misc.xor"   , "XorP")
+  , ("Data.Tuple.fst"    , "ExlP")
+  , ("Data.Tuple.snd"    , "ExrP")
+  , ("Data.Either.Left"  , "InlP")
+  , ("Data.Either.Right" , "InrP")
+  , ("GHC.Tuple.(,)"     , "PairP")
+  ]
+
+-- TODO: make primitives a map to expressions, to use during reification. Or
+-- maybe a transformation that succeeds only for primitives, since we'll have to
+-- look up IDs.
+
+isPrimitiveName :: String -> Bool
+isPrimitiveName name =
+     name `M.member` primMap
+  || name `M.member` stdClassOps
+
+isPrimOrRepMeth :: Var -> [Type] -> Bool
+isPrimOrRepMeth (fqVarName -> name) tys =
+  isRepMeth name || (isPrimitiveName name && all isPrimitiveTy tys)
+
+simplePrims :: M.Map String (Type -> [Type] -> TransformH a CoreExpr)
+simplePrims = mk <$> primMap
+ where
+   mk name primTy tyArgs =
+     do primV <- findIdP name
+        -- type is Prim primTy
+        -- pprTrace "simplePrims" (ppr primV <+> text "::" <+> ppr primTy) (return ())
+        appsE1 "kPrimEP" [primTy] (mkApps (Var primV) (Type <$> tyArgs))
+
+-- -- Sometimes we don't get to the method selectors & dictionaries in time, so we
+-- -- have to deal with the names of methods inside the dictionaries.
+-- -- TODO: rename "unpacked".
+-- unpackedPrims :: M.Map String (Type -> [Type] -> TransformH a CoreExpr)
+-- unpackedPrims =
+--   ...
+--  where  
+--    numFuns  = [ "GHC.Num.$fNum"++ty++"_$c"++meth
+--               | (tys,meths) <- primMeths , ty <- tys, meth <- meths ]
+--     where
+--       primMeths = [( ["Int","Double"]
+--                    , ["+","-","*","negate","abs","signum","fromInteger"])]
+
+reifyPrim :: ReExpr
+reifyPrim =
+  unReify >>>
+  do ty <- exprTypeT
+     (Var (fqVarName -> flip M.lookup simplePrims -> Just mk), tyArgs, [])
+       <- callSplitT
+     mk ty tyArgs
+
+stdClassOpInfo :: [(String,String,[(String,String)])]
+stdClassOpInfo =
+   [ ( "GHC.Classes","Eq"
+     , [("==","EqP"), ("/=","NeP")])
+   , ( "GHC.Classes","Ord"
+     , [("<","LtP"),(">","GtP"),("<=","LeP"),(">=","GeP")])
+   , ( "GHC.Num", "Num"
+     , [("negate","NegateP"),("+","AddP"),("-","SubP"),("*","MulP")])
+   , ( "GHC.Float", "Floating"
+     , [("exp","ExpP"),("cos","CosP"),("sin","SinP")])
+   , ( "GHC.Real", "Fractional"
+     , [("recip","RecipP"),("/","DivideP")])
+   , ( "GHC.Real", "FromIntegral"     -- *
+     , [("fromIntegral","FromIP")])
+   ]
+
+-- stdMeths :: M.Map String 
+
+-- Translate methods to cat class and prim
+stdClassOps :: M.Map String (String,String)
+stdClassOps = M.fromList $ concatMap ops stdClassOpInfo
+ where
+   op modu cls meth ctor =
+     ( modu++"."++meth
+     , ("Circat.Prim.Circuit"++cls, "Circat.Prim."++ctor))
+   ops (modu,cls,meths) = [op modu cls meth ctor | (meth,ctor) <- meths]
+
+-- * fromIntegral is not really a method, but we avoid inlining it and exposing
+-- the Integer type (fromInteger . toInteger).
+
+-- Reify standard methods, given type and dictionary argument.
+-- We assume only a single type argument.
+reifyStdClassOp :: ReExpr
+reifyStdClassOp =
+  unReify >>>
+  do ty <- exprTypeT
+     (Var (fqVarName -> flip M.lookup stdClassOps -> Just (cls,prim)), tyArgs, moreArgs) <- callSplitT
+     guardMsg (not (any isTypeArg moreArgs))
+         "reifyStdClassOp: types among moreArgs"
+     guardMsg (all (isDictTy . exprType) moreArgs)
+         "reifyStdClassOp: non-dict argument"
+     catDict <- simpleDict (fromString cls) $* tyArgs
+     primV <- findIdT (fromString prim)
+     appsE1 "kPrimEP" [ty] (App (mkTyApps (Var primV) tyArgs) catDict)
+
+-- Reify an application of 'repr' or 'abst' to its type, dict, and coercion
+-- args (four in total), leaving the final expression argument for reifyApp.
+reifyRepMeth :: ReExpr
+reifyRepMeth =
+  unReify >>>
+  do (Var v,args@(length -> 4)) <- callT
+     guardMsg (isRepMeth (fqVarName v)) "not a HasRep method"
+     (\ f -> mkApps (Var f) args) <$> findIdT (lamName (uqVarName v ++ "EP"))
+
+isRepMeth :: String -> Bool
+isRepMeth = (`elem` repMethNames) . fromString
+
+repMethNames :: [HermitName]
+repMethNames = repName <$> ["repr","abst"]
+
+-- reifyTupCase :: ReExpr
+-- reifyTupCase = reifyUnitCase <+ reifyPairCase
+
+-- Do I need to handle unit, or will caseDefaultR do it?
+
+reifyLit :: ReExpr
+reifyLit =
+  unReify >>>
+  do ty <- exprTypeT
+     guardMsg (isPrimitiveTy ty) "reifyLit: must have primitive type"
+     ( void callDataConT <+
+       void (callNameT "GHC.Float.pi") <+
+       do (_,[_],[_dict,{-Lit-} _]) <- callNameSplitT "GHC.Num.fromInteger"
+          return ())
+     e        <- idR
+     hasLitD  <- simpleDict (primName "HasLit") $* [ty]
+     appsE "kLit" [ty] [hasLitD,e]
+
+-- | case c of { False -> a'; True -> a }  ==>  if_then_else c a a'
+-- Assuming there's a HasIf instance.
+rewriteIf :: ReExpr
+rewriteIf = do Case c wild ty [(_False,[],a'),(_True,[],a)] <- id
+               guardMsg (isBoolTy (exprType' c)) "scrutinee not Boolean"
+               guardMsg (isDeadOcc (idOccInfo wild)) "rewriteIf: wild is alive"
+               ifCircTc <- findTyConT (lamName "IfCirc")
+               dict     <- buildDictionaryT' $* TyConApp ifCircTc [ty]
+               apps' (lamName "if'") [ty] [dict,pair c (pair a a')]
+ where
+   pair p q = mkCoreTup [p,q]
+
+{--------------------------------------------------------------------
+    Simplification
+--------------------------------------------------------------------}
 
 reifySimplify :: ReExpr
 reifySimplify = inReify simplifyOneStepE
@@ -571,7 +629,38 @@ simplifyOneStepE = -- watchR "simplifyOneStepE" $
   <+ watchR "castFloatApps" castFloatApps
   <+ watchR "castFloatR" castFloatR  -- combination and elim, too. rename.
 
+letTrivialSubstR :: ReExpr
+letTrivialSubstR =
+ do Let (NonRec v rhs) body <- id
+    if | v `notElemVarSet` freeVarsExpr body -> return body
+       | trivial rhs || varOccCount v body <= 1 -> letSubstR
+       | otherwise -> -- traceR "reifyTrivialLet failed" >>>
+                                                fail "Non-trivial"
+ where
+   trivial e = exprIsTrivial e || isEval e || isDict e
+
+-- TODO: revisit the single-occurrence criterion, and maybe avoid substituting
+-- under lambdas. Hermit has some useful functionality, but take care about what
+-- it (and GHC) consider trivial.
+
+-- When rhs = eval (var x), reify will make it var x. We don't introduce eval
+-- any other way.
+
 --   <+ watchR "pairCaseToLet" pairCaseToLet
+
+-- | (case scrut of w { (a,b) -> rhs }) --> let { w = scrut; a = fst w; b = snd w } in rhs
+pairCaseToLet :: ReExpr
+pairCaseToLet =
+  do Case scrut w _
+       [(DataAlt (isBoxedTupleTyCon . dataConTyCon -> True), [a,b], rhs) ] <- id
+     let w' = zapVarOccInfo w
+         partArgs = [Type (varType a), Type (varType b), Var w']
+         wPart f = (\ v -> mkCoreApps (Var v) partArgs)
+                   <$> findIdT (fromString ("Data.Tuple."++f))
+     fstW <- wPart "fst"
+     sndW <- wPart "snd"
+     return $
+       mkCoreLets [NonRec w' scrut, NonRec a fstW, NonRec b sndW] rhs
 
 simplifyScrutineeR :: ReExpr
 simplifyScrutineeR = -- (observeV "simplifyScrutineeR" >>>) $
@@ -608,23 +697,23 @@ reifyOops =
 
 reifyMisc :: ReExpr
 reifyMisc = lintExprR' <<<
-       watchR "reifyEval"     reifyEval
-  <+   watchR "reifyRepMeth"  reifyRepMeth
-  <+   watchR "reifyStdMeth"  reifyStdMeth
-  <+   watchR "reifyIf"       reifyIf
-  <+   watchR "reifyBottom"   reifyBottom
-  <+   watchR "reifyDelay"    reifyDelay
-  <+   watchR "reifyLoop"     reifyLoop
-  <+   watchR "reifyLit"      reifyLit
-  <+   watchR "reifyApp"      reifyApp -- special apps must come earlier
-  <+   watchR "reifyLam"      reifyLam
-  <+   watchR "reifyPrim"     reifyPrim
-  <+   watchR "reifyReified"  reifyReified
-  <+ nowatchR "reifySimplify" reifySimplify
-  <+   watchR "reifyLet"      reifyLet
-  <+   watchR "reifyPairCase" reifyPairCase
-  <+   watchR "reifyLetFloat" reifyLetFloat
-  <+   watchR "reifyUnfold"   reifyUnfold  -- last resort
+       watchR "reifyEval"        reifyEval
+  <+   watchR "reifyRepMeth"     reifyRepMeth
+  <+   watchR "reifyStdClassOp"  reifyStdClassOp
+  <+   watchR "reifyIf"          reifyIf
+  <+   watchR "reifyBottom"      reifyBottom
+  <+   watchR "reifyDelay"       reifyDelay
+  <+   watchR "reifyLoop"        reifyLoop
+  <+   watchR "reifyLit"         reifyLit
+  <+   watchR "reifyApp"         reifyApp -- special apps must come earlier
+  <+   watchR "reifyLam"         reifyLam
+  <+   watchR "reifyPrim"        reifyPrim
+  <+   watchR "reifyReified"     reifyReified
+  <+ nowatchR "reifySimplify"    reifySimplify
+  <+   watchR "reifyLet"         reifyLet
+  <+   watchR "reifyPairCase"    reifyPairCase
+  <+   watchR "reifyLetFloat"    reifyLetFloat
+  <+   watchR "reifyUnfold"      reifyUnfold  -- last resort
   <+ fail "reifyMisc: no reification rule applies"
 
 -- TODO: move reifyPrim to before reifyApp. Faster?
@@ -633,62 +722,6 @@ reifyMisc = lintExprR' <<<
 -- TODO: either comment out lintExprR' when not debugging or have it turned on
 -- only in verbose mode (getVerboseT).
 
-{--------------------------------------------------------------------
-    Primitives
---------------------------------------------------------------------}
-
-findIdP :: String -> TransformH a Id
-findIdP = findIdT . primName
-
-primName :: String -> HermitName
-primName = mkQualified "Circat.Prim"
-
--- TODO: generalize primName, lamName, etc
-
--- Map name to prim name and dictionary constraints
-primMap :: M.Map String String
-primMap = M.fromList
-  [ ("GHC.Classes.not"   , "NotP")
-  , ("GHC.Classes.&&"    , "AndP")
-  , ("GHC.Classes.||"    , "OrP")
-  , ("Circat.Misc.xor"   , "XorP")
-  , ("Data.Tuple.fst"    , "ExlP")
-  , ("Data.Tuple.snd"    , "ExrP")
-  , ("Data.Either.Left"  , "InlP")
-  , ("Data.Either.Right" , "InrP")
-  , ("GHC.Tuple.(,)"     , "PairP")
-  ]
-
--- TODO: make primitives a map to expressions, to use during reification. Or
--- maybe a transformation that succeeds only for primitives, since we'll have to
--- look up IDs.
-
-isPrimitiveName :: String -> Bool
-isPrimitiveName name =
-     name `M.member` primMap
-  || name `M.member` stdMeths
-
-isPrimOrRepMeth :: Var -> [Type] -> Bool
-isPrimOrRepMeth (fqVarName -> name) tys =
-  isRepMeth name || (isPrimitiveName name && all isPrimitiveTy tys)
-
-simplePrims :: M.Map String (Type -> [Type] -> TransformH a CoreExpr)
-simplePrims = mk <$> primMap
- where
-   mk name primTy tyArgs =
-     do primV <- findIdP name
-        -- type is Prim primTy
-        -- pprTrace "simplePrims" (ppr primV <+> text "::" <+> ppr primTy) (return ())
-        appsE1 "kPrimEP" [primTy] (mkApps (Var primV) (Type <$> tyArgs))
-
-reifyPrim :: ReExpr
-reifyPrim =
-  unReify >>>
-  do ty <- exprTypeT
-     (Var (fqVarName -> flip M.lookup simplePrims -> Just mk), tyArgs, [])
-       <- callSplitT
-     mk ty tyArgs
-
 -- Temporary workaround. See https://github.com/ku-fpg/hermit/issues/173.
 isDoubliTy :: Type -> Bool
 isDoubliTy (TyConApp (tyConName -> qualifiedName -> "Circat.Doubli.Doubli") _) = True
@@ -696,18 +729,6 @@ isDoubliTy _ = False
 
 isPrimitiveTy :: Type -> Bool
 isPrimitiveTy ty = any ($ ty) [isUnitTy,isBoolTy,isIntTy,isDoubliTy]
-
--- | case c of { False -> a'; True -> a }  ==>  if_then_else c a a'
--- Assuming there's a HasIf instance.
-rewriteIf :: ReExpr
-rewriteIf = do Case c wild ty [(_False,[],a'),(_True,[],a)] <- id
-               guardMsg (isBoolTy (exprType' c)) "scrutinee not Boolean"
-               guardMsg (isDeadOcc (idOccInfo wild)) "rewriteIf: wild is alive"
-               ifCircTc <- findTyConT (lamName "IfCirc")
-               dict     <- buildDictionaryT' $* TyConApp ifCircTc [ty]
-               apps' (lamName "if'") [ty] [dict,pair c (pair a a')]
- where
-   pair p q = mkCoreTup [p,q]
 
 {--------------------------------------------------------------------
     Run it
@@ -1112,7 +1133,7 @@ externals =
     , externC' "reify-loop" reifyLoop
     , externC' "reify-bottom" reifyBottom
     , externC' "reify-repmeth" reifyRepMeth
-    , externC' "reify-stdmeth" reifyStdMeth
+    , externC' "reify-std-op" reifyStdClassOp
     , externC' "reify-app" reifyApp
     , externC' "reify-lam" reifyLam
     , externC' "reify-let" reifyLet
