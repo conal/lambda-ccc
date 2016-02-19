@@ -28,43 +28,23 @@
 
 -- import Prelude
 
-import LambdaCCC.Lambda (EP,reifyEP)
-
+import Data.Monoid (Sum(..))
 import Control.Applicative (liftA2)
+import GHC.Generics ((:.:))
 
 import LambdaCCC.Run
 
 import Circat.Rep
 
-import ShapedTypes.Nat
-import ShapedTypes.Pair
-import ShapedTypes.Vec
-
-import qualified ShapedTypes.RPow as R
-import qualified ShapedTypes.LPow as L
-
-import LambdaCCC.Misc (Unop,Binop)
-
-import Data.Monoid (Sum(..))
-
--- import TypeUnary.TyNat
--- import TypeUnary.Nat (IsNat,natToZ)
--- import TypeUnary.Vec hiding (transpose,iota)
--- import qualified TypeUnary.Vec as V
-
 import Control.Compose ((:.)(..),unO)
 
--- import LambdaCCC.Lambda (reifyEP)
-import LambdaCCC.Misc
-  (xor,boolToInt,dup,Unop,Binop,Ternop,transpose,(:*),loop,delay,Reversible(..))
-import LambdaCCC.Adder
-import LambdaCCC.CRC -- hiding (crcS,sizeA)
-import LambdaCCC.Bitonic
-import LambdaCCC.Counters
-import qualified LambdaCCC.RadixSort as RS
-
--- import Circat.Misc (Reversible(..))
-import Circat.Rep (bottom)
+import LambdaCCC.Misc hiding (Sized(..))
+-- import LambdaCCC.Adder
+-- import LambdaCCC.CRC
+-- import LambdaCCC.Bitonic
+-- import LambdaCCC.Counters
+-- import qualified LambdaCCC.RadixSort as RS
+import LambdaCCC.Lambda (EP,reifyEP)
 
 {-
 import Circat.Pair (Pair(..),sortP)
@@ -79,18 +59,68 @@ import Circat.FFT
 -- import Circat.Mealy hiding (ArrowCircuit(..))
 -- import qualified Circat.Mealy as Mealy
 -- import Circat.Circuit (GenBuses(..), GS, Attr, systemSuccess)
-import Circat.Complex
 -}
+
+import Circat.Doubli
+import Circat.Complex
+
+-- import Data.Complex
 
 import LambdaCCC.Lambda (reifyEP)
 import LambdaCCC.Run
 
-type RTree n = Pair R.^^ n
-type LTlee n = Pair L.^^ n
+import ShapedTypes.Sized
+import ShapedTypes.Nat
+import ShapedTypes.Pair
+import ShapedTypes.Vec
+import qualified ShapedTypes.RPow as R
+import qualified ShapedTypes.LPow as L
+import ShapedTypes.Scan
+import ShapedTypes.FFT
+
+type RTree n = Pair R.^ n
+type LTree n = Pair L.^ n
 
 -- type Ragged = Ra.Tree
 
+type C = Complex Doubli
+
 main = do
+
+--   go "lsums-p" (lsums :: Pair Int -> Pair Int :* Int)
+
+--   goSep "lsums-rt0" 0.35 (lsums :: RTree N0 Int -> RTree N0 Int :* Int)
+--   goSep "lsums-rt1" 0.5 (lsums :: RTree N1 Int -> RTree N1 Int :* Int)
+--   goSep "lsums-rt2" 0.75 (lsums :: RTree N2 Int -> RTree N2 Int :* Int)
+--   goSep "lsums-rt3"  1 (lsums :: RTree N3 Int -> RTree N3 Int :* Int)
+--   goSep "lsums-rt4"  2 (lsums :: RTree N4 Int -> RTree N4 Int :* Int)
+--   goSep "lsums-rt5"  3 (lsums :: RTree N5 Int -> RTree N5 Int :* Int)
+--   goSep "lsums-rt6"  5 (lsums :: RTree N6 Int -> RTree N6 Int :* Int)
+--   goSep "lsums-rt7"  8 (lsums :: RTree N7 Int -> RTree N7 Int :* Int)
+--   goSep "lsums-rt8" 13 (lsums :: RTree N8 Int -> RTree N8 Int :* Int)
+--   goSep "lsums-rt9" 21 (lsums :: RTree N9 Int -> RTree N9 Int :* Int)
+
+--   goSep "lsums-rt10"  34 (lsums :: RTree N10 Int -> RTree N10 Int :* Int)
+--   goSep "lsums-rt11"  55 (lsums :: RTree N11 Int -> RTree N11 Int :* Int)
+--   goSep "lsums-rt12"  89 (lsums :: RTree N12 Int -> RTree N12 Int :* Int)
+--   goSep "lsums-rt13" 144 (lsums :: RTree N13 Int -> RTree N13 Int :* Int)
+--   goSep "lsums-rt14" 233 (lsums :: RTree N14 Int -> RTree N14 Int :* Int)
+--   goSep "lsums-rt15" 377 (lsums :: RTree N15 Int -> RTree N15 Int :* Int)
+--   goSep "lsums-rt16" 610 (lsums :: RTree N16 Int -> RTree N16 Int :* Int)
+
+--   goSep "lsums-rt17" 1597 (lsums :: RTree N17 Int -> RTree N17 Int :* Int)
+
+--   go "plus-c" ((+) :: Binop C)
+
+--   go "fft-p" (fft :: Pair C -> Pair C)
+
+--   go "fft-rt1" (fft :: RTree N1 C -> LTree N1 C)
+
+--   go "foo" (size (undefined :: Pair ()))
+
+  go "foo" (size (undefined :: (Pair :.: Pair) ()))
+
+--   go "map-p" (fmap not :: Unop (Pair Bool))
 
 --   go "sum-p" (sum :: Pair Int -> Int)
 
@@ -98,7 +128,7 @@ main = do
 
 --   go "foo" (liftA2 (&&) :: Binop (RTree N1 Bool))  -- mysterious residual
 
---   goSep "and-lv5-3" 3 (and :: (Vec N5 L.^^ N3) Bool -> Bool)
+--   goSep "and-lv5-3" 3 (and :: (Vec N5 L.^ N3) Bool -> Bool)
 
 --   goSep "map-rt6" 3 (fmap not :: Unop (RTree N6 Bool))
 
