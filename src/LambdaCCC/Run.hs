@@ -29,13 +29,15 @@ module LambdaCCC.Run
 
 import Prelude
 
+import Control.Monad (when)
+
 import LambdaCCC.Lambda (EP,reifyEP)
 import LambdaCCC.ToCCC (toCCC)
 
 import Circat.Category (Uncurriable)
-import Circat.Circuit (Attr,mkGraph,UU,writeDot,unitize',(:>)) -- ,displayDot
+import Circat.Circuit (Attr,mkGraph,UU,writeDot,displayDot,unitize',(:>))
 
--- import Circat.Netlist (saveAsVerilog)
+import Circat.Netlist (saveAsVerilog)
 import Circat.Mealy (Mealy(..))
 
 #if defined MealyAsFun
@@ -65,9 +67,12 @@ go name = go' name []
 goSep :: Okay a => String -> Double -> a -> IO ()
 goSep name s = go' name [ranksep s]
 
+showPretty :: Bool
+showPretty = True
+
 -- Run an example: reify, CCC, circuit.
 run :: Okay a => String -> [Attr] -> EP a -> IO ()
-run name attrs e = do -- putStrLn (name ++ " = " ++ show e)
+run name attrs e = do when showPretty $ putStrLn (name ++ " = " ++ show e)
                       outGV name attrs (unitize' (toCCC e))
 {-# NOINLINE run #-}
 
@@ -82,15 +87,24 @@ goNew :: Okay a => String -> a -> IO ()
 goNew name = goNew' name []
 {-# INLINE goNew #-}
 
+genVerilog :: Bool
+genVerilog = False
+
+genPdf :: Bool
+genPdf = False
+
+showGraph :: Bool
+showGraph = False
+
 -- Diagram and Verilog
 outGV :: String -> [Attr] -> UU -> IO ()
 outGV name attrs circ =
-  do -- putStrLn $ "outGV: Graph \n" ++ show g
+  do when showGraph $ putStrLn $ "outGV: Graph \n" ++ show g
      writeDot attrs g
-     -- displayDot ("pdf","")
+     when genPdf $ displayDot ("pdf","") name
      -- displayDot ("svg","") 
      -- displayDot ("png","-Gdpi=200")
-     -- saveAsVerilog g
+     when genVerilog $ saveAsVerilog g
  where
    g = mkGraph name circ
 {-# NOINLINE outGV #-}
