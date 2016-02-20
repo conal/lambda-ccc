@@ -6,16 +6,22 @@ go:	Examples
 play:
 	hermit Examples.hs -v0 -opt=LambdaCCC.Interactive Play.hss
 
-goZ:    Z
-	./Z
+F:      ../dist F.hs Makefile
+	ghc -O -fforce-recomp -fplugin=LambdaCCC.Plugin F
+
+goF:    F
+	./F
 
 Z:      ../dist Z.hs Makefile
 	ghc -O -fforce-recomp -fplugin=LambdaCCC.Plugin -package circat Z
 
+goZ:    Z
+	./Z
+
 # ghc -O -fplugin=LambdaCCC.Plugin -fplugin-opt=LambdaCCC.Reify:verbose -dppr-case-as-let -dsuppress-idinfo -dcore-lint V
 
-playR:
-	hermit R.hs -v0 -opt=LambdaCCC.Interactive Play.hss
+playF:
+	hermit F.hs -v0 -opt=LambdaCCC.Interactive Play.hss
 
 playZ:
 	hermit Z.hs -v0 -opt=LambdaCCC.Interactive Play.hss -- -package circat
@@ -25,7 +31,7 @@ playZ:
 g:
 	ghc G.hs
 
-Examples: ../dist Examples.hs Makefile
+Examples: ../dist ../../shaped-types/dist Examples.hs Makefile
 	time ghc -O -fforce-recomp -fplugin=LambdaCCC.Plugin Examples
 
 # 	time ghc -O Examples.hs -fforce-recomp -fplugin=LambdaCCC.Plugin -dcore-lint
@@ -44,13 +50,16 @@ SH = ../../shaped-types/dist/build/ShapedTypes
 %.iface: $(SH)/%.hi
 	ghc --show-iface $(SH)/$*.hi > $*.iface
 
-ifaces: Pair.iface Vec.iface RPow.iface LPow.iface
+ifaces: Pair.iface Vec.iface RPow.iface LPow.iface Scan.iface FFT.iface
 
 %.hi %.o: ../dist %.hs
 	ghc $*.hs
 
 %.iface: %.hi
 	ghc --show-iface $*.hi > $*.iface
+
+shaped: compile
+	cd ../../shaped-types ; make
 
 compile:
 	cd .. ; make
