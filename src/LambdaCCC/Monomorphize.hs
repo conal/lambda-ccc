@@ -61,7 +61,7 @@ import PrelNames (eqPrimTyConKey,eqReprPrimTyConKey)
 
 import HERMIT.Extras
   (pattern FunCo, fqVarName, exprType', exprTypeT, ReExpr
-  , ($*), externC', onScrutineeR, bashExtendedWithE, newIdT
+  , ($*), externC', onCaseExprR, bashExtendedWithE, newIdT
   , callSplitT, bashE, detickE
   )
 
@@ -129,7 +129,7 @@ mono args c = go
        (  watchR "caseReduceR False" (caseReduceR False)
        <+ watchR "letFloatCaseR" letFloatCaseR
        <+ watchR "caseFloatCaseR" caseFloatCaseR
-       <+ watchR "onScrutineeR simplifyScrut" (onScrutineeR simplifyScrut)
+       <+ watchR "onCaseExprR simplifyScrut" (onCaseExprR simplifyScrut)
        <+ watchR "abstReprCase" abstReprCase
        ) `rewOr`
          (Case <$> mono0 scrut <*> pure w <*> pure ty <*> mapM (onAltRhsM go) alts)
@@ -166,7 +166,7 @@ mono args c = go
 
 simplifyScrut :: ReExpr
 simplifyScrut = watchR "simplifyScrut" $
-  unfoldR <+ (tryR (caseReduceR False) . onScrutineeR simplifyScrut)
+  unfoldR <+ (tryR (caseReduceR False) . onCaseExprR simplifyScrut)
 
 toDictConR :: ReExpr
 toDictConR = watchR "toDictConR" $
@@ -178,7 +178,7 @@ toDictConR = watchR "toDictConR" $
  where
    go = acceptR isDictConstruction
          <+ (go . repeatR unfoldR)
-         <+ (caseReduceR False . go . onScrutineeR go)
+         <+ (caseReduceR False . go . onCaseExprR go)
 
 isDictConstruction :: CoreExpr -> Bool
 isDictConstruction e@(collectArgs -> (Var v,_)) =
@@ -252,7 +252,7 @@ isPrim v = fqVarName v `S.member` primNames
 --      -- tryR bashE . unfoldPredR (\ v _ -> not (isPrim v))
 --      go
 --  where
---    go = caseReduceR False . (id <+ onScrutineeR revealDict) . repeatR unfoldR
+--    go = caseReduceR False . (id <+ onCaseExprR revealDict) . repeatR unfoldR
 --    revealDict = tryR bashE . repeatR unfoldR
 
 -- Heading here:
@@ -329,7 +329,7 @@ isDataConId i = case idDetails i of
 
 abstReprCase :: ReExpr
 abstReprCase = -- watchR "abstReprCase" $
-               onScrutineeR abstReprScrutinee
+               onCaseExprR abstReprScrutinee
 
 -- Prepare a scrutinee
 abstReprScrutinee :: ReExpr
@@ -372,7 +372,7 @@ altIdCaseR = nowatchR "altIdCaseR" $
              prefixFailMsg "altIdCaseR failed: " $
              withPatFailMsg (wrongExprForm "Case scrut v ty [alt]") $
   do Case _ wild _ [alt] <- id
-     onScrutineeR (altIdOf wild alt)
+     onCaseExprR (altIdOf wild alt)
 
 -- A single-alternative identity function based on an existing case alternative,
 -- applied to a given scrutinee, and using the given wild var.
