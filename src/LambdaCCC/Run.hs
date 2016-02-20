@@ -67,8 +67,17 @@ go name = go' name []
 goSep :: Okay a => String -> Double -> a -> IO ()
 goSep name s = go' name [ranksep s]
 
+genVerilog :: Bool
+genVerilog = False
+
+genPdf :: Bool
+genPdf = True
+
 showPretty :: Bool
-showPretty = True
+showPretty = False
+
+showGraph :: Bool
+showGraph = False
 
 -- Run an example: reify, CCC, circuit.
 run :: Okay a => String -> [Attr] -> EP a -> IO ()
@@ -86,15 +95,6 @@ goNew' name attrs f = run name attrs (reifyEP f)
 goNew :: Okay a => String -> a -> IO ()
 goNew name = goNew' name []
 {-# INLINE goNew #-}
-
-genVerilog :: Bool
-genVerilog = False
-
-genPdf :: Bool
-genPdf = False
-
-showGraph :: Bool
-showGraph = False
 
 -- Diagram and Verilog
 outGV :: String -> [Attr] -> UU -> IO ()
