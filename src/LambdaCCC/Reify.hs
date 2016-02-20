@@ -27,12 +27,14 @@ import Prelude hiding (id,(.))
 
 import Data.Functor (void)
 import Control.Category (Category(..))
+import Control.Arrow (first)
 import Control.Monad ((<=<),unless)
 import Control.Arrow ((>>>),(<<<),arr,(***))
 import Data.Maybe (isJust)
 import qualified Data.Map as M
+import Data.Char (isUpper,isLower)
 import Data.String (fromString)
-import Data.List (isPrefixOf)
+import Data.List (isPrefixOf,stripPrefix)
 
 import GHC.Float () -- experiment. didn't work.
 
@@ -416,7 +418,8 @@ inScope e = (mkInScopeSet (localFreeVarsExpr e),idUnfolding)
 reifyUnfold :: ReExpr
 reifyUnfold = inReify $
   do (h@(Var v), args) <- callTyDictsT
-     guardMsg (fqVarName v /= "GHC.Real.fromIntegral") "I won't unfold fromIntegral" -- *
+     guardMsg (fqVarName v /= "GHC.Real.fromIntegral")
+              "I won't unfold fromIntegral" -- *
      if isJust (isClassOpId_maybe v) then
        -- For class-ops, 
        -- | (foo ... dict ty1 ... tyn) --> $foo_meth ty1 ... tyn
@@ -438,6 +441,31 @@ nonLocal = (callDataConT >> return True) <+ nonLocal . (simplifyOneStepE <+ unfo
 
 reifyPairCase :: ReExpr
 reifyPairCase = inReify pairCaseToLet
+
+reifyLit :: ReExpr
+reifyLit =
+  unReify >>>
+  do ty <- exprTypeT
+     guardMsg (isPrimitiveTy ty) "reifyLit: must have primitive type"
+     ( void callDataConT <+
+       void (callNameT "GHC.Float.pi") <+
+       do (_,[_],[_dict,{-Lit-} _]) <- callNameSplitT "GHC.Num.fromInteger"
+          return ())
+     e        <- idR
+     hasLitD  <- simpleDict (primName "HasLit") $* [ty]
+     appsE "kLit" [ty] [hasLitD,e]
+
+-- | case c of { False -> a'; True -> a }  ==>  if_then_else c a a'
+-- Assuming there's a HasIf instance.
+rewriteIf :: ReExpr
+rewriteIf = do Case c wild ty [(_False,[],a'),(_True,[],a)] <- id
+               guardMsg (isBoolTy (exprType' c)) "scrutinee not Boolean"
+               guardMsg (isDeadOcc (idOccInfo wild)) "rewriteIf: wild is alive"
+               ifCircTc <- findTyConT (lamName "IfCirc")
+               dict     <- buildDictionaryT' $* TyConApp ifCircTc [ty]
+               apps' (lamName "if'") [ty] [dict,pair c (pair a a')]
+ where
+   pair p q = mkCoreTup [p,q]
 
 {--------------------------------------------------------------------
     Primitives
@@ -487,19 +515,6 @@ simplePrims = mk <$> primMap
         -- pprTrace "simplePrims" (ppr primV <+> text "::" <+> ppr primTy) (return ())
         appsE1 "kPrimEP" [primTy] (mkApps (Var primV) (Type <$> tyArgs))
 
--- -- Sometimes we don't get to the method selectors & dictionaries in time, so we
--- -- have to deal with the names of methods inside the dictionaries.
--- -- TODO: rename "unpacked".
--- unpackedPrims :: M.Map String (Type -> [Type] -> TransformH a CoreExpr)
--- unpackedPrims =
---   ...
---  where  
---    numFuns  = [ "GHC.Num.$fNum"++ty++"_$c"++meth
---               | (tys,meths) <- primMeths , ty <- tys, meth <- meths ]
---     where
---       primMeths = [( ["Int","Double"]
---                    , ["+","-","*","negate","abs","signum","fromInteger"])]
-
 reifyPrim :: ReExpr
 reifyPrim =
   unReify >>>
@@ -508,6 +523,7 @@ reifyPrim =
        <- callSplitT
      mk ty tyArgs
 
+-- Class module, class name, and selector/prim associations
 stdClassOpInfo :: [(String,String,[(String,String)])]
 stdClassOpInfo =
    [ ( "GHC.Classes","Eq"
@@ -524,16 +540,33 @@ stdClassOpInfo =
      , [("fromIntegral","FromIP")])
    ]
 
--- stdMeths :: M.Map String 
+-- Parse method names (like "$fNumInt_$c+") to class, type, op ("Num", "Int", "+")
+parseMeth :: String -> Maybe (String,String,String)
+parseMeth str =
+  do s1 <- stripPrefix "$f" str
+     (cls,s2) <- capWord s1
+     (ty ,s3) <- capWord s2
+     op <- stripPrefix "_$c" s3
+     return (cls,ty,op)
+ where
+   capWord (c:cs0) | isUpper c = Just (first (c :) (span isLower cs0))
+   capWord _                   = Nothing
+
+methToClassOp :: ReExpr
+methToClassOp = watchR "methToClassOp" $
+  do (Var (uqVarName -> parseMeth -> Just (cls,valTyStr,op)), [], []) <- callSplitT
+     valTy <- findTypeT (fromString valTyStr)
+     -- pprTraceV "methToClassOp" (ppr opTy <+> ppr valTy <+> text cls <+> text op)
+     apps1' (fromString op) [valTy] =<< simpleDict (fromString cls) $* [valTy]
 
 -- Translate methods to cat class and prim
 stdClassOps :: M.Map String (String,String)
 stdClassOps = M.fromList $ concatMap ops stdClassOpInfo
  where
-   op modu cls meth ctor =
-     ( modu++"."++meth
-     , ("Circat.Prim.Circuit"++cls, "Circat.Prim."++ctor))
-   ops (modu,cls,meths) = [op modu cls meth ctor | (meth,ctor) <- meths]
+   ops (modu,cls,opcs) = op <$> opcs
+    where
+      op (sel,ctor) = ( modu++"."++sel
+                     , ("Circat.Prim.Circuit"++cls, "Circat.Prim."++ctor) )
 
 -- * fromIntegral is not really a method, but we avoid inlining it and exposing
 -- the Integer type (fromInteger . toInteger).
@@ -543,6 +576,7 @@ stdClassOps = M.fromList $ concatMap ops stdClassOpInfo
 reifyStdClassOp :: ReExpr
 reifyStdClassOp =
   unReify >>>
+  tryR methToClassOp >>>
   do ty <- exprTypeT
      (Var (fqVarName -> flip M.lookup stdClassOps -> Just (cls,prim)), tyArgs, moreArgs) <- callSplitT
      guardMsg (not (any isTypeArg moreArgs))
@@ -573,31 +607,6 @@ repMethNames = repName <$> ["repr","abst"]
 
 -- Do I need to handle unit, or will caseDefaultR do it?
 
-reifyLit :: ReExpr
-reifyLit =
-  unReify >>>
-  do ty <- exprTypeT
-     guardMsg (isPrimitiveTy ty) "reifyLit: must have primitive type"
-     ( void callDataConT <+
-       void (callNameT "GHC.Float.pi") <+
-       do (_,[_],[_dict,{-Lit-} _]) <- callNameSplitT "GHC.Num.fromInteger"
-          return ())
-     e        <- idR
-     hasLitD  <- simpleDict (primName "HasLit") $* [ty]
-     appsE "kLit" [ty] [hasLitD,e]
-
--- | case c of { False -> a'; True -> a }  ==>  if_then_else c a a'
--- Assuming there's a HasIf instance.
-rewriteIf :: ReExpr
-rewriteIf = do Case c wild ty [(_False,[],a'),(_True,[],a)] <- id
-               guardMsg (isBoolTy (exprType' c)) "scrutinee not Boolean"
-               guardMsg (isDeadOcc (idOccInfo wild)) "rewriteIf: wild is alive"
-               ifCircTc <- findTyConT (lamName "IfCirc")
-               dict     <- buildDictionaryT' $* TyConApp ifCircTc [ty]
-               apps' (lamName "if'") [ty] [dict,pair c (pair a a')]
- where
-   pair p q = mkCoreTup [p,q]
-
 {--------------------------------------------------------------------
     Simplification
 --------------------------------------------------------------------}
@@ -623,7 +632,8 @@ simplifyOneStepE = -- watchR "simplifyOneStepE" $
   <+ watchR "detickE" detickE  -- done elsewhere. still needed here?
   <+ watchR "abstReprCase" abstReprCase
   <+ watchR "abstReprCon" abstReprCon
-  <+ watchR "simplifyScrutineeR" simplifyScrutineeR
+  <+ watchR "simplifyCaseExprR" simplifyCaseExprR
+  <+ watchR "simplifyCastExprR" simplifyCastExprR
   <+ watchR "recastR" recastR
   <+ watchR "argCastSimplify" argCastSimplify
   <+ watchR "castFloatApps" castFloatApps
@@ -662,11 +672,24 @@ pairCaseToLet =
      return $
        mkCoreLets [NonRec w' scrut, NonRec a fstW, NonRec b sndW] rhs
 
-simplifyScrutineeR :: ReExpr
-simplifyScrutineeR = -- (observeV "simplifyScrutineeR" >>>) $
-  onScrutineeR $
-    do guardMsgM (not . isStandardType <$> exprTypeT) "scrutinee has standard type"
+simplifyPartR :: Unop ReExpr -> ReExpr
+simplifyPartR onPart =
+  onPart $
+    do guardMsgM (not . isStandardType <$> exprTypeT) "part has standard type"
        simplifyOneStepE <+ unfoldGentlyR
+
+-- TODO: Do I want this guard for cast as well as case?
+
+simplifyCaseExprR :: ReExpr
+simplifyCaseExprR = simplifyPartR onCaseExprR
+
+simplifyCastExprR :: ReExpr
+simplifyCastExprR = simplifyPartR onCastExprR
+
+-- simplifyCaseExprR = -- (observeV "simplifyCaseExprR" >>>) $
+--   onCaseExprR $
+--     do guardMsgM (not . isStandardType <$> exprTypeT) "scrutinee has standard type"
+--        simplifyOneStepE <+ unfoldGentlyR
 
 isStandardType :: Type -> Bool
 isStandardType (coreView -> Just ty) = isStandardType ty
@@ -705,11 +728,11 @@ reifyMisc = lintExprR' <<<
   <+   watchR "reifyDelay"       reifyDelay
   <+   watchR "reifyLoop"        reifyLoop
   <+   watchR "reifyLit"         reifyLit
+  <+ nowatchR "reifySimplify"    reifySimplify
   <+   watchR "reifyApp"         reifyApp -- special apps must come earlier
   <+   watchR "reifyLam"         reifyLam
   <+   watchR "reifyPrim"        reifyPrim
   <+   watchR "reifyReified"     reifyReified
-  <+ nowatchR "reifySimplify"    reifySimplify
   <+   watchR "reifyLet"         reifyLet
   <+   watchR "reifyPairCase"    reifyPairCase
   <+   watchR "reifyLetFloat"    reifyLetFloat
@@ -1160,8 +1183,10 @@ externals =
     , externC' "pair-case-to-let" pairCaseToLet
     , externC' "simplify-expr" simplifyExprR
     , externC' "unfold-driver" unfoldDriver
-    , externC' "simplify-scrutinee" simplifyScrutineeR
+    , externC' "simplify-case-expr" simplifyCaseExprR
+    , externC' "simplify-cast-expr" simplifyCastExprR
     , externC' "simplify-one-step" simplifyOneStepE
+    , externC' "meth-to-class-op" methToClassOp
     ]
 
 --     , externC' "reify" reifyR
