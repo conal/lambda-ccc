@@ -15,17 +15,31 @@ reify-module
 
 lint-module
 
-rhs-of 'main
-
--- application-of 'run
-
--- tickle-reifies
+application-of 'run
 
 application-of 'reifyEP
 
--- prog
+application-of 'evalEP
+
+----
+
+-- rhs-of 'main
+-- any-td unfold-driver
+-- application-of 'reifyEP
+-- reify-misc
+-- [app-fun,app-arg]
+-- reify-misc
+-- bash
+-- [app-arg,app-fun]
+-- unfold
+-- [lam-body,app-arg]
+-- [app-fun,app-fun]
+-- reify-of  -- lint bomb
+-- reify-std-op
+
 
 
 ----
 
 -- application-of 'sum
+
