@@ -920,6 +920,18 @@ tickleReifies = -- watchR "tickleReifies" $
 
 -- TODO: Maybe combine traversals.
 
+checkHasReify :: ReExpr
+checkHasReify =
+  anytdE (observeR "Reification residual" . acceptR isReify)
+
+checkHasReifyBind :: TransformH CoreBind Bool
+checkHasReifyBind =
+  (return True . observeR "Failed reifier" . nonRecAllR id checkHasReify)
+  <+ return False
+
+checkReifyFreeBind :: TransformH CoreBind Bool
+checkReifyFreeBind = not <$> checkHasReifyBind
+
 reifyBind :: TransformH CoreBind ([CoreBind],[CoreRule])
 reifyBind = -- watchR "reifier" $
   do b@(NonRec v rhs0) <- id
@@ -935,9 +947,16 @@ reifyBind = -- watchR "reifier" $
      Let b' ruleRhs  <- lintExprR' . -- while debugging
                         tryR (anybuE letFloatReifier) $* rhs'
      void $ observeV "reified version" $* Let b' ruleRhs
-     pprTraceV "reifyBind b'" (ppr b')
+     -- pprTraceV "reifyBind b'" (ppr b')
+#if 0
      rule <- mkReifyRule bndrs v (snd (collectBinders ruleRhs))
      return ([b,b'],[rule])
+#else
+     ifM (checkReifyFreeBind $* b')
+         (do rule <- mkReifyRule bndrs v (snd (collectBinders ruleRhs))
+             return ([b,b'],[rule]))
+         (return ([b],[]))
+#endif
   <+ ( arr (\ b -> ([b],[])) . tryR (nonRecAllR id tickleReifies) )
   -- TODO: Rec
   -- TODO: Rename rhs to rhs1, and rhs' to rhs.
@@ -952,6 +971,7 @@ reifyBind = -- watchR "reifier" $
                   (FunTy dom _, _) | isDictTy dom -> etaRetry "eta"
                   _ -> ([],) <$> ( reifyBetaExpandPlusR nm
                                  . tryR (floatReifies . abstractReifies)
+                                 . tryR (anybuE letElimR) -- left-overs
                                  . reifyE   -- can fail
                                  -- . observeV "Reifying"
                                  . reifyOf e
