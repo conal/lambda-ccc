@@ -46,12 +46,12 @@ import Data.Proof.EQ
 import LambdaCCC.Misc (Unop,Evalable(..),Unit,(:*),(:+),(:=>),Eq'(..),(==?))
 import LambdaCCC.ShowUtils (showsApp1,showsOp2',Assoc(..))
 -- import LambdaCCC.Ty
+import LambdaCCC.Prim (Prim(..),Lit(..),primArrow) -- ,cond,ifThenElse
 
 -- import TypeEncode.Encode (EncodeCat(..))
 
 import Circat.Category
 import Circat.Classes
-import Circat.Prim (Prim(..),Lit(..),primArrow) -- ,cond,ifThenElse
 import Circat.Circuit ((:>),GenBuses)
 
 infix  0 :->

@@ -350,8 +350,8 @@ reifyBottom =
   unReify >>>
   do void $ callNameT "GHC.Err.undefined"
      ty <- exprTypeT
-     dict <- simpleDict ("Circat.Prim.CircuitBot") $* [ty]
-     appsE1 "kPrimEP" [ty] =<< apps' "Circat.Prim.BottomP" [ty] [dict]
+     dict <- simpleDict ("LambdaCCC.Prim.CircuitBot") $* [ty]
+     appsE1 "kPrimEP" [ty] =<< apps' "LambdaCCC.Prim.BottomP" [ty] [dict]
 
 reifyDelay :: ReExpr
 reifyDelay =
@@ -359,7 +359,7 @@ reifyDelay =
   do (Var (fqVarName -> "Circat.Misc.delay"),[Type ty,s0]) <- callT
      showD     <- simpleDict "GHC.Show.Show" $* [ty]
      genBusesD <- simpleDict "Circat.Circuit.GenBuses" $* [ty]
-     primV     <- findIdT "Circat.Prim.DelayP"
+     primV     <- findIdT "LambdaCCC.Prim.DelayP"
      appsE1 "kPrimEP" [ty `FunTy` ty]
        (mkApps (Var primV) [Type ty,genBusesD,showD,s0])
 
@@ -475,7 +475,7 @@ findIdP :: String -> TransformH a Id
 findIdP = findIdT . primName
 
 primName :: String -> HermitName
-primName = mkQualified "Circat.Prim"
+primName = mkQualified "LambdaCCC.Prim"
 
 -- TODO: generalize primName, lamName, etc
 
@@ -566,7 +566,7 @@ stdClassOps = M.fromList $ concatMap ops stdClassOpInfo
    ops (modu,cls,opcs) = op <$> opcs
     where
       op (sel,ctor) = ( modu++"."++sel
-                     , ("Circat.Prim.Circuit"++cls, "Circat.Prim."++ctor) )
+                     , ("LambdaCCC.Prim.Circuit"++cls, "LambdaCCC.Prim."++ctor) )
 
 -- * fromIntegral is not really a method, but we avoid inlining it and exposing
 -- the Integer type (fromInteger . toInteger).

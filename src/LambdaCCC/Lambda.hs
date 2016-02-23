@@ -61,13 +61,13 @@ import TypeUnary.Nat (IsNat(..),Nat(..))
 import TypeUnary.Vec (Vec(..),Z,S)
 
 import Circat.Category (Rep,HasRep(..),RepCat(..),LoopCat(..),DelayCat(..))
-import Circat.Prim
 
 import Circat.Classes
 import Circat.Circuit ((:>),GenBuses,SourceToBuses)
 
 import LambdaCCC.Misc hiding (Eq'(..), (==?))
 import LambdaCCC.ShowUtils
+import LambdaCCC.Prim
 
 -- Whether to sugar during show, including 'let'
 #define Sugared

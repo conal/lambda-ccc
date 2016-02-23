@@ -28,6 +28,7 @@ Library
                   , transformers
                   , mtl
                   , containers
+                  , constraints
                   , kure >= 2.16.0
                   , hermit >= 1.0.0.1
                   , ty >= 0.1.5
@@ -40,6 +41,7 @@ Library
 
   Exposed-Modules:  LambdaCCC.Misc
                     LambdaCCC.ShowUtils
+                    LambdaCCC.Prim
                     LambdaCCC.Lambda
                     LambdaCCC.ToCCC
                     LambdaCCC.Monomorphize

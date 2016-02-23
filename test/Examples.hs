@@ -119,7 +119,7 @@ main = do
 --    go "fft-v1" (fft :: Unop (Vec N1 C))
 
 --   goSep "fft-rt1" 1 (fft :: RTree N1 C -> LTree N1 C)
-  goSep "fft-rt2" 1 (fft :: RTree N2 C -> LTree N2 C)
+--   goSep "fft-rt2" 1 (fft :: RTree N2 C -> LTree N2 C)
 --   goSep "fft-rt3" 2 (fft :: RTree N3 C -> LTree N3 C)
 --   goSep "fft-rt4" 3 (fft :: RTree N4 C -> LTree N4 C)
 --   goSep "fft-rt5" 4 (fft :: RTree N5 C -> LTree N5 C)
@@ -129,7 +129,7 @@ main = do
 --   goSep "fft-lt2" 1 (fft :: LTree N2 C -> RTree N2 C)
 --   goSep "fft-lt3" 2 (fft :: LTree N3 C -> RTree N3 C)
 --   goSep "fft-lt4" 3 (fft :: LTree N4 C -> RTree N4 C)
---   goSep "fft-lt5" 4 (fft :: LTree N5 C -> RTree N5 C)
+  goSep "fft-lt5" 4 (fft :: LTree N5 C -> RTree N5 C)
 --   goSep "fft-lt6" 7 (fft :: LTree N6 C -> RTree N6 C)
 
 --   print (reifyEP (pure () :: Pair ()))

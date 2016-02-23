@@ -36,15 +36,15 @@ import Data.Maybe (fromMaybe)
 
 import Data.Proof.EQ
 
-import LambdaCCC.Misc
-import LambdaCCC.Lambda (E(..),V,Pat(..))
 import Circat.Category
-
 -- Sad hack. I don't yet know how to handle Loop generally enough.
 -- See BiCCCC'.
 -- TODO: rethink the whole extensibility thing.
 import Circat.Circuit ((:>))
-import Circat.Prim (Prim)
+
+import LambdaCCC.Misc
+import LambdaCCC.Lambda (E(..),V,Pat(..))
+import LambdaCCC.Prim (Prim)
 
 {--------------------------------------------------------------------
     Conversion

@@ -24,9 +24,10 @@ import LambdaCCC.Lambda
 -- import LambdaCCC.CCC
 import LambdaCCC.ToCCC
 
-import Circat.Prim
 import Circat.Category
 import Circat.Classes
+
+import LambdaCCC.Prim
 
 {--------------------------------------------------------------------
     Convenient notation for expression building
