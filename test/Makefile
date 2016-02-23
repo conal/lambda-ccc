@@ -36,12 +36,6 @@ Examples: ../dist ../../shaped-types/dist Examples.hs Makefile
 
 # 	time ghc -O Examples.hs -fforce-recomp -fplugin=LambdaCCC.Plugin -dcore-lint
 
-X: ../dist X.hs Makefile
-	time ghc X.hs -fforce-recomp -fplugin=LambdaCCC.Plugin -O -dcore-lint
-
-goX:	X
-	./X
-
 # 
 # -ddump-simpl -ddump-simpl-stats -ddump-to-file 
 
@@ -50,7 +44,7 @@ SH = ../../shaped-types/dist/build/ShapedTypes
 %.iface: $(SH)/%.hi
 	ghc --show-iface $(SH)/$*.hi > $*.iface
 
-ifaces: Pair.iface Vec.iface RPow.iface LPow.iface Scan.iface FFT.iface
+ifaces: Misc.iface Sized.iface Nat.iface Pair.iface Vec.iface RPow.iface LPow.iface Scan.iface FFT.iface
 
 %.hi %.o: ../dist %.hs
 	ghc $*.hs
@@ -58,7 +52,7 @@ ifaces: Pair.iface Vec.iface RPow.iface LPow.iface Scan.iface FFT.iface
 %.iface: %.hi
 	ghc --show-iface $*.hi > $*.iface
 
-shaped: compile
+shaped:
 	cd ../../shaped-types ; make
 
 compile:
