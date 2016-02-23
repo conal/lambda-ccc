@@ -1,3 +1,9 @@
+*   Terser simplification
+*   Reification rules from dictionaries, e.g., `reify (fft :: ...)`, rather than the just the methods (`$fFFTPairPair_$cfft`), to save time later.
+
+
+----
+
 *   Multi-clock systems:
     semantic model and implementation.
 *   Rethink allocation to use sets of spacetime slots.
