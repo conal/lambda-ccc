@@ -7,6 +7,7 @@ TAGS
 tags
 tarballs
 out/
+was-out/
 Unused/
 *.iface
 *.verbose-core2core
