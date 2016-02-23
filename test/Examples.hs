@@ -19,7 +19,9 @@
 
 -- {-# OPTIONS_GHC -fplugin=LambdaCCC.Plugin -dcore-lint #-}
 -- {-# OPTIONS_GHC -fplugin-opt=LambdaCCC.Reify:verbose #-}
-{-# OPTIONS_GHC -dsuppress-idinfo #-}
+
+{-# OPTIONS_GHC -dppr-case-as-let -dsuppress-idinfo #-}
+{-# OPTIONS_GHC -dsuppress-uniques -dsuppress-module-prefixes #-}
 
 -- {-# OPTIONS_GHC -ddump-rule-firings #-}
 -- {-# OPTIONS_GHC -ddump-rule-rewrites #-}
@@ -108,17 +110,38 @@ main = do
 --   goSep "lsums-rt15" 377 (lsums :: RTree N15 Int -> RTree N15 Int :* Int)
 --   goSep "lsums-rt16" 610 (lsums :: RTree N16 Int -> RTree N16 Int :* Int)
 
---   goSep "lsums-rt17" 1597 (lsums :: RTree N17 Int -> RTree N17 Int :* Int)
+--   goSep "lsums-lt6"  4 (lsums :: LTree N6 Int -> LTree N6 Int :* Int)
 
 --   go "plus-c" ((+) :: Binop C)
 
 --   go "fft-p" (fft :: Pair C -> Pair C)
 
---   go "fft-rt1" (fft :: RTree N1 C -> LTree N1 C)
+--    go "fft-v1" (fft :: Unop (Vec N1 C))
 
---   go "foo" (size (undefined :: Pair ()))
+--   goSep "fft-rt1" 1 (fft :: RTree N1 C -> LTree N1 C)
+  goSep "fft-rt2" 1 (fft :: RTree N2 C -> LTree N2 C)
+--   goSep "fft-rt3" 2 (fft :: RTree N3 C -> LTree N3 C)
+--   goSep "fft-rt4" 3 (fft :: RTree N4 C -> LTree N4 C)
+--   goSep "fft-rt5" 4 (fft :: RTree N5 C -> LTree N5 C)
+--   goSep "fft-rt6" 7 (fft :: RTree N6 C -> LTree N6 C)
 
-  go "foo" (size (undefined :: (Pair :.: Pair) ()))
+--   goSep "fft-lt1" 1 (fft :: LTree N1 C -> RTree N1 C)
+--   goSep "fft-lt2" 1 (fft :: LTree N2 C -> RTree N2 C)
+--   goSep "fft-lt3" 2 (fft :: LTree N3 C -> RTree N3 C)
+--   goSep "fft-lt4" 3 (fft :: LTree N4 C -> RTree N4 C)
+--   goSep "fft-lt5" 4 (fft :: LTree N5 C -> RTree N5 C)
+--   goSep "fft-lt6" 7 (fft :: LTree N6 C -> RTree N6 C)
+
+--   print (reifyEP (pure () :: Pair ()))
+
+--   print (reifyEP (pure () :: (Pair :.: Pair) ()))
+
+
+--   go "foo" (size (pure () :: (Pair :.: Pair) ()))
+
+
+--   go "foo" (size (pure () :: RTree N8 ()))
+
 
 --   go "map-p" (fmap not :: Unop (Pair Bool))
 
@@ -126,7 +149,7 @@ main = do
 
 --   go "and-p" (liftA2 (&&) :: Binop (Pair Bool))
 
---   go "foo" (liftA2 (&&) :: Binop (RTree N1 Bool))  -- mysterious residual
+--   go "foo" (liftA2 (&&) :: Binop (RTree N1 Bool))
 
 --   goSep "and-lv5-3" 3 (and :: (Vec N5 L.^ N3) Bool -> Bool)
 
@@ -142,12 +165,19 @@ main = do
 
 --   goSep "applyLin-rt34" 3 (($@) :: MatrixT N3 N4 Int -> RTree N3 Int -> RTree N4 Int)
 
---   go "composeLin-rt232" ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int)
+--   goSep "composeLin-rt232" 4 ((.@) :: MatrixT N3 N2 Int -> MatrixT N2 N3 Int -> MatrixT N2 N2 Int)
 
-  -- go "lsums-p" (lsums :: Pair Int -> (Pair Int, Int))
-  -- goSep "lsums-rt9" 15 (lsums :: RTree N9 Int -> (RTree N9 Int, Int))
+--   go "lsums-p" (lsums :: Pair Int -> (Pair Int, Int))
+
   -- go "lsums-rt0" (lsums :: RTree N0 Int -> (RTree N0 Int, Int))
   -- go "lsums-lt0" (lsums :: LTree N0 Int -> (LTree N0 Int, Int))
+
+-- fooP :: Num a => Unop (Pair a)
+-- fooP (a :# b) = (a + b) :# (a - b)
+
+-- fftP :: RealFloat a => Unop (Pair (Complex a))
+-- fftP (a :# b) = (a + b) :# (a - b)
+
 
 {--------------------------------------------------------------------
     Misc definitions
